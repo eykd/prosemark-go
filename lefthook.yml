@@ -1,0 +1,36 @@
+# Lefthook configuration for pmk CLI project
+# https://github.com/evilmartians/lefthook
+
+pre-commit:
+  parallel: false
+  commands:
+    fmt-check:
+      glob: "*.go"
+      run: test -z "$(gofmt -l .)" || (echo "Files not formatted:"; gofmt -l .; exit 1)
+
+    vet:
+      glob: "*.go"
+      run: go vet ./...
+
+    staticcheck:
+      glob: "*.go"
+      run: staticcheck ./...
+
+    smoke:
+      glob: "*.go"
+      run: just smoke
+
+    test-coverage:
+      glob: "*.go"
+      run: |
+        PACKAGES=$(go list ./... | grep -v '^github.com/eykd/prosemark-go$' | grep -v '/cmd/pipeline$' | grep -v '/generated-acceptance-tests$')
+        go test -coverprofile=/tmp/coverage.out $PACKAGES
+        # Check that all non-Impl functions are at 100%
+        UNCOVERED=$(go tool cover -func=/tmp/coverage.out | grep -v "Impl" | grep -v "^.*main.go:" | grep -v "100.0%" | grep -v "^total:" || true)
+        if [ -n "$UNCOVERED" ]; then
+          echo "The following non-Impl functions are not at 100% coverage:"
+          echo "$UNCOVERED"
+          exit 1
+        fi
+        TOTAL=$(go tool cover -func=/tmp/coverage.out | grep total | awk '{print $3}')
+        echo "Coverage: ${TOTAL} (100% of non-Impl functions covered)"
