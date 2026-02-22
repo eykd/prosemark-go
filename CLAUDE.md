@@ -1,7 +1,3 @@
-# CLAUDE.md
-
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
 ## Project Overview
 
 `pmk` is a CLI application for long-form prose projects using a new outline organization strategy. Written in Go.
@@ -95,15 +91,11 @@ specs/*.txt → parse → IR JSON → generate → Go test files
 
 Pipeline CLI: `go run ./acceptance/cmd/pipeline -action=<parse|generate|run>`
 
-### ralph.sh ATDD Outer Loop
-
-`ralph.sh` wraps the inner TDD cycle with an outer acceptance loop:
-1. Generate acceptance test from spec (fails by design)
-2. Run inner RED-GREEN-REFACTOR cycles (up to 15)
-3. Check acceptance tests after each inner cycle
-4. Task is DONE when acceptance tests pass (objective gate)
-5. Tasks without specs fall back to standard TDD
-
 ## Active Technologies
 - Go 1.25 + Cobra (CLI framework)
 - Additional dependencies will expand as features are implemented
+
+
+---
+
+Always use subagents liberally and aggressively to conserve the main context window.
