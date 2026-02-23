@@ -1,6 +1,7 @@
 package binder
 
 import (
+	"bytes"
 	"context"
 	"net/url"
 	"regexp"
@@ -43,7 +44,7 @@ func Parse(ctx context.Context, src []byte, project *Project) (*ParseResult, []D
 	}
 
 	// Strip UTF-8 BOM if present.
-	if len(src) >= 3 && src[0] == 0xef && src[1] == 0xbb && src[2] == 0xbf {
+	if bytes.HasPrefix(src, []byte(utf8BOM)) {
 		result.HasBOM = true
 		src = src[3:]
 		diags = append(diags, Diagnostic{
