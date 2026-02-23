@@ -21,13 +21,6 @@ type MoveIO interface {
 	WriteBinderAtomic(ctx context.Context, path string, data []byte) error
 }
 
-// moveOutput is the JSON output schema for the move command.
-type moveOutput struct {
-	Version     string              `json:"version"`
-	Changed     bool                `json:"changed"`
-	Diagnostics []binder.Diagnostic `json:"diagnostics"`
-}
-
 // NewMoveCmd creates the move subcommand.
 func NewMoveCmd(io MoveIO) *cobra.Command {
 	var (
@@ -69,7 +62,10 @@ func NewMoveCmd(io MoveIO) *cobra.Command {
 				return fmt.Errorf("parsing project JSON: %w", err)
 			}
 
-			position := map[bool]string{true: "first", false: "last"}[first]
+			position := "last"
+			if first {
+				position = "first"
+			}
 
 			params := binder.MoveParams{
 				SourceSelector:            source,
@@ -82,14 +78,14 @@ func NewMoveCmd(io MoveIO) *cobra.Command {
 			}
 			_ = at
 
-			modifiedBytes, diags, _ := ops.Move(ctx, binderBytes, &proj, params) //nolint:errcheck
+			modifiedBytes, diags, _ := ops.Move(ctx, binderBytes, &proj, params)
 			if diags == nil {
 				diags = []binder.Diagnostic{}
 			}
 
 			changed := !bytes.Equal(binderBytes, modifiedBytes)
 
-			out := moveOutput{
+			out := binder.OpResult{
 				Version:     "1",
 				Changed:     changed,
 				Diagnostics: diags,
