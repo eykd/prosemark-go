@@ -55,7 +55,7 @@ The pragma MUST be the exact string `<!-- prosemark-binder:v1 -->` with no varia
 
 The pragma MAY appear anywhere in the file.
 
-If absent, the file is still parsed as Binder v1, but lint SHOULD emit a warning.
+If absent, the file is still parsed as Binder v1, but lint MUST emit BNDW001.
 
 ---
 
@@ -96,7 +96,9 @@ Title derivation rules:
 
 ### 4.3 Structural Link
 
-A structural link is either:
+The term **"structural link"** refers to any of the three supported link syntaxes (inline, reference, wikilink) recognized by the Prosemark parser. The term **"node-bearing link"** refers to a structural link whose target is a valid `.md` path that satisfies all predicates in Section A.5 — that is, a structural link that actually produces a structural node.
+
+A structural link is one of:
 
 1. A standard Markdown inline link:
    `[Title](target.md)`
@@ -120,7 +122,7 @@ If multiple structural links appear in one list item, lint MUST emit a warning.
 
 ### 4.4 Valid Structural Link Targets
 
-Only `.md` targets produce structural nodes. A structural link whose target does not resolve to a `.md` file does not create a structural node; lint SHOULD warn when such a link appears in a list item.
+Only `.md` targets produce structural nodes. A structural link whose target does not resolve to a `.md` file does not create a structural node; lint MUST emit BNDW007 when such a link appears in a list item.
 
 A structural link targeting `_binder.md` itself is ignored for structure and does not produce a node. Lint MUST warn on self-referential links.
 
@@ -236,6 +238,9 @@ Implementations MUST NOT:
 - Multiple nodes referencing the same file (operates at the file level regardless of fragments; fires even if fragments differ).
 - Link target file does not exist.
 - Structural node detected inside a fenced code block (`` ``` `` or `~~~`). CommonMark indented code blocks (4-space or tab prefix) do not affect structural node detection; list items cannot appear inside an indented code block by CommonMark syntax rules.
+
+  > **Note:** Only fenced code blocks (backtick or tilde delimiters) require the `BNDW005` exclusion treatment. Indented code blocks (4-space or tab prefix per CommonMark) are irrelevant to structural node detection because CommonMark syntax prevents list items from appearing inside them.
+
 - Structural link detected outside a list item.
 - Non-`.md` target in a list item link.
 - Self-referential link targeting `_binder.md`.
@@ -324,8 +329,8 @@ The optional title component in a Markdown link (e.g., `[Text](target.md "toolti
 
 - Markdown link targets are resolved relative to the project root.
 - Markdown link targets are taken literally — no implicit `.md` appending.
-- If `Path` does not end in `.md`, the link does not produce a structural node; lint SHOULD warn.
-- Percent-encoding in the target MUST be decoded before path resolution.
+- If `Path` does not end in `.md`, the link does not produce a structural node; lint MUST emit BNDW007.
+- Percent-encoded sequences in link targets MUST be decoded (per RFC 3986) before path validation and resolution. A percent-encoded sequence that decodes to a path component that would escape the project root (e.g., `%2E%2E` decoding to `..`) MUST be treated identically to a literal `..` component and MUST trigger `BNDE002 PathEscapesRoot`. Otherwise, decoding is transparent to all subsequent path validation steps.
 - Resolution rules (including path normalization and project-root checks) must follow lint rules in Section 8.
 
 ---

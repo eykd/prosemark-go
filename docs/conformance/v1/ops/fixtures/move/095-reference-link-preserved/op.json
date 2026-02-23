@@ -1,0 +1,10 @@
+{
+  "version": "1",
+  "operation": "move",
+  "params": {
+    "sourceSelector": "part:chapter",
+    "destinationParentSelector": ".",
+    "position": "last",
+    "yes": true
+  }
+}

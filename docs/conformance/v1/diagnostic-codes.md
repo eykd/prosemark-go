@@ -77,3 +77,11 @@ These are emitted during an operation. The operation **proceeds** and the binder
 - Codes within a range (e.g. BNDW001–BNDW010) are not necessarily ordered by importance; they are ordered by the section of the spec that describes them.
 - Implementations MAY emit additional implementation-defined codes outside this registry, provided they do not use the `BND` or `OP` prefix (use an implementation-specific prefix instead).
 - The conformance runner treats unexpected `severity: "error"` codes as test failures; unexpected `severity: "warning"` codes are permitted.
+
+---
+
+## Fixture Coverage
+
+| Code | Fixtures |
+|------|----------|
+| `OPE009` | 087, 088 |

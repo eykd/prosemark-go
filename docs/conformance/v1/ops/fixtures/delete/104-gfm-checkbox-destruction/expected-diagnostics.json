@@ -1,0 +1,10 @@
+{
+  "version": "1",
+  "diagnostics": [
+    {
+      "severity": "warning",
+      "code": "OPW003",
+      "message": "Non-structural content destroyed: list item contained content beyond the structural link"
+    }
+  ]
+}

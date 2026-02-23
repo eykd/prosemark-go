@@ -1,0 +1,10 @@
+{
+  "version": "1",
+  "diagnostics": [
+    {
+      "severity": "warning",
+      "code": "BNDW007",
+      "message": "Link target is not a .md file"
+    }
+  ]
+}

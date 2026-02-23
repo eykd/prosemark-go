@@ -1,0 +1,10 @@
+{
+  "version": "1",
+  "diagnostics": [
+    {
+      "severity": "error",
+      "code": "BNDE002",
+      "message": "Link target resolves outside the project root"
+    }
+  ]
+}

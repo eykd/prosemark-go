@@ -1,0 +1,10 @@
+{
+  "version": "1",
+  "diagnostics": [
+    {
+      "severity": "error",
+      "code": "OPE003",
+      "message": "Move would create a cycle: source node is an ancestor of the destination parent"
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "version": "1",
+  "diagnostics": [
+    {
+      "severity": "error",
+      "code": "OPE009",
+      "message": "I/O or parse failure reading project.json"
+    }
+  ]
+}

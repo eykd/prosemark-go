@@ -1,0 +1,4 @@
+{
+  "version": "1",
+  "files": ["parent.md", "child.md"]
+}

@@ -1,0 +1,10 @@
+{
+  "version": "1",
+  "diagnostics": [
+    {
+      "severity": "warning",
+      "code": "OPW004",
+      "message": "Empty sublist pruned: parent node has no remaining structural children"
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "version": "1",
+  "root": {
+    "type": "root",
+    "children": [
+      {
+        "type": "node",
+        "target": "chapter.md",
+        "title": "Alias",
+        "children": []
+      }
+    ]
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "version": "1",
+  "diagnostics": [
+    {
+      "severity": "warning",
+      "code": "BNDW003",
+      "message": "Duplicate file reference: chapter.md appears as more than one node in the binder tree"
+    },
+    {
+      "severity": "warning",
+      "code": "BNDW003",
+      "message": "Duplicate file reference: section.md appears as more than one node in the binder tree"
+    }
+  ]
+}

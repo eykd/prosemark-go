@@ -1,0 +1,8 @@
+{
+  "version": "1",
+  "operation": "delete",
+  "params": {
+    "selector": "parent:child",
+    "yes": true
+  }
+}

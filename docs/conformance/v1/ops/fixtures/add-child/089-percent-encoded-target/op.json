@@ -1,0 +1,10 @@
+{
+  "version": "1",
+  "operation": "add-child",
+  "params": {
+    "parentSelector": ".",
+    "target": "foo%20bar.md",
+    "title": "Foo Bar",
+    "position": "last"
+  }
+}

@@ -69,6 +69,8 @@ All operations accept multi-match selectors. When a selector matches multiple no
 - The operation applies to all matched nodes.
 - OPW001 is always emitted. For CLI implementations, destructive operations (delete, move) MUST prompt for interactive confirmation when multi-match occurs; `--yes` suppresses the prompt. Library implementations proceed without prompting but MUST still emit OPW001.
 
+**Index scope in multi-segment selectors**: Indices in a selector apply independently at each segment level during tree traversal. `foo[1]:bar` means "among all nodes at the current level matching `foo`, take the second one (zero-based index 1), then within that node's children, match all nodes whose target file stem is `bar`." Only the segment that bears an `[N]` qualifier is narrowed; other segments continue to match all nodes at their respective levels.
+
 ### 3.6 Selector Examples
 
 Given the binder:
@@ -99,6 +101,12 @@ A multi-segment selector (e.g., `part-one:chapter-03`) matches the final segment
 ### 3.8 Root Selector
 
 The literal string `.` is a reserved selector that matches the **synthetic root** node. It is valid only as a `parent-selector` in add-child operations (inserting top-level children). It is not valid as a source or destination selector for delete or move, and is not valid in multi-segment selectors. When `.` is used as parent-selector, multi-match semantics do not apply (the root is unique).
+
+### 3.9 Fragment Handling in Selectors
+
+Fragments in node targets carry no structural weight (see format spec Section A.4). When a selector segment matches by file stem or relative path, ALL nodes referencing that file are considered matches regardless of their fragment component. A node referencing `chapter.md#intro` and a node referencing `chapter.md#outro` are both matched by the selector `chapter`.
+
+Index qualifiers (`[N]`) count across all fragment variants: `chapter[0]` means the first node (in document order) whose target file is `chapter.md`, whether it references `chapter.md`, `chapter.md#intro`, `chapter.md#outro`, or any other fragment or no fragment.
 
 ---
 
@@ -153,7 +161,9 @@ New nodes are always serialized as standard Markdown inline links:
 
 **Ordered list markers** (`1.`, `2.`, etc.): use the maximum ordinal among the parent's existing structural children plus 1. If the parent has no structural children, use `1.`. The marker style (period vs. paren) MUST match the prevailing sibling style.
 
-**Indentation**: Match the last encountered sibling's indentation. If there is no previous sibling, match the next sibling. If there are no siblings, derive from the parent's nesting depth using a 2-space indent unit.
+**Indentation**: Match the last encountered sibling's indentation character and unit. If the reference sibling uses tab characters for indentation, the new node MUST use tab characters for each indentation level. If the reference sibling uses spaces, use the same number of spaces as the unit. If there is no previous sibling, match the next sibling. If there are no siblings, derive from the parent's nesting depth using a 2-space indent unit (the default).
+
+**Title escaping**: The title text provided by the caller MUST be escaped for use in Markdown link syntax: `[` and `]` characters within the title MUST be backslash-escaped (e.g., `A [note]` becomes `A \[note\]`). Link tooltip attributes (the optional quoted title in `[text](url "tooltip")` syntax) are NOT emitted for new nodes. When moving a node, any tooltip in the original source is preserved as-is.
 
 The serialization resolution order is: previous sibling → next sibling → defaults (`-`, 2-space indent).
 
@@ -174,9 +184,15 @@ For each node matching `selector`:
 1. Remove the list item occurrence and its entire nested subtree.
 2. If the deleted node's list item contained non-structural content (annotations, free text, task checkboxes), emit a warning noting the destroyed content.
 3. If the deletion leaves the parent with an empty sublist, prune the empty sublist.
-4. After removal, reduce any run of 2 or more consecutive blank lines at the deletion site to a single blank line. If the deletion site is the last item in its containing block and is immediately followed by EOF or the close of its parent list (no following sibling content), reduce the trailing blank lines to zero instead.
+4. After removing the node and its subtree lines, examine the lines immediately surrounding the gap. Apply blank-line cleanup in this order:
+   - **Definition**: A *run* is a maximal sequence of consecutive lines that are empty or contain only whitespace characters.
+   - **Rule 1**: A run of two or more blank lines anywhere in the file MUST be collapsed to exactly one blank line.
+   - **Rule 2 (EOF exception)**: If the run occurs at the very end of the file (nothing but optional whitespace follows), it MUST be collapsed to zero blank lines (the file MUST NOT end with trailing blank lines).
+   - **Rule 3**: Blank lines that existed *before* the deleted node (its preceding sibling's trailing whitespace) are retained unless Rule 1 or Rule 2 applies to them after the deletion.
 
 Other occurrences referencing the same file remain untouched.
+
+Reference link definitions (`[label]: url`) associated with deleted nodes are NOT removed. See Section 6.4 for details.
 
 ### 5.3 Confirmation
 
@@ -209,15 +225,19 @@ If `source-selector` and `destination-parent-selector` resolve such that the sou
 - **Link syntax** within the moved subtree MUST be preserved as-is (wikilinks remain wikilinks, inline links remain inline links).
 - **List markers** MUST be updated to match the destination context, following the same resolution rules as add-child serialization (Section 4.5): previous sibling → next sibling → defaults.
 
-### 6.4 Validation
+### 6.4 Reference Link Definitions
+
+Reference link definitions (`[label]: url`) are document-global and are NOT moved or deleted along with the nodes that reference them. After a move or delete operation, any reference definitions that were only used by the moved/deleted nodes remain in the document as orphaned definitions. Implementations MAY emit a warning for orphaned definitions but MUST NOT be required to do so. This behavior preserves lossless round-tripping for reference-style links.
+
+### 6.5 Validation
 
 A move MUST fail if it would make a node a descendant of itself (cycle detection).
 
-### 6.5 Confirmation
+### 6.6 Confirmation
 
 In interactive CLI mode, the CLI MUST display the source and destination and prompt for confirmation. The `--yes` flag overrides this prompt.
 
-### 6.6 Cleanup
+### 6.7 Cleanup
 
 The source site follows the same cleanup rules as delete (Section 5.2): prune empty sublists, clean up residual blank lines, warn on destroyed non-structural content (if any existed in the moved node's list item beyond the structural link and its subtree).
 
@@ -248,6 +268,8 @@ Binder transformations MUST be deterministic and minimal.
 ---
 
 ## 9. Traversal Semantics
+
+> **Informational — not tested by conformance suite.** This section describes traversal semantics for future compile/export operations. Conformance runners MUST NOT test Section 9 behavior. Implementations may implement compile/export traversal as a non-normative extension.
 
 ### 9.1 Occurrence Traversal (Compile/Export)
 

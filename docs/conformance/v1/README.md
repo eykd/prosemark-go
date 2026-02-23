@@ -69,11 +69,11 @@ The `NNN` prefix in fixture directory names is a stable, three-digit, zero-padde
 | `schema/op-spec.schema.json` | `op.json` |
 | `schema/project.schema.json` | `project.json` |
 
-**Total fixtures**: 76. All fixtures are implemented.
+**Total fixtures**: 105. All fixtures are implemented.
 
 ## Test Catalog Summary
 
-### Parse Domain (001–040, 071)
+### Parse Domain (001–040, 071, 076–086)
 
 | Range | Category |
 |-------|----------|
@@ -87,8 +87,14 @@ The `NNN` prefix in fixture directory names is a stable, three-digit, zero-padde
 | 026–033 | Lint warnings (BNDW codes) |
 | 034–040 | Edge cases (line endings, GFM checkboxes, indentation) |
 | 071 | Wikilink zero-match (BNDW004 synthesized target) |
+| 076–077 | Percent-encoded link targets |
+| 078–079 | Code fence edge cases |
+| 080 | Non-.md link followed by .md link |
+| 081–082 | Pragma position variants |
+| 083–084 | GFM extension interactions |
+| 085–086 | Wikilink heading and fragment forms |
 
-### Ops Domain (041–069, 070, 072–075)
+### Ops Domain (041–069, 070, 072–075, 087–105)
 
 | Range | Operation |
 |-------|-----------|
@@ -102,3 +108,19 @@ The `NNN` prefix in fixture directory names is a stable, three-digit, zero-padde
 | 073 | move / multi-match warning |
 | 074 | add-child / ordered-list serialization |
 | 075 | add-child / selector index disambiguation |
+| 087–088 | ops-error / OPE009 I/O and parse failure |
+| 089 | add-child / percent-encoded target |
+| 090 | add-child / CRLF line ending preservation |
+| 091 | delete / mixed CRLF line endings |
+| 092–093 | add-child / ordered list marker inheritance |
+| 094 | add-child / tab indentation matching |
+| 095 | move / reference-link syntax preservation |
+| 096 | delete / fragment disambiguation |
+| 097 | add-child / multi-segment indexed selector |
+| 098–099 | delete / prune cascade and whitespace cleanup |
+| 100 | delete / blank-line reduction before deletion |
+| 101 | add-child / isolated parent default serialization |
+| 102 | delete / duplicate node single occurrence |
+| 103 | move / deep cycle detection |
+| 104 | delete / GFM checkbox content destruction |
+| 105 | add-child / title bracket escaping |

@@ -1,0 +1,10 @@
+{
+  "version": "1",
+  "operation": "move",
+  "params": {
+    "sourceSelector": "a",
+    "destinationParentSelector": "a:b:c:d:e",
+    "position": "last",
+    "yes": true
+  }
+}

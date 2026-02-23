@@ -1,0 +1,10 @@
+{
+  "version": "1",
+  "operation": "add-child",
+  "params": {
+    "parentSelector": "parent",
+    "target": "child.md",
+    "title": "Child",
+    "position": "last"
+  }
+}

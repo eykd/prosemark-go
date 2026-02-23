@@ -1,0 +1,15 @@
+{
+  "version": "1",
+  "diagnostics": [
+    {
+      "severity": "warning",
+      "code": "BNDW005",
+      "message": "Structural link found inside a fenced code block"
+    },
+    {
+      "severity": "warning",
+      "code": "BNDW005",
+      "message": "Structural link found inside a fenced code block"
+    }
+  ]
+}
