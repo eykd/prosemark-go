@@ -64,14 +64,9 @@ func Parse(ctx context.Context, src []byte, project *Project) (*ParseResult, []D
 		lineNum := i + 1
 
 		if !inFence {
-			switch {
-			case strings.HasPrefix(line, "```"):
-				inFence = true
-				fenceMarker = "```"
-			case strings.HasPrefix(line, "~~~"):
-				inFence = true
-				fenceMarker = "~~~"
-			default:
+			if marker := openFenceMarker(line); marker != "" {
+				inFence, fenceMarker = true, marker
+			} else {
 				if !result.HasPragma && pragmaRE.MatchString(line) {
 					result.HasPragma = true
 					result.PragmaLine = lineNum
@@ -129,12 +124,8 @@ func Parse(ctx context.Context, src []byte, project *Project) (*ParseResult, []D
 		lineNum := i + 1
 
 		if !inFence {
-			if strings.HasPrefix(line, "```") {
-				inFence, fenceMarker = true, "```"
-				continue
-			}
-			if strings.HasPrefix(line, "~~~") {
-				inFence, fenceMarker = true, "~~~"
+			if marker := openFenceMarker(line); marker != "" {
+				inFence, fenceMarker = true, marker
 				continue
 			}
 		} else {
@@ -319,8 +310,8 @@ func resolveWikilink(stem, alias string, wikiIndex map[string][]wikilinkEntry, l
 		}
 	}
 
-	switch len(atMinDepth) {
-	case 1:
+	switch {
+	case len(atMinDepth) == 1:
 		target = atMinDepth[0].file
 		if caseInsensitive {
 			diags = append(diags, Diagnostic{
@@ -334,15 +325,13 @@ func resolveWikilink(stem, alias string, wikiIndex map[string][]wikilinkEntry, l
 			alias = stemFromPath(target)
 		}
 		title = alias
-	default:
-		if len(atMinDepth) > 1 {
-			diags = append(diags, Diagnostic{
-				Severity: "error",
-				Code:     CodeAmbiguousWikilink,
-				Message:  "wikilink matches multiple files at the same depth",
-				Location: &Location{Line: lineNum},
-			})
-		}
+	case len(atMinDepth) > 1:
+		diags = append(diags, Diagnostic{
+			Severity: "error",
+			Code:     CodeAmbiguousWikilink,
+			Message:  "wikilink matches multiple files at the same depth",
+			Location: &Location{Line: lineNum},
+		})
 	}
 	return
 }
@@ -454,6 +443,18 @@ func escapesRoot(path string) bool {
 // isMarkdownTarget reports whether path has a .md extension.
 func isMarkdownTarget(path string) bool {
 	return strings.HasSuffix(strings.ToLower(path), ".md")
+}
+
+// openFenceMarker returns the fence marker string ("```" or "~~~") if line opens a
+// fenced code block, or "" if the line is not a fence opener.
+func openFenceMarker(line string) string {
+	if strings.HasPrefix(line, "```") {
+		return "```"
+	}
+	if strings.HasPrefix(line, "~~~") {
+		return "~~~"
+	}
+	return ""
 }
 
 // splitLines splits src into lines and their corresponding line endings.
