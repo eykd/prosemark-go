@@ -44,7 +44,7 @@ func Parse(ctx context.Context, src []byte, project *Project) (*ParseResult, []D
 
 	// Scan lines: track fences, detect pragma, detect links in fences.
 	inFence := false
-	fenceChar := byte(0)
+	fenceMarker := ""
 
 	for i, line := range result.Lines {
 		lineNum := i + 1
@@ -53,10 +53,10 @@ func Parse(ctx context.Context, src []byte, project *Project) (*ParseResult, []D
 			switch {
 			case strings.HasPrefix(line, "```"):
 				inFence = true
-				fenceChar = '`'
+				fenceMarker = "```"
 			case strings.HasPrefix(line, "~~~"):
 				inFence = true
-				fenceChar = '~'
+				fenceMarker = "~~~"
 			default:
 				if !result.HasPragma && pragmaRE.MatchString(line) {
 					result.HasPragma = true
@@ -64,10 +64,9 @@ func Parse(ctx context.Context, src []byte, project *Project) (*ParseResult, []D
 				}
 			}
 		} else {
-			if (fenceChar == '`' && strings.HasPrefix(line, "```")) ||
-				(fenceChar == '~' && strings.HasPrefix(line, "~~~")) {
+			if strings.HasPrefix(line, fenceMarker) {
 				inFence = false
-				fenceChar = 0
+				fenceMarker = ""
 			} else if linkRE.MatchString(line) {
 				diags = append(diags, Diagnostic{
 					Severity: "warning",
@@ -111,17 +110,16 @@ func splitLines(src []byte) ([]string, []string) {
 			i++
 			start = i
 		case '\r':
+			end := "\r"
+			advance := 1
 			if i+1 < len(src) && src[i+1] == '\n' {
-				lines = append(lines, string(src[start:i]))
-				ends = append(ends, "\r\n")
-				i += 2
-				start = i
-			} else {
-				lines = append(lines, string(src[start:i]))
-				ends = append(ends, "\r")
-				i++
-				start = i
+				end = "\r\n"
+				advance = 2
 			}
+			lines = append(lines, string(src[start:i]))
+			ends = append(ends, end)
+			i += advance
+			start = i
 		default:
 			i++
 		}
