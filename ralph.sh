@@ -1944,6 +1944,69 @@ run_acceptance_check() {
     return 0
 }
 
+# Drive the ATDD cycle for each implementation subtask under the
+# [sp:07-implement] container, rather than delegating to the skill
+# as a single monolithic call.
+# Arguments: implement_task_id, epic_id
+# Returns 0 when all subtasks complete, 1 on failure/blocked
+execute_implement_phase() {
+    local implement_task_id="$1"
+    local epic_id="$2"
+    local iteration=0
+
+    log_section "IMPLEMENT PHASE: running ATDD loop for subtasks of $implement_task_id"
+
+    if [[ "$DRY_RUN" == "true" ]]; then
+        log INFO "[DRY RUN] Would run ATDD loop for subtasks of $implement_task_id"
+        return "$EXIT_SUCCESS"
+    fi
+
+    while (( iteration < MAX_ITERATIONS )); do
+        (( iteration++ ))
+        log INFO "Implement iteration $iteration/$MAX_ITERATIONS"
+
+        # Query ready leaf tasks scoped to the implement container
+        local ready_tasks task_count
+        ready_tasks=$(get_ready_tasks "$implement_task_id") || {
+            log ERROR "Failed to query ready tasks under $implement_task_id"
+            return "$EXIT_FAILURE"
+        }
+        task_count=$(echo "$ready_tasks" | jq 'length')
+
+        if [[ "$task_count" -eq 0 ]]; then
+            # No ready tasks — check if all children are already closed
+            local open_count
+            open_count=$(npx bd list --parent "$implement_task_id" --status open \
+                --json 2>/dev/null | jq 'length // 0')
+
+            if [[ "$open_count" == "0" ]]; then
+                log INFO "All implementation tasks complete — closing $implement_task_id"
+                npx bd close "$implement_task_id" 2>/dev/null || true
+                return "$EXIT_SUCCESS"
+            else
+                log WARN "Implement phase has $open_count open task(s) but none ready (blocked)"
+                return "$EXIT_FAILURE"
+            fi
+        fi
+
+        local next_task sub_task_id sub_title
+        next_task=$(echo "$ready_tasks" | jq '.[0]')
+        sub_task_id=$(echo "$next_task" | jq -r '.id // "unknown"')
+        sub_title=$(echo "$next_task"  | jq -r '.title // "unknown"')
+        log INFO "Processing: $sub_task_id | $sub_title"
+
+        if execute_atdd_cycle "$next_task" "$implement_task_id"; then
+            log INFO "Implementation task $sub_task_id completed"
+            auto_close_completed_parents "$sub_task_id" "$implement_task_id"
+        else
+            log WARN "Implementation task $sub_task_id blocked — continuing to next"
+        fi
+    done
+
+    log WARN "Implement phase exhausted $MAX_ITERATIONS iterations"
+    return "$EXIT_LIMIT_REACHED"
+}
+
 # Execute a spec-kit phase task by invoking its corresponding skill.
 # Arguments: task_json, epic_id
 # Returns 0 on success (task complete), 1 on failure (BLOCKED)
@@ -1962,6 +2025,13 @@ execute_spec_kit_phase_task() {
     if [[ -z "$phase_name" ]]; then
         log ERROR "Could not extract phase name from task title: $task_title"
         return "$EXIT_FAILURE"
+    fi
+
+    # sp:07-implement drives the ATDD loop for each implementation subtask
+    # rather than invoking the skill as a monolithic call.
+    if [[ "$phase_name" == "sp:07-implement" ]]; then
+        execute_implement_phase "$task_id" "$epic_id"
+        return $?
     fi
 
     log_section "SPEC-KIT PHASE: $phase_name for $task_id"
