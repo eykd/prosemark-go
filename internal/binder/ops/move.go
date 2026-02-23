@@ -162,10 +162,29 @@ func Move(ctx context.Context, src []byte, project *binder.Project, params binde
 // moveEvalSourceSelector finds source nodes matching selector.
 // For selectors containing ":", path navigation via binder.EvalSelector is used.
 // Otherwise a deep-tree search is performed.
+// The root node is never a valid source: returns OPE001 with an explicit message.
 func moveEvalSourceSelector(selector string, root *binder.Node) ([]*binder.Node, []binder.Diagnostic) {
+	const rootGuardMsg = "root node is not a valid target for this operation"
+	if selector == "." {
+		return nil, []binder.Diagnostic{{
+			Severity: "error",
+			Code:     binder.CodeSelectorNoMatch,
+			Message:  rootGuardMsg,
+		}}
+	}
 	if strings.Contains(selector, ":") {
 		selResult, errDiags := binder.EvalSelector(selector, root)
-		return selResult.Nodes, append(selResult.Warnings, errDiags...)
+		allDiags := append(selResult.Warnings, errDiags...)
+		for _, n := range selResult.Nodes {
+			if n.Type == "root" {
+				return nil, append(allDiags, binder.Diagnostic{
+					Severity: "error",
+					Code:     binder.CodeSelectorNoMatch,
+					Message:  rootGuardMsg,
+				})
+			}
+		}
+		return selResult.Nodes, allDiags
 	}
 	var matches []*binder.Node
 	deleteSearchTree(root, selector, &matches)
@@ -181,8 +200,11 @@ func moveEvalSourceSelector(selector string, root *binder.Node) ([]*binder.Node,
 		diags = []binder.Diagnostic{{
 			Severity: "warning",
 			Code:     binder.CodeMultiMatch,
-			Message:  fmt.Sprintf("selector %q matched %d nodes; all will be moved", selector, len(matches)),
+			Message: fmt.Sprintf("selector %q matched %d nodes; moving first match only"+
+				" (use an index-qualified selector, e.g. %q, to be explicit)",
+				selector, len(matches), selector+"[0]"),
 		}}
+		matches = matches[:1]
 	}
 	return matches, diags
 }
