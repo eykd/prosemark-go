@@ -41,18 +41,9 @@ func Delete(ctx context.Context, src []byte, project *binder.Project, params bin
 
 	// Evaluate selector with deep-tree search.
 	nodes, selDiags := deleteEvalSelector(params.Selector, result.Root)
-	if selDiags != nil {
+	if len(nodes) == 0 {
 		// Fatal selector error (OPE001): return src unchanged.
-		hasError := false
-		for _, d := range selDiags {
-			if d.Severity == "error" {
-				hasError = true
-				break
-			}
-		}
-		if hasError {
-			return src, append(parseDiags, selDiags...), nil
-		}
+		return src, append(parseDiags, selDiags...), nil
 	}
 
 	node := nodes[0]
@@ -73,7 +64,7 @@ func Delete(ctx context.Context, src []byte, project *binder.Project, params bin
 
 	// Find parent to determine whether its sublist will become empty.
 	parent := deleteFindParentNode(result.Root, node)
-	lastChildOfNonRoot := parent != nil && parent.Type != "root" && len(parent.Children) == 1
+	isSoleChildOfListItem := parent != nil && parent.Type != "root" && len(parent.Children) == 1
 
 	// Compute the subtree end line (parser does not populate SubtreeEnd).
 	subtreeEndLine := deleteComputeSubtreeEnd(node)
@@ -81,17 +72,11 @@ func Delete(ctx context.Context, src []byte, project *binder.Project, params bin
 	// Delete lines node.Line..subtreeEndLine (1-based, inclusive).
 	startIdx := node.Line - 1
 	endIdx := subtreeEndLine - 1
-	newLines := make([]string, 0, len(result.Lines)-(endIdx-startIdx+1))
-	newLines = append(newLines, result.Lines[:startIdx]...)
-	newLines = append(newLines, result.Lines[endIdx+1:]...)
-	newLineEnds := make([]string, 0, len(result.LineEnds)-(endIdx-startIdx+1))
-	newLineEnds = append(newLineEnds, result.LineEnds[:startIdx]...)
-	newLineEnds = append(newLineEnds, result.LineEnds[endIdx+1:]...)
-	result.Lines = newLines
-	result.LineEnds = newLineEnds
+	result.Lines = deleteRemoveRange(result.Lines, startIdx, endIdx)
+	result.LineEnds = deleteRemoveRange(result.LineEnds, startIdx, endIdx)
 
 	// Emit OPW004 if the parent's sublist is now empty.
-	if lastChildOfNonRoot {
+	if isSoleChildOfListItem {
 		allDiags = append(allDiags, binder.Diagnostic{
 			Severity: "warning",
 			Code:     binder.CodeEmptySublistPruned,
@@ -186,6 +171,15 @@ func deleteNodeHasNonStructuralContent(rawLine string) bool {
 	}
 	rest := strings.TrimSpace(rawLine[loc[1]:])
 	return rest != ""
+}
+
+// deleteRemoveRange returns a copy of s with elements [startIdx, endIdx] removed
+// (0-based, inclusive).
+func deleteRemoveRange(s []string, startIdx, endIdx int) []string {
+	out := make([]string, 0, len(s)-(endIdx-startIdx+1))
+	out = append(out, s[:startIdx]...)
+	out = append(out, s[endIdx+1:]...)
+	return out
 }
 
 // deleteCollapseBlankLines removes duplicate consecutive blank lines, ensuring
