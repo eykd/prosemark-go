@@ -1,0 +1,11 @@
+{
+  "version": "1",
+  "root": {
+    "children": [
+      {
+        "target": "ghost.md",
+        "title": "Ghost Chapter"
+      }
+    ]
+  }
+}

@@ -1,0 +1,5 @@
+{
+  "version": "1",
+  "files": ["chapter-03.md", "notes/chapter-03.md"],
+  "binderDir": "."
+}

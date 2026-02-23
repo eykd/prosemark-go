@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "prosemark-binder-op-spec/v1",
+  "type": "object",
+  "required": ["version", "operation"],
+  "additionalProperties": false,
+  "properties": {
+    "version":   { "const": "1" },
+    "operation": { "enum": ["add-child", "delete", "move"] },
+    "params":    { "type": "object" }
+  },
+  "if":   { "properties": { "operation": { "const": "add-child" } }, "required": ["operation"] },
+  "then": { "properties": { "params": { "$ref": "#/$defs/AddChildParams" } } },
+  "else": {
+    "if":   { "properties": { "operation": { "const": "delete" } }, "required": ["operation"] },
+    "then": { "properties": { "params": { "$ref": "#/$defs/DeleteParams" } } },
+    "else": { "properties": { "params": { "$ref": "#/$defs/MoveParams" } } }
+  },
+  "$defs": {
+    "AddChildParams": {
+      "required": ["parentSelector", "target", "title"],
+      "properties": {
+        "parentSelector":   { "type": "string" },
+        "target":           { "type": "string" },
+        "title":            { "type": "string" },
+        "position":         { "enum": ["last", "first", "at", "before", "after"], "default": "last" },
+        "positionIndex":    { "type": "integer", "minimum": 0 },
+        "positionSelector": { "type": "string" },
+        "force":            { "type": "boolean", "default": false }
+      }
+    },
+    "DeleteParams": {
+      "required": ["selector"],
+      "properties": {
+        "selector": { "type": "string" },
+        "yes":      { "type": "boolean", "default": true }
+      }
+    },
+    "MoveParams": {
+      "required": ["sourceSelector", "destinationParentSelector"],
+      "properties": {
+        "sourceSelector":            { "type": "string" },
+        "destinationParentSelector": { "type": "string" },
+        "position":                  { "enum": ["last", "first", "at", "before", "after"], "default": "last" },
+        "positionIndex":             { "type": "integer", "minimum": 0 },
+        "positionSelector":          { "type": "string" },
+        "yes":                       { "type": "boolean", "default": true }
+      }
+    }
+  }
+}

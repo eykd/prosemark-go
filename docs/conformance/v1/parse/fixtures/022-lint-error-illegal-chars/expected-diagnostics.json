@@ -1,0 +1,14 @@
+{
+  "version": "1",
+  "diagnostics": [
+    {
+      "severity": "error",
+      "code": "BNDE001",
+      "message": "Illegal path characters in link target: foo<bar>.md",
+      "location": {
+        "line": 3,
+        "column": 3
+      }
+    }
+  ]
+}

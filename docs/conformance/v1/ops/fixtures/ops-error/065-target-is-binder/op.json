@@ -1,0 +1,9 @@
+{
+  "version": "1",
+  "operation": "add-child",
+  "params": {
+    "parentSelector": ".",
+    "target": "_binder.md",
+    "title": "Self"
+  }
+}

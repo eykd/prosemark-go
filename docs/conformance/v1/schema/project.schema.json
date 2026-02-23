@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "prosemark-binder-project/v1",
+  "type": "object",
+  "required": ["version", "files"],
+  "additionalProperties": false,
+  "properties": {
+    "version":   { "const": "1" },
+    "files":     {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Relative paths of all .md files that exist in the project root (forward-slash separated, excluding _binder.md)"
+    },
+    "binderDir": {
+      "type": "string",
+      "default": ".",
+      "description": "Directory where _binder.md lives, relative to project root. Used for wikilink proximity tiebreak."
+    }
+  }
+}

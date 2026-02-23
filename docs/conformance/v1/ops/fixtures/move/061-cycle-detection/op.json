@@ -1,0 +1,10 @@
+{
+  "version": "1",
+  "operation": "move",
+  "params": {
+    "sourceSelector": "ch1.md",
+    "destinationParentSelector": "sub-i.md",
+    "position": "last",
+    "yes": true
+  }
+}

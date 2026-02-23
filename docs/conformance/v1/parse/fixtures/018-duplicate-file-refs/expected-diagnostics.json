@@ -1,0 +1,10 @@
+{
+  "version": "1",
+  "diagnostics": [
+    {
+      "severity": "warning",
+      "code": "BNDW003",
+      "message": "Duplicate file reference: intro.md appears as more than one node in the binder tree"
+    }
+  ]
+}

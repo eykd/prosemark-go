@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "prosemark-binder-diagnostics/v1",
+  "type": "object",
+  "required": ["version", "diagnostics"],
+  "additionalProperties": false,
+  "properties": {
+    "version": { "const": "1" },
+    "diagnostics": { "type": "array", "items": { "$ref": "#/$defs/Diagnostic" } }
+  },
+  "$defs": {
+    "Diagnostic": {
+      "type": "object",
+      "required": ["severity", "code"],
+      "properties": {
+        "severity":   { "enum": ["error", "warning"] },
+        "code":       { "type": "string", "pattern": "^(BND[EW]|OP[EW])[0-9]{3}$" },
+        "message":    { "type": "string" },
+        "location": {
+          "type": "object",
+          "required": ["line"],
+          "additionalProperties": false,
+          "properties": {
+            "line":       { "type": "integer", "minimum": 1 },
+            "column":     { "type": "integer", "minimum": 1 },
+            "byteOffset": { "type": "integer", "minimum": 0 }
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

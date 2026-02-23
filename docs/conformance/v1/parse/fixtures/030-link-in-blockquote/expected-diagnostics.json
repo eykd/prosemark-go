@@ -1,0 +1,9 @@
+{
+  "version": "1",
+  "diagnostics": [
+    {
+      "severity": "warning",
+      "code": "BNDW006"
+    }
+  ]
+}

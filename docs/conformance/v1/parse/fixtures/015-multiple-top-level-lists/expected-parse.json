@@ -1,0 +1,32 @@
+{
+  "version": "1",
+  "root": {
+    "type": "root",
+    "children": [
+      {
+        "type": "node",
+        "target": "part1.md",
+        "title": "Part One",
+        "children": []
+      },
+      {
+        "type": "node",
+        "target": "part2.md",
+        "title": "Part Two",
+        "children": []
+      },
+      {
+        "type": "node",
+        "target": "part3.md",
+        "title": "Part Three",
+        "children": []
+      },
+      {
+        "type": "node",
+        "target": "part4.md",
+        "title": "Part Four",
+        "children": []
+      }
+    ]
+  }
+}

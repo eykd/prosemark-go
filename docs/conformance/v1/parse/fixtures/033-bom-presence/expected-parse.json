@@ -1,0 +1,11 @@
+{
+  "version": "1",
+  "root": {
+    "children": [
+      {
+        "target": "ch1.md",
+        "title": "Chapter One"
+      }
+    ]
+  }
+}

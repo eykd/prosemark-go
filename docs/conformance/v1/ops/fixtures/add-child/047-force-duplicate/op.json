@@ -1,0 +1,11 @@
+{
+  "version": "1",
+  "operation": "add-child",
+  "params": {
+    "parentSelector": ".",
+    "target": "ch1.md",
+    "title": "Chapter One (dup)",
+    "position": "last",
+    "force": true
+  }
+}

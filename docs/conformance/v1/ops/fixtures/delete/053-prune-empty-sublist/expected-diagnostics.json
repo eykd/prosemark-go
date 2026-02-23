@@ -1,0 +1,10 @@
+{
+  "version": "1",
+  "diagnostics": [
+    {
+      "severity": "warning",
+      "code": "OPW004",
+      "message": "Empty sublist pruned from ch1.md after its last structural child was removed"
+    }
+  ]
+}

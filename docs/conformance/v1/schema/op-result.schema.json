@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "prosemark-binder-op-result/v1",
+  "type": "object",
+  "required": ["version", "changed"],
+  "properties": {
+    "version":     { "const": "1" },
+    "changed":     { "type": "boolean", "description": "true if binder bytes were modified" },
+    "diagnostics": { "type": "array", "items": { "$ref": "diagnostics.schema.json#/$defs/Diagnostic" } }
+  },
+  "additionalProperties": false
+}

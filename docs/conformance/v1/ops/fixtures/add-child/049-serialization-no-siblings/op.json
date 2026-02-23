@@ -1,0 +1,10 @@
+{
+  "version": "1",
+  "operation": "add-child",
+  "params": {
+    "parentSelector": "ch1.md",
+    "target": "sec-a.md",
+    "title": "Section A",
+    "position": "last"
+  }
+}

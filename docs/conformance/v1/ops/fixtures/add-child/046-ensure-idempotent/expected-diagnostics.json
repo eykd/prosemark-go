@@ -1,0 +1,10 @@
+{
+  "version": "1",
+  "diagnostics": [
+    {
+      "severity": "warning",
+      "code": "OPW002",
+      "message": "add-child skipped: ch1.md already exists as a child of the selected parent and --force was not specified"
+    }
+  ]
+}

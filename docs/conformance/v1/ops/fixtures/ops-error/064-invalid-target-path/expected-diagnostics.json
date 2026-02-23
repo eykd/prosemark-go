@@ -1,0 +1,9 @@
+{
+  "version": "1",
+  "diagnostics": [
+    {
+      "severity": "error",
+      "code": "OPE004"
+    }
+  ]
+}

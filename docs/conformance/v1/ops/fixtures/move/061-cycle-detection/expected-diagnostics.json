@@ -1,0 +1,10 @@
+{
+  "version": "1",
+  "diagnostics": [
+    {
+      "severity": "error",
+      "code": "OPE003",
+      "message": "Move would create a cycle: ch1.md is an ancestor of sub-i.md"
+    }
+  ]
+}

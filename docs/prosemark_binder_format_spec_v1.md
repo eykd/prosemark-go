@@ -181,6 +181,8 @@ The wikilink resolution algorithm matches Obsidian's behavior:
 3. When multiple files share a basename, prefer the one closest to the linking file (same directory first, then shortest relative path).
 4. If still ambiguous after proximity tiebreak, emit a lint error.
 
+If no file in the project matches the bare stem (zero matches), the implementation MUST synthesize the target as `<stem>.md`, include the structural node in the parse result with that synthesized path, and emit BNDW004 (MissingTargetFile).
+
 ---
 
 ## 6. Graph Semantics

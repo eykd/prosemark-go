@@ -1,0 +1,13 @@
+{
+  "version": "1",
+  "diagnostics": [
+    {
+      "severity": "error",
+      "code": "BNDE002",
+      "location": {
+        "line": 3,
+        "column": 3
+      }
+    }
+  ]
+}

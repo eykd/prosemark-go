@@ -1,0 +1,10 @@
+{
+  "version": "1",
+  "operation": "add-child",
+  "params": {
+    "parentSelector": "intro.md",
+    "target": "appendix.md",
+    "title": "Appendix",
+    "position": "last"
+  }
+}

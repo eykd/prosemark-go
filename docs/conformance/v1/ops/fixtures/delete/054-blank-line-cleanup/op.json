@@ -1,0 +1,8 @@
+{
+  "version": "1",
+  "operation": "delete",
+  "params": {
+    "selector": "ch2.md",
+    "yes": true
+  }
+}

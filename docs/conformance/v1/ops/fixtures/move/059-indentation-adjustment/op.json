@@ -1,0 +1,10 @@
+{
+  "version": "1",
+  "operation": "move",
+  "params": {
+    "sourceSelector": "ch1.md",
+    "destinationParentSelector": "deep.md",
+    "position": "last",
+    "yes": true
+  }
+}

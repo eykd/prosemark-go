@@ -1,0 +1,10 @@
+{
+  "version": "1",
+  "diagnostics": [
+    {
+      "severity": "error",
+      "code": "OPE007",
+      "message": "Sibling selector nonexistent did not match any sibling at the insertion point"
+    }
+  ]
+}

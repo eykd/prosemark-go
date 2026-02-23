@@ -1,0 +1,10 @@
+{
+  "version": "1",
+  "diagnostics": [
+    {
+      "severity": "warning",
+      "code": "BNDW001",
+      "message": "Missing binder pragma: file has content but does not begin with <!-- prosemark-binder:v1 -->"
+    }
+  ]
+}

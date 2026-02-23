@@ -1,0 +1,3 @@
+<\!-- prosemark-binder:v1 -->
+
+- [Title](foo.md)

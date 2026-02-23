@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "prosemark-binder-parse-result/v1",
+  "type": "object",
+  "required": ["version", "root"],
+  "additionalProperties": false,
+  "properties": {
+    "version": { "const": "1" },
+    "root": {
+      "type": "object",
+      "required": ["type", "children"],
+      "properties": {
+        "type": { "const": "root" },
+        "children": { "type": "array", "items": { "$ref": "#/$defs/Node" } }
+      }
+    }
+  },
+  "$defs": {
+    "Node": {
+      "type": "object",
+      "required": ["type", "target", "title", "children"],
+      "properties": {
+        "type":     { "const": "node" },
+        "target":   { "type": "string", "description": "Resolved relative path (e.g. subfolder/foo.md)" },
+        "title":    { "type": "string" },
+        "children": { "type": "array", "items": { "$ref": "#/$defs/Node" } }
+      },
+      "additionalProperties": false
+    }
+  }
+}

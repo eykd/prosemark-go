@@ -1,0 +1,14 @@
+{
+  "version": "1",
+  "diagnostics": [
+    {
+      "severity": "error",
+      "code": "BNDE003",
+      "message": "Ambiguous wikilink: [[chapter-03]] matches chapter-03.md and notes/chapter-03.md",
+      "location": {
+        "line": 3,
+        "column": 3
+      }
+    }
+  ]
+}

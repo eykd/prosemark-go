@@ -1,0 +1,10 @@
+{
+  "version": "1",
+  "diagnostics": [
+    {
+      "severity": "error",
+      "code": "OPE001",
+      "message": "Selector nonexistent.md resolved to zero nodes in the binder tree"
+    }
+  ]
+}

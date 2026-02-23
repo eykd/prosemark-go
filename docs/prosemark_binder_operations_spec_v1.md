@@ -34,7 +34,7 @@ A **node selector** is a string that identifies one or more structural node occu
 ### 3.2 Selector Grammar
 
 ```
-Selector       ::= Segment ( ":" Segment )*
+Selector       ::= "." | Segment ( ":" Segment )*
 Segment        ::= FileReference [ "[" Index "]" ]
 FileReference  ::= <file stem or relative path without .md extension>
 Index          ::= <non-negative integer>
@@ -97,6 +97,10 @@ A single-segment selector (e.g., `part-one`) matches nodes at the top level (chi
 
 A multi-segment selector (e.g., `part-one:chapter-03`) matches the final segment among children of nodes matched by the preceding segments.
 
+### 3.8 Root Selector
+
+The literal string `.` is a reserved selector that matches the **synthetic root** node. It is valid only as a `parent-selector` in add-child operations (inserting top-level children). It is not valid as a source or destination selector for delete or move, and is not valid in multi-segment selectors. When `.` is used as parent-selector, multi-match semantics do not apply (the root is unique).
+
 ---
 
 ## 4. Add-Child Operation
@@ -118,7 +122,7 @@ add-child <parent-selector> <target> --title <title> [position flags] [--force]
 For each node matching `parent-selector`:
 
 1. Check whether a child node with the same resolved target already exists.
-2. If a duplicate exists and `--force` is not set → skip (no-op for that parent). A warning MAY be emitted.
+2. If a duplicate exists and `--force` is not set → skip (no-op for that parent). A warning MUST be emitted (OPW002 DuplicateSkipped).
 3. If a duplicate exists and `--force` is set → insert regardless, creating an additional occurrence.
 4. Otherwise → insert a new structural node as a child.
 
@@ -147,6 +151,8 @@ New nodes are always serialized as standard Markdown inline links:
 ```
 
 **List marker**: Match the last encountered sibling (the sibling immediately above the insertion point in document order). If there is no previous sibling, match the next sibling. If there are no siblings, use `-`.
+
+**Ordered list markers** (`1.`, `2.`, etc.): use the maximum ordinal among the parent's existing structural children plus 1. If the parent has no structural children, use `1.`. The marker style (period vs. paren) MUST match the prevailing sibling style.
 
 **Indentation**: Match the last encountered sibling's indentation. If there is no previous sibling, match the next sibling. If there are no siblings, derive from the parent's nesting depth using a 2-space indent unit.
 

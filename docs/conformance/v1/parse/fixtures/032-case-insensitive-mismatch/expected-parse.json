@@ -1,0 +1,11 @@
+{
+  "version": "1",
+  "root": {
+    "children": [
+      {
+        "target": "Foo.md",
+        "title": "Chapter"
+      }
+    ]
+  }
+}
