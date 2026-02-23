@@ -117,8 +117,8 @@ A developer wants to verify that the `pmk` implementation passes all 135 conform
 
 **Acceptance Scenarios**:
 
-1. **Given** the 64 parse fixtures in `docs/conformance/v1/parse/fixtures/`, **When** each fixture's `binder.md` and `project.json` are processed, **Then** the output parse tree and diagnostics match `expected-parse.json` and `expected-diagnostics.json` respectively.
-2. **Given** the 71 ops fixtures in `docs/conformance/v1/ops/fixtures/`, **When** each fixture's `input-binder.md` and `op.json` are processed, **Then** the output binder bytes match `expected-binder.md` (if present) or the input (if absent), and diagnostics match `expected-diagnostics.json`.
+1. **Given** the 63 parse fixtures in `docs/conformance/v1/parse/fixtures/`, **When** each fixture's `binder.md` and `project.json` are processed, **Then** the output parse tree and diagnostics match `expected-parse.json` and `expected-diagnostics.json` respectively.
+2. **Given** the 72 ops fixtures in `docs/conformance/v1/ops/fixtures/`, **When** each fixture's `input-binder.md` and `op.json` are processed, **Then** the output binder bytes match `expected-binder.md` (if present) or the input (if absent), and diagnostics match `expected-diagnostics.json`.
 3. **Given** a stability fixture (no `op.json`), **When** the binder is parsed and re-serialized, **Then** the output is byte-for-byte identical to the input.
 4. **Given** a fixture that expects an OPExx error, **When** the operation runs, **Then** the exit code is non-zero and the file is unchanged.
 5. **Given** a fixture that expects only OPWxx warnings, **When** the operation runs, **Then** the exit code is 0 and the mutation is applied as expected.
@@ -185,7 +185,7 @@ A developer wants to verify that the `pmk` implementation passes all 135 conform
 ## Assumptions
 
 - The `pmk` binary is a CLI application using an existing command scaffolding in the repository.
-- The conformance runner integrates with the existing `just acceptance` pipeline via the `acceptance/` package.
+- The conformance runner lives in a new `conformance/` package (separate from the GWT acceptance spec pipeline in `acceptance/`) and is invoked via `just conformance-run`; `just test-all` runs both unit tests and conformance fixtures.
 - The project map is supplied as an external JSON input; the tool does not scan the filesystem to discover project files during conformance testing.
 - All binder files are encoded in UTF-8 (with optional BOM handled via BNDW010).
 - The tool is single-user and single-process; concurrent writes to the same binder file are out of scope.

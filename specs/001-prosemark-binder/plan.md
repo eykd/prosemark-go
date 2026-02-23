@@ -243,9 +243,165 @@ Build `conformance/runner_test.go` as a Go integration test.
 conformance-run:
     go test -v -timeout=120s ./conformance/...
 
-test-all:
-    just test && just conformance-run
+test-all: test acceptance conformance-run
 ```
+
+Note: The existing `test-all` target (`test-all: test acceptance`) must be updated to include
+`conformance-run`. The `acceptance` target runs the GWT acceptance spec pipeline (separate
+from the 135 conformance fixtures).
+
+---
+
+---
+
+## Security Considerations
+
+### Atomic File Writes (C1 — Critical)
+
+The plan currently states "Write modified bytes" without specifying the write strategy. A direct
+in-place write (open → truncate → write) that is interrupted mid-operation (disk full, SIGKILL,
+power loss) will leave a **partially overwritten file** — the original content is corrupted and the
+new content is incomplete.
+
+**Required mitigation**: All mutations MUST use atomic write semantics:
+1. Write the modified content to a **temporary file** in the same directory as the binder (e.g.,
+   `_binder.md.tmp.<pid>`).
+2. Verify the write succeeded (no error, expected byte count).
+3. `os.Rename(tmpPath, binderPath)` — atomic rename on Linux, macOS, and Windows (same
+   filesystem).
+4. On any step failure, delete the temp file and return OPE009 with the original file untouched.
+
+This applies to Phase C (add-child), Phase D (delete), and Phase E (move). The `OpImpl` wrapper
+in each `cmd/` command handles the filesystem interaction; the domain functions return `[]byte`
+and remain testable.
+
+### Path Validation: Percent-Encoded Paths (H1 — High)
+
+Inline links allow percent-encoded URLs: `[foo](%2E%2E/secret.md)` is valid CommonMark and
+decodes to `../secret.md`. The current plan validates paths for illegal characters (BNDE001) and
+root-escape (BNDE002) but does not specify **when percent-decoding occurs** relative to validation.
+
+**Required mitigation**:
+- During path extraction from inline links, apply `url.PathUnescape()` (Go stdlib) on the raw
+  link target **before** illegal-char and root-escape checks.
+- The `decoded` path is what gets stored in `Node.Target` and used for all downstream operations.
+- If `url.PathUnescape()` returns an error (malformed `%`-encoding), treat the path as containing
+  illegal characters → BNDE001.
+
+### Binder Path Input Validation (H4 — High)
+
+The `<binder-path>` CLI argument accepts any writable file path. A user could accidentally invoke
+`pmk delete --selector foo ./project.json --yes` and corrupt project metadata.
+
+**Required mitigation**: At the CLI layer (Phase F), validate that `filepath.Base(binderPath)`
+equals `_binder.md` before opening the file. If the check fails, return exit code 1 with an
+informative error on stderr; do **not** emit a structured diagnostic JSON for this failure (it is a
+CLI usage error, not a binder parse error).
+
+---
+
+## Edge Cases & Error Handling
+
+### Empty / Zero-Byte Binder (M1 — Medium)
+
+A zero-byte `_binder.md` file is valid input. The parser must handle it gracefully:
+- After BOM stripping: zero bytes remaining → empty line array
+- Emit BNDW001 (missing pragma)
+- Return `ParseResult{Root: &Node{Type:"root", Children:[]*Node{}}, ...}`
+- Do **not** panic or return OPE009
+
+This ensures parse-then-serialize round-trips are stable on empty files.
+
+### Multiple Pragma Occurrences (M2 — Medium)
+
+If `<!-- prosemark-binder:v1 -->` appears more than once in a binder file, the behavior is
+unspecified. **Required behavior**: the first occurrence wins; subsequent pragma lines are treated
+as ordinary HTML comment content. `ParseResult.PragmaLine` stores the first occurrence only. No
+diagnostic is emitted for duplicate pragmas.
+
+### Pragma Inside Fenced Code Block (M5 — Medium)
+
+The fenced-code-block scan (Phase A, step 3) and pragma detection (Phase A, step 4) must be
+evaluated in correct order: **if the pragma `<!-- prosemark-binder:v1 -->` appears inside a
+fenced code block, it does NOT count as the pragma**. The fence scan must precede pragma
+detection, and pragma detection must check the fence state at the pragma line.
+
+### Multi-Match Selector on Destructive Operations (H2 — High)
+
+The selector grammar allows a bare stem to match multiple nodes (OPW001 warning). The plan must
+explicitly specify mutation behavior when the selector matches more than one node:
+
+- **delete**: OPW001 is emitted; the operation targets the **first** match only (index 0 of
+  the matched set). The OPW001 message MUST include the count of matched nodes and recommend
+  using an index-qualified selector.
+- **move**: same — OPW001, first match only.
+- **add-child** `--parent` selector: same — OPW001, first match only.
+
+This prevents a multi-match bare stem from silently destroying multiple nodes.
+
+### Root Selector on Delete/Move (H3 — High)
+
+The root selector (`.`) is valid per grammar and resolves to the synthetic root node. Deleting
+or moving the root node would destroy the entire binder structure.
+
+**Required guard**: If the target selector evaluates to the synthetic root node (`Type == "root"`),
+return **OPE001** (selector matched zero _real_ nodes) with the message
+`"root node is not a valid target for this operation"` and leave the file unchanged. This applies
+to `delete` and `move` (source selector).
+
+### `--yes` Flag Absence (M3 — Medium)
+
+`delete` and `move` commands require `--yes` as a confirmation flag. The plan must specify
+the error path when `--yes` is absent:
+- Exit code 1; write a human-readable message to stderr: `"destructive operation requires --yes
+  flag; re-run with --yes to confirm"`.
+- In `--json` mode, still produce valid JSON: `{"version":"1","changed":false,"diagnostics":
+  [{"severity":"error","code":"OPE009","message":"operation requires --yes confirmation flag"}]}`.
+- This error occurs before any file I/O.
+
+### Line-Ending Inheritance for First Child in Empty Parent (M4 — Medium)
+
+Phase C (add-child) step 9 derives line endings from sibling context. When there are no existing
+siblings (adding the first child to an empty parent or to root on an empty binder):
+1. Inspect `ParseResult.LineEnds` for all existing lines; take the **majority** ending (LF or
+   CRLF or bare-CR).
+2. If the file is empty or has only one line, default to LF (`"\n"`).
+3. Never use `""` (no ending) as the line ending for a newly inserted line.
+
+This must be explicitly coded and tested in the add-child implementation.
+
+---
+
+## Performance Considerations
+
+### Wikilink Resolution: Index project.json at Parse Time (L2 — Low)
+
+Phase A step 8 resolves wikilinks via `project.files`. A naive scan of `project.files` for each
+wikilink is O(m × n) where m = number of wikilinks and n = number of project files. For large
+projects this exceeds the 100ms parse budget.
+
+**Required optimization**: Build a `map[string][]string` (basename → []full path) from
+`project.files` once at the start of parsing (before processing any list items). Wikilink
+resolution becomes O(1) per lookup plus O(k log k) for tiebreak sorting of the k candidates.
+
+### Regex Compilation at Package Level (L3 — Low)
+
+All regular expressions used in the parser — inline link pattern, wikilink pattern, reference
+definition pattern, fenced-code-fence pattern — MUST be compiled once at package initialization
+using `var rxFoo = regexp.MustCompile(...)` at the top of `parser.go`. Per-call `regexp.Compile`
+or `regexp.MustCompile` inside parse loops adds measurable overhead for 10,000-line files and
+would likely violate the 100ms parse budget.
+
+### Conformance Runner Binary Build Isolation (L1 — Low)
+
+The conformance runner builds `bin/pmk` before running tests. If multiple test processes run
+concurrently (e.g., parallel CI jobs on the same machine with a shared workspace), they race on
+the `bin/pmk` output path.
+
+**Required mitigation**: Use `os.MkdirTemp` or a test-run-specific binary path (e.g., incorporate
+`os.Getpid()` into the binary name), or write the binary to the system temp directory:
+`os.CreateTemp("", "pmk-test-*")`. Clean up the temp binary in `TestMain` after all tests
+complete.
 
 ---
 
