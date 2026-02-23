@@ -70,7 +70,10 @@ func NewAddChildCmd(io AddChildIO) *cobra.Command {
 				return fmt.Errorf("parsing project JSON: %w", err)
 			}
 
-			position := map[bool]string{false: "last", true: "first"}[first]
+			position := "last"
+			if first {
+				position = "first"
+			}
 
 			params := binder.AddChildParams{
 				ParentSelector: parent,
