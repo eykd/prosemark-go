@@ -1944,6 +1944,52 @@ run_acceptance_check() {
     return 0
 }
 
+# Execute a spec-kit phase task by invoking its corresponding skill.
+# Arguments: task_json, epic_id
+# Returns 0 on success (task complete), 1 on failure (BLOCKED)
+execute_spec_kit_phase_task() {
+    local task_json="$1"
+    local epic_id="$2"
+    local task_id task_title task_description phase_name
+
+    task_id=$(echo "$task_json" | jq -r '.id // "unknown"')
+    task_title=$(echo "$task_json" | jq -r '.title // "unknown"')
+    task_description=$(echo "$task_json" | jq -r '.description // "no description"')
+
+    # Extract phase skill name: "[sp:04-red-team] ..." → "sp:04-red-team"
+    phase_name=$(echo "$task_title" | grep -oP '(?<=\[)sp:[^\]]+(?=\])' | head -1 || true)
+
+    if [[ -z "$phase_name" ]]; then
+        log ERROR "Could not extract phase name from task title: $task_title"
+        return "$EXIT_FAILURE"
+    fi
+
+    log_section "SPEC-KIT PHASE: $phase_name for $task_id"
+    log INFO "Invoking /$phase_name skill"
+
+    if [[ "$DRY_RUN" == "true" ]]; then
+        log INFO "[DRY RUN] Would invoke /$phase_name with task context"
+        return "$EXIT_SUCCESS"
+    fi
+
+    local prompt
+    prompt="/$phase_name
+
+Task: $task_title
+Task ID: $task_id
+
+$task_description"
+
+    if invoke_claude_with_retry "$prompt"; then
+        log INFO "Spec-kit phase $phase_name completed successfully"
+        bd close "$task_id" 2>/dev/null || true
+        return "$EXIT_SUCCESS"
+    else
+        log ERROR "Spec-kit phase $phase_name failed"
+        return "$EXIT_FAILURE"
+    fi
+}
+
 # Execute ATDD cycle: outer acceptance loop wrapping inner TDD cycles.
 # Tasks with matching spec files get the full ATDD treatment.
 # Tasks without specs fall back to execute_unit_tdd_cycle.
@@ -1957,6 +2003,14 @@ execute_atdd_cycle() {
 
     task_id=$(echo "$task_json" | jq -r '.id // "unknown"')
     task_title=$(echo "$task_json" | jq -r '.title // "unknown"')
+
+    # Spec-kit phase tasks invoke their skill directly — no TDD cycle
+    local phase_name
+    phase_name=$(echo "$task_title" | grep -oP '(?<=\[)sp:[^\]]+(?=\])' | head -1 || true)
+    if [[ -n "$phase_name" ]]; then
+        execute_spec_kit_phase_task "$task_json" "$epic_id"
+        return $?
+    fi
 
     # Try to find a matching spec file
     if ! spec_file=$(find_spec_for_task "$task_json"); then
