@@ -17,6 +17,7 @@ func NewRootCmd() *cobra.Command {
 	root.AddCommand(NewParseCmd(newDefaultParseReader()))
 	root.AddCommand(NewAddChildCmd(newDefaultAddChildIO()))
 	root.AddCommand(NewDeleteCmd(newDefaultDeleteIO()))
+	root.AddCommand(NewMoveCmd(newDefaultMoveIO()))
 	return root
 }
 
