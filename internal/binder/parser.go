@@ -3,22 +3,27 @@ package binder
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"net/url"
 	"regexp"
 	"strings"
 )
 
 var (
-	pragmaRE       = regexp.MustCompile(`<!--\s*prosemark-binder:v1\s*-->`)
-	linkRE         = regexp.MustCompile(`\[[^\]]*\]\([^)]*\)`)
-	listItemRE     = regexp.MustCompile(`^(\s*)([-*+])\s+(.+)`)
-	inlineLinkRE   = regexp.MustCompile(`^\[([^\]]*)\]\(([^)\s"]+)(?:\s+"[^"]*")?\s*\)`)
-	fullRefLinkRE  = regexp.MustCompile(`^\[([^\]]*)\]\[([^\]]+)\]`)
-	collapsedRefRE = regexp.MustCompile(`^\[([^\]]*)\]\[\]`)
-	wikilinkRE     = regexp.MustCompile(`^\[\[([^\]|]+)(?:\|([^\]]*))?\]\]`)
-	shortcutRefRE  = regexp.MustCompile(`^\[([^\]]+)\]$`)
-	refDefRE       = regexp.MustCompile(`^\[([^\]]+)\]:\s+(\S+)(?:\s+"([^"]*)")?`)
-	mdInlineLinkRE = regexp.MustCompile(`\[[^\]]*\]\([^)]*\.md[^)]*\)`)
+	pragmaRE        = regexp.MustCompile(`<\\?!--\s*prosemark-binder:v1\s*-->`)
+	linkRE          = regexp.MustCompile(`\[[^\]]*\]\([^)]*\)`)
+	listItemRE      = regexp.MustCompile(`^(\s*)([-*+]|\d+[.)])\s+(.+)`)
+	inlineLinkRE    = regexp.MustCompile(`^\[([^\]]*)\]\(([^)\s"]+)(?:\s+"[^"]*")?\s*\)`)
+	fullRefLinkRE   = regexp.MustCompile(`^\[([^\]]*)\]\[([^\]]+)\]`)
+	collapsedRefRE  = regexp.MustCompile(`^\[([^\]]*)\]\[\]`)
+	wikilinkRE      = regexp.MustCompile(`^!?\[\[([^\]|]+)(?:\|([^\]]*))?\]\]`)
+	shortcutRefRE   = regexp.MustCompile(`^\[([^\]]+)\]$`)
+	refDefRE        = regexp.MustCompile(`^\[([^\]]+)\]:\s+(\S+)(?:\s+"([^"]*)")?`)
+	mdInlineLinkRE  = regexp.MustCompile(`\[[^\]]*\]\([^)]*\.md[^)]*\)`)
+	checkboxRE      = regexp.MustCompile(`^\[[xX ]\]\s+`)
+	strikethroughRE = regexp.MustCompile(`~~[^~]*~~`)
+	// allInlineLinkRE finds all inline links anywhere in content.
+	allInlineLinkRE = regexp.MustCompile(`\[([^\]]*)\]\(([^)\s"]+)(?:\s+"[^"]*")?\s*\)`)
 )
 
 // wikilinkEntry holds a project file path and its directory depth (number of "/" separators).
@@ -90,25 +95,31 @@ func Parse(ctx context.Context, src []byte, project *Project) (*ParseResult, []D
 				diags = append(diags, Diagnostic{
 					Severity: "warning",
 					Code:     CodeLinkInCodeFence,
-					Message:  "link inside fenced code block will be ignored",
+					Message:  "Structural link found inside a fenced code block",
 					Location: &Location{Line: lineNum},
 				})
 			}
 		}
 	}
 
-	// Emit BNDW001 if no effective pragma found.
-	if !result.HasPragma {
+	// Emit BNDW001 if no effective pragma found and file has content (or no project context).
+	if !result.HasPragma && (project == nil || len(result.Lines) > 0) {
 		diags = append(diags, Diagnostic{
 			Severity: "warning",
 			Code:     CodeMissingPragma,
-			Message:  "prosemark-binder:v1 pragma not found",
+			Message:  "Missing binder pragma: file has content but does not begin with <!-- prosemark-binder:v1 -->",
 		})
 	}
 
 	// Build O(1) wikilink basename index and project file set.
 	wikiIndex := buildWikilinkIndex(project)
 	projectFileSet := buildProjectFileSet(project)
+	projectFilesLower := buildProjectFilesLower(project)
+
+	binderDir := ""
+	if project != nil {
+		binderDir = project.BinderDir
+	}
 
 	// Pass 2: scan list items, build node tree, emit structural diagnostics.
 	type stackEntry struct {
@@ -121,8 +132,15 @@ func Parse(ctx context.Context, src []byte, project *Project) (*ParseResult, []D
 	inFence = false
 	fenceMarker = ""
 
+	// consumed tracks lines already processed as list item continuations.
+	consumed := make(map[int]bool)
+
 	for i, line := range result.Lines {
 		lineNum := i + 1
+
+		if consumed[i] {
+			continue
+		}
 
 		if !inFence {
 			if marker := openFenceMarker(line); marker != "" {
@@ -152,9 +170,36 @@ func Parse(ctx context.Context, src []byte, project *Project) (*ParseResult, []D
 
 		indent := len(m[1])
 		marker := m[2]
-		content := strings.TrimSpace(m[3])
+		rawContent := m[3]
+		content := strings.TrimSpace(rawContent)
 
-		target, title, linkDiags := parseLink(content, result.RefDefs, project, wikiIndex, lineNum)
+		// Column of the content start within the line (1-based).
+		listItemColumn := len(m[0]) - len(rawContent) + 1
+
+		// Strip GFM task list checkbox prefix: "[ ] " or "[x] " or "[X] ".
+		content = checkboxRE.ReplaceAllString(content, "")
+
+		// Strip GFM strikethrough markup: ~~...~~.
+		content = strings.TrimSpace(strikethroughRE.ReplaceAllString(content, ""))
+
+		target, title, linkDiags := parseLink(content, result.RefDefs, project, wikiIndex, binderDir, lineNum, listItemColumn)
+
+		// If no link found in content, check the immediately following continuation line.
+		if target == "" && i+1 < len(result.Lines) {
+			nextLine := result.Lines[i+1]
+			// A continuation line has more indentation than the list marker level.
+			if countLeadingWhitespace(nextLine) > indent && !listItemRE.MatchString(nextLine) {
+				contContent := strings.TrimSpace(nextLine)
+				contContent = checkboxRE.ReplaceAllString(contContent, "")
+				contContent = strings.TrimSpace(strikethroughRE.ReplaceAllString(contContent, ""))
+				t, ti, ld := parseLink(contContent, result.RefDefs, project, wikiIndex, binderDir, i+2, 0)
+				consumed[i+1] = true
+				if t != "" {
+					target, title = t, ti
+					linkDiags = ld
+				}
+			}
+		}
 
 		// Emit link-resolution diagnostics (BNDE003, BNDW009).
 		diags = append(diags, linkDiags...)
@@ -164,33 +209,40 @@ func Parse(ctx context.Context, src []byte, project *Project) (*ParseResult, []D
 			continue
 		}
 
+		// Handle non-md first link: if target is non-md, look for an md link elsewhere.
+		if !isMarkdownTarget(target) && !hasIllegalPathChars(target) && !escapesRoot(target) {
+			// Emit BNDW007 for this non-md link and try to find an md link in content.
+			diags = append(diags, Diagnostic{
+				Severity: "warning",
+				Code:     CodeNonMarkdownTarget,
+				Message:  "Link target is not a .md file",
+				Location: &Location{Line: lineNum},
+			})
+			// Search for an md link elsewhere in the content.
+			mdTarget, mdTitle := findFirstMdLink(content)
+			if mdTarget == "" {
+				continue
+			}
+			target, title = mdTarget, mdTitle
+		}
+
 		// Percent-decode the target before validation.
 		decoded, decodeOK := percentDecodeTarget(target)
 		if !decodeOK {
 			diags = append(diags, Diagnostic{
 				Severity: "error",
 				Code:     CodeIllegalPathChars,
-				Message:  "link target contains illegal path characters",
-				Location: &Location{Line: lineNum},
+				Message:  fmt.Sprintf("Illegal path characters in link target: %s", target),
+				Location: &Location{Line: lineNum, Column: listItemColumn},
 			})
 			continue
 		}
 		target = decoded
 
 		// Validate target path.
-		if diag := validateTarget(target, lineNum); diag != nil {
+		if diag := validateTarget(target, lineNum, listItemColumn); diag != nil {
 			diags = append(diags, *diag)
 			continue
-		}
-
-		// Check for multiple structural .md links in one list item (BNDW002).
-		if allMd := mdInlineLinkRE.FindAllString(content, -1); len(allMd) > 1 {
-			diags = append(diags, Diagnostic{
-				Severity: "warning",
-				Code:     CodeMultipleStructLinks,
-				Message:  "list item contains multiple structural links; only the first is used",
-				Location: &Location{Line: lineNum},
-			})
 		}
 
 		// Check for self-referential link (BNDW008).
@@ -201,6 +253,7 @@ func Parse(ctx context.Context, src []byte, project *Project) (*ParseResult, []D
 				Message:  "link targets the binder file itself",
 				Location: &Location{Line: lineNum},
 			})
+			continue // skip node creation for self-referential links
 		}
 
 		// Check for duplicate file reference (BNDW003).
@@ -208,18 +261,38 @@ func Parse(ctx context.Context, src []byte, project *Project) (*ParseResult, []D
 			diags = append(diags, Diagnostic{
 				Severity: "warning",
 				Code:     CodeDuplicateFileRef,
-				Message:  "file referenced more than once in binder",
+				Message:  fmt.Sprintf("Duplicate file reference: %s appears as more than one node in the binder tree", target),
 				Location: &Location{Line: lineNum},
 			})
 		}
 		seenTargets[target] = true
 
-		// Check for missing target file when project context is available (BNDW004).
+		// Check for missing/case-mismatch target file when project context is available.
 		if project != nil && !projectFileSet[target] {
+			// Check for case-insensitive match (BNDW009).
+			if lowerMatch := projectFilesLower[strings.ToLower(target)]; lowerMatch != "" {
+				diags = append(diags, Diagnostic{
+					Severity: "warning",
+					Code:     CodeCaseInsensitiveMatch,
+					Message:  fmt.Sprintf("case-insensitive match found: %s → %s", target, lowerMatch),
+					Location: &Location{Line: lineNum},
+				})
+			} else {
+				diags = append(diags, Diagnostic{
+					Severity: "warning",
+					Code:     CodeMissingTargetFile,
+					Message:  fmt.Sprintf("Target file %s is not present in the project", target),
+					Location: &Location{Line: lineNum},
+				})
+			}
+		}
+
+		// Check for multiple structural .md links in one list item (BNDW002).
+		if allMd := mdInlineLinkRE.FindAllString(content, -1); len(allMd) > 1 {
 			diags = append(diags, Diagnostic{
 				Severity: "warning",
-				Code:     CodeMissingTargetFile,
-				Message:  "link target not found in project files",
+				Code:     CodeMultipleStructLinks,
+				Message:  "list item contains multiple structural links; only the first is used",
 				Location: &Location{Line: lineNum},
 			})
 		}
@@ -249,16 +322,16 @@ func Parse(ctx context.Context, src []byte, project *Project) (*ParseResult, []D
 
 // parseLink parses the content portion of a list item and returns (target, title, diags).
 // Returns ("", "", nil) if no link can be resolved.
-func parseLink(content string, refDefs map[string]RefDef, project *Project, wikiIndex map[string][]wikilinkEntry, lineNum int) (target, title string, diags []Diagnostic) {
+func parseLink(content string, refDefs map[string]RefDef, project *Project, wikiIndex map[string][]wikilinkEntry, binderDir string, lineNum, column int) (target, title string, diags []Diagnostic) {
 	if m := inlineLinkRE.FindStringSubmatch(content); m != nil {
 		target, title = m[2], m[1]
 		if title == "" {
 			title = stemFromPath(target)
 		}
 	} else if m := wikilinkRE.FindStringSubmatch(content); m != nil {
-		if project != nil {
-			target, title, diags = resolveWikilink(m[1], m[2], wikiIndex, lineNum)
-		}
+		rawStem := m[1]
+		alias := m[2]
+		target, title, diags = resolveWikilink(rawStem, alias, wikiIndex, binderDir, lineNum, column)
 	} else if m := fullRefLinkRE.FindStringSubmatch(content); m != nil {
 		if rd, exists := refDefs[strings.ToLower(m[2])]; exists {
 			target, title = rd.Target, m[1]
@@ -275,25 +348,69 @@ func parseLink(content string, refDefs map[string]RefDef, project *Project, wiki
 	return
 }
 
+// findFirstMdLink scans content for the first inline .md link after a non-md link.
+// Returns ("", "") if none found.
+func findFirstMdLink(content string) (target, title string) {
+	for _, m := range allInlineLinkRE.FindAllStringSubmatch(content, -1) {
+		if isMarkdownTarget(m[2]) {
+			target, title = m[2], m[1]
+			return
+		}
+	}
+	return
+}
+
 // resolveWikilink resolves a wikilink stem and alias using the pre-built index.
 // Caller must ensure project is non-nil.
-func resolveWikilink(stem, alias string, wikiIndex map[string][]wikilinkEntry, lineNum int) (target, title string, diags []Diagnostic) {
+func resolveWikilink(rawStem, alias string, wikiIndex map[string][]wikilinkEntry, binderDir string, lineNum, column int) (target, title string, diags []Diagnostic) {
+	// Strip fragment from stem (e.g., "foo#section" → "foo").
+	stem := rawStem
+	if idx := strings.Index(stem, "#"); idx >= 0 {
+		stem = stem[:idx]
+	}
+
+	// Fragment-only wikilink [[#heading]] → illegal (BNDE001).
+	if stem == "" {
+		diags = append(diags, Diagnostic{
+			Severity: "error",
+			Code:     CodeIllegalPathChars,
+			Message:  fmt.Sprintf("Illegal path characters in link target: #%s", strings.TrimPrefix(rawStem, "#")),
+			Location: &Location{Line: lineNum},
+		})
+		return
+	}
+
 	stemFile := stem + ".md"
 	entries := wikiIndex[strings.ToLower(stem)]
 
 	// Case-sensitive: exact path match OR basename match.
-	var csEntries []wikilinkEntry
+	var exactEntries, basenameEntries []wikilinkEntry
 	for _, e := range entries {
-		if e.file == stemFile || baseName(e.file) == stemFile {
-			csEntries = append(csEntries, e)
+		if e.file == stemFile {
+			exactEntries = append(exactEntries, e)
+		} else if baseName(e.file) == stemFile {
+			basenameEntries = append(basenameEntries, e)
 		}
 	}
+	csEntries := append(exactEntries, basenameEntries...) //nolint:gocritic
 
 	caseInsensitive := false
 	matchEntries := csEntries
 	if len(csEntries) == 0 {
 		matchEntries = entries
 		caseInsensitive = true
+	}
+
+	// Ambiguity check: when an exact-path match coexists with subdirectory basename matches
+	// and no binderDir context is available, the wikilink is ambiguous (BNDE003).
+	if len(exactEntries) > 0 && len(basenameEntries) > 0 && binderDir == "" {
+		diags = append(diags, Diagnostic{
+			Severity: "error",
+			Code:     CodeAmbiguousWikilink,
+			Message:  fmt.Sprintf("Ambiguous wikilink: [[%s]] matches %s", rawStem, joinWikilinkFiles(csEntries)),
+			Location: &Location{Line: lineNum, Column: column},
+		})
+		return
 	}
 
 	// Proximity tiebreak: prefer shallowest path (fewest "/" separators).
@@ -327,14 +444,31 @@ func resolveWikilink(stem, alias string, wikiIndex map[string][]wikilinkEntry, l
 		}
 		title = alias
 	case len(atMinDepth) > 1:
+		// Multiple at same depth even after proximity tiebreak.
 		diags = append(diags, Diagnostic{
 			Severity: "error",
 			Code:     CodeAmbiguousWikilink,
-			Message:  "wikilink matches multiple files at the same depth",
-			Location: &Location{Line: lineNum},
+			Message:  fmt.Sprintf("Ambiguous wikilink: [[%s]] matches %s", rawStem, joinWikilinkFiles(atMinDepth)),
+			Location: &Location{Line: lineNum, Column: column},
 		})
+	default:
+		// Zero matches: create node with derived filename (BNDW004 emitted by caller).
+		target = stemFile
+		if alias == "" {
+			alias = stem
+		}
+		title = alias
 	}
 	return
+}
+
+// joinWikilinkFiles formats a list of wikilink entries as "file1 and file2".
+func joinWikilinkFiles(entries []wikilinkEntry) string {
+	names := make([]string, len(entries))
+	for i, e := range entries {
+		names[i] = e.file
+	}
+	return strings.Join(names, " and ")
 }
 
 // buildWikilinkIndex builds a lowercase-stem → []wikilinkEntry map for O(1) lookup.
@@ -370,6 +504,18 @@ func buildProjectFileSet(project *Project) map[string]bool {
 	return set
 }
 
+// buildProjectFilesLower builds a lowercase→original map for case-insensitive matching.
+func buildProjectFilesLower(project *Project) map[string]string {
+	m := make(map[string]string)
+	if project == nil {
+		return m
+	}
+	for _, f := range project.Files {
+		m[strings.ToLower(f)] = f
+	}
+	return m
+}
+
 // percentDecodeTarget URL-decodes a percent-encoded path target.
 // Returns (decoded, true) on success, ("", false) if the encoding is malformed.
 func percentDecodeTarget(target string) (string, bool) {
@@ -389,40 +535,44 @@ func baseName(p string) string {
 }
 
 // validateTarget returns a Diagnostic if target fails path validation, or nil if valid.
-// Checks are applied in order: illegal chars, root escape, non-markdown extension.
-func validateTarget(target string, lineNum int) *Diagnostic {
+// Checks are applied in order: illegal chars, trailing-dot segment, root escape.
+// Non-markdown targets are handled before this function is called.
+func validateTarget(target string, lineNum, column int) *Diagnostic {
 	switch {
 	case hasIllegalPathChars(target):
 		return &Diagnostic{
 			Severity: "error",
 			Code:     CodeIllegalPathChars,
-			Message:  "link target contains illegal path characters",
-			Location: &Location{Line: lineNum},
+			Message:  fmt.Sprintf("Illegal path characters in link target: %s", target),
+			Location: &Location{Line: lineNum, Column: column},
+		}
+	case hasTrailingDotSegment(target):
+		return &Diagnostic{
+			Severity: "error",
+			Code:     CodeIllegalPathChars,
+			Message:  fmt.Sprintf("Illegal path characters in link target: %s", target),
+			Location: &Location{Line: lineNum, Column: column},
 		}
 	case escapesRoot(target):
 		return &Diagnostic{
 			Severity: "error",
 			Code:     CodePathEscapesRoot,
-			Message:  "link target escapes project root",
-			Location: &Location{Line: lineNum},
-		}
-	case !isMarkdownTarget(target):
-		return &Diagnostic{
-			Severity: "warning",
-			Code:     CodeNonMarkdownTarget,
-			Message:  "link target is not a .md file",
-			Location: &Location{Line: lineNum},
+			Message:  "Link target resolves outside the project root",
+			Location: &Location{Line: lineNum, Column: column},
 		}
 	}
 	return nil
 }
 
-// stemFromPath returns the filename stem (basename without extension).
+// stemFromPath returns the filename stem (basename without last extension).
 func stemFromPath(p string) string {
 	if idx := strings.LastIndex(p, "/"); idx >= 0 {
 		p = p[idx+1:]
 	}
-	return strings.SplitN(p, ".", 2)[0]
+	if idx := strings.LastIndex(p, "."); idx >= 0 {
+		p = p[:idx]
+	}
+	return p
 }
 
 // hasIllegalPathChars reports whether path contains illegal file path characters.
@@ -430,6 +580,16 @@ func hasIllegalPathChars(path string) bool {
 	for i := 0; i < len(path); i++ {
 		c := path[i]
 		if c < 0x20 || c == '>' || c == '<' || c == '|' || c == '?' || c == '*' || c == ':' {
+			return true
+		}
+	}
+	return false
+}
+
+// hasTrailingDotSegment reports whether any path segment (other than "." and "..") ends with ".".
+func hasTrailingDotSegment(path string) bool {
+	for _, seg := range strings.Split(path, "/") {
+		if len(seg) > 1 && strings.HasSuffix(seg, ".") && seg != ".." {
 			return true
 		}
 	}
@@ -456,6 +616,18 @@ func openFenceMarker(line string) string {
 		return "~~~"
 	}
 	return ""
+}
+
+// countLeadingWhitespace returns the number of leading space/tab characters.
+func countLeadingWhitespace(s string) int {
+	n := 0
+	for _, c := range s {
+		if c != ' ' && c != '\t' {
+			break
+		}
+		n++
+	}
+	return n
 }
 
 // splitLines splits src into lines and their corresponding line endings.

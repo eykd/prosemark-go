@@ -65,8 +65,9 @@ type ParseResult struct {
 
 // Project is the external project file map, loaded from project.json.
 type Project struct {
-	Version string   `json:"version"` // "1"
-	Files   []string `json:"files"`   // relative paths to .md files in the project
+	Version   string   `json:"version"`   // "1"
+	Files     []string `json:"files"`     // relative paths to .md files in the project
+	BinderDir string   `json:"binderDir"` // directory containing the binder file (enables proximity tiebreak)
 }
 
 // OpSpec is the parsed operation specification from op.json.
