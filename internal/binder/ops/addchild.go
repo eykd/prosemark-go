@@ -179,29 +179,27 @@ func resolveInsertionIndex(parent *binder.Node, params binder.AddChildParams) (i
 	}
 
 	if params.Before != "" {
-		for i, child := range parent.Children {
-			if siblingMatchesSelector(child, params.Before) {
-				return i, nil
+		i := findSiblingIndex(parent.Children, params.Before)
+		if i < 0 {
+			return 0, &binder.Diagnostic{
+				Severity: "error",
+				Code:     binder.CodeSiblingNotFound,
+				Message:  fmt.Sprintf("before-sibling %q not found", params.Before),
 			}
 		}
-		return 0, &binder.Diagnostic{
-			Severity: "error",
-			Code:     binder.CodeSiblingNotFound,
-			Message:  fmt.Sprintf("before-sibling %q not found", params.Before),
-		}
+		return i, nil
 	}
 
 	if params.After != "" {
-		for i, child := range parent.Children {
-			if siblingMatchesSelector(child, params.After) {
-				return i + 1, nil
+		i := findSiblingIndex(parent.Children, params.After)
+		if i < 0 {
+			return 0, &binder.Diagnostic{
+				Severity: "error",
+				Code:     binder.CodeSiblingNotFound,
+				Message:  fmt.Sprintf("after-sibling %q not found", params.After),
 			}
 		}
-		return 0, &binder.Diagnostic{
-			Severity: "error",
-			Code:     binder.CodeSiblingNotFound,
-			Message:  fmt.Sprintf("after-sibling %q not found", params.After),
-		}
+		return i + 1, nil
 	}
 
 	if params.Position == "first" {
@@ -209,6 +207,17 @@ func resolveInsertionIndex(parent *binder.Node, params binder.AddChildParams) (i
 	}
 
 	return n, nil
+}
+
+// findSiblingIndex returns the 0-based index of the first child whose target
+// matches selector, or -1 if no child matches.
+func findSiblingIndex(children []*binder.Node, selector string) int {
+	for i, child := range children {
+		if siblingMatchesSelector(child, selector) {
+			return i
+		}
+	}
+	return -1
 }
 
 // siblingMatchesSelector reports whether a child node's target matches a bare-stem selector.
@@ -281,13 +290,13 @@ func orderedStyle(marker string) string {
 
 // maxOrdinal returns the maximum numeric ordinal found among nodes' list markers.
 func maxOrdinal(nodes []*binder.Node) int {
-	max := 0
+	maxVal := 0
 	for _, n := range nodes {
-		if v := ordinalValue(n.ListMarker); v > max {
-			max = v
+		if v := ordinalValue(n.ListMarker); v > maxVal {
+			maxVal = v
 		}
 	}
-	return max
+	return maxVal
 }
 
 // ordinalValue extracts the integer ordinal from an ordered marker like "2." or "3)".
