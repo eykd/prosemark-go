@@ -91,14 +91,10 @@ func Move(ctx context.Context, src []byte, project *binder.Project, params binde
 	// Determine the target indent string for the destination.
 	targetIndentStr, _ := inferMarkerAndIndent(destNode)
 
-	// Collect source line ranges and re-indented lines.
-	type srcRange struct {
-		startIdx int
-		endIdx   int
-	}
-	var ranges []srcRange
+	// Collect re-indented lines and mark source indices for removal.
 	var movedLines []string
 	var movedLineEnds []string
+	skipSet := make(map[int]bool)
 
 	for _, srcNode := range sourceNodes {
 		startIdx := srcNode.Line - 1
@@ -108,14 +104,6 @@ func Move(ctx context.Context, src []byte, project *binder.Project, params binde
 		for i := startIdx; i <= endIdx; i++ {
 			movedLines = append(movedLines, moveReindentLine(result.Lines[i], srcIndentLen, targetIndentStr))
 			movedLineEnds = append(movedLineEnds, result.LineEnds[i])
-		}
-		ranges = append(ranges, srcRange{startIdx, endIdx})
-	}
-
-	// Build a set of line indices to skip (remove from original positions).
-	skipSet := make(map[int]bool)
-	for _, r := range ranges {
-		for i := r.startIdx; i <= r.endIdx; i++ {
 			skipSet[i] = true
 		}
 	}
