@@ -800,3 +800,335 @@ func TestParse_LinkOutsideList_EmitsBNDW006(t *testing.T) {
 		t.Error("expected BNDW006 for .md link outside list item, got none")
 	}
 }
+
+// --- Path Validation: Percent-Encoded Paths (plan.md §H1) ---
+
+// TestParse_PercentEncoded_IllegalChars_EmitsBNDE001 tests that percent-encoded paths
+// are decoded via url.PathUnescape before illegal-character checks, so %3E ('>') and
+// %3C ('<') trigger BNDE001 even though the raw bytes are valid ASCII (FR-002, plan §H1).
+func TestParse_PercentEncoded_IllegalChars_EmitsBNDE001(t *testing.T) {
+	tests := []struct {
+		name string
+		src  string
+	}{
+		{
+			name: "percent-encoded greater-than %3E",
+			src:  "<!-- prosemark-binder:v1 -->\n- [Bad](%3E.md)\n",
+		},
+		{
+			name: "percent-encoded less-than %3C",
+			src:  "<!-- prosemark-binder:v1 -->\n- [Bad](%3Cfile.md)\n",
+		},
+		{
+			name: "malformed percent encoding %GG",
+			src:  "<!-- prosemark-binder:v1 -->\n- [Bad](%GGinvalid.md)\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, diags, err := binder.Parse(context.Background(), []byte(tt.src), nil)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			found := false
+			for _, d := range diags {
+				if d.Code == binder.CodeIllegalPathChars {
+					found = true
+					if d.Severity != "error" {
+						t.Errorf("BNDE001 severity = %q, want %q", d.Severity, "error")
+					}
+				}
+			}
+			if !found {
+				t.Errorf("expected BNDE001 after percent-decoding, got diags: %v", diags)
+			}
+		})
+	}
+}
+
+// TestParse_PercentEncoded_RootEscape_EmitsBNDE002 tests that %2E%2E/ (which decodes
+// to ../) is caught as a root-escape after url.PathUnescape (plan §H1).
+func TestParse_PercentEncoded_RootEscape_EmitsBNDE002(t *testing.T) {
+	src := []byte("<!-- prosemark-binder:v1 -->\n- [Bad](%2E%2E/secret.md)\n")
+
+	_, diags, err := binder.Parse(context.Background(), src, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	found := false
+	for _, d := range diags {
+		if d.Code == binder.CodePathEscapesRoot {
+			found = true
+			if d.Severity != "error" {
+				t.Errorf("BNDE002 severity = %q, want %q", d.Severity, "error")
+			}
+		}
+	}
+	if !found {
+		t.Error("expected BNDE002 for percent-encoded root-escape path, got none")
+	}
+}
+
+// TestParse_PercentEncoded_DecodedTargetStoredInNode tests that the decoded path
+// (not the raw percent-encoded form) is stored in Node.Target (plan §H1).
+func TestParse_PercentEncoded_DecodedTargetStoredInNode(t *testing.T) {
+	// %63hapter.md decodes to chapter.md (c = %63)
+	src := []byte("<!-- prosemark-binder:v1 -->\n- [Ch](%63hapter.md)\n")
+
+	result, _, err := binder.Parse(context.Background(), src, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result.Root.Children) != 1 {
+		t.Fatalf("Root.Children len = %d, want 1", len(result.Root.Children))
+	}
+	got := result.Root.Children[0].Target
+	if got != "chapter.md" {
+		t.Errorf("Target = %q, want %q (decoded form)", got, "chapter.md")
+	}
+}
+
+// --- Wikilink Resolution: Phase-A step 8 (FR-007) ---
+
+// TestParse_WikilinkBasenameMatch_ResolvesSubdirFile tests that a wikilink stem
+// resolves by basename across project files, not only root-level exact matches.
+// [[chapter]] must find "sub/chapter.md" when that is the only project file (FR-007).
+func TestParse_WikilinkBasenameMatch_ResolvesSubdirFile(t *testing.T) {
+	project := &binder.Project{
+		Version: "1",
+		Files:   []string{"sub/chapter.md"},
+	}
+	src := []byte("<!-- prosemark-binder:v1 -->\n- [[chapter]]\n")
+
+	result, diags, err := binder.Parse(context.Background(), src, project)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, d := range diags {
+		if d.Code == binder.CodeAmbiguousWikilink {
+			t.Errorf("unexpected BNDE003 when only one match exists: %+v", d)
+		}
+	}
+	if len(result.Root.Children) != 1 {
+		t.Fatalf("Root.Children len = %d, want 1 (wikilink must resolve by basename)", len(result.Root.Children))
+	}
+	if result.Root.Children[0].Target != "sub/chapter.md" {
+		t.Errorf("Target = %q, want %q", result.Root.Children[0].Target, "sub/chapter.md")
+	}
+}
+
+// TestParse_WikilinkProximityTiebreak_ShallowestWins tests that when multiple files
+// share a basename, the shallowest-path file is selected (FR-007).
+func TestParse_WikilinkProximityTiebreak_ShallowestWins(t *testing.T) {
+	// Both files match stem "chapter" by basename; "sub/chapter.md" (depth 1) is shallower
+	// than "deep/sub/chapter.md" (depth 2).
+	project := &binder.Project{
+		Version: "1",
+		Files:   []string{"deep/sub/chapter.md", "sub/chapter.md"},
+	}
+	src := []byte("<!-- prosemark-binder:v1 -->\n- [[chapter]]\n")
+
+	result, diags, err := binder.Parse(context.Background(), src, project)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, d := range diags {
+		if d.Code == binder.CodeAmbiguousWikilink {
+			t.Errorf("unexpected BNDE003 when proximity tiebreak should resolve: %+v", d)
+		}
+	}
+	if len(result.Root.Children) != 1 {
+		t.Fatalf("Root.Children len = %d, want 1", len(result.Root.Children))
+	}
+	if result.Root.Children[0].Target != "sub/chapter.md" {
+		t.Errorf("Target = %q, want %q (shallowest match must win)", result.Root.Children[0].Target, "sub/chapter.md")
+	}
+}
+
+// TestParse_AmbiguousWikilink_EmitsBNDE003 tests that a wikilink stem matching files
+// in multiple directories at equal depth emits BNDE003 (FR-007, spec §US-1 sc8).
+func TestParse_AmbiguousWikilink_EmitsBNDE003(t *testing.T) {
+	// a/deep.md and b/deep.md are both at depth 1 — proximity tiebreak cannot resolve.
+	project := &binder.Project{
+		Version: "1",
+		Files:   []string{"a/deep.md", "b/deep.md"},
+	}
+	src := []byte("<!-- prosemark-binder:v1 -->\n- [[deep]]\n")
+
+	_, diags, err := binder.Parse(context.Background(), src, project)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	found := false
+	for _, d := range diags {
+		if d.Code == binder.CodeAmbiguousWikilink {
+			found = true
+			if d.Severity != "error" {
+				t.Errorf("BNDE003 severity = %q, want %q", d.Severity, "error")
+			}
+		}
+	}
+	if !found {
+		t.Error("expected BNDE003 for ambiguous wikilink with same-depth matches, got none")
+	}
+}
+
+// TestParse_WikilinkCaseInsensitiveMatch_EmitsBNDW009 tests that a wikilink stem
+// matching a project file only via case-insensitive comparison emits BNDW009 and still
+// resolves the node to the actual filename (spec §US-1 sc7, FR-002).
+func TestParse_WikilinkCaseInsensitiveMatch_EmitsBNDW009(t *testing.T) {
+	// project has "chapter.md"; wikilink uses [[Chapter]] (case mismatch)
+	project := &binder.Project{
+		Version: "1",
+		Files:   []string{"chapter.md"},
+	}
+	src := []byte("<!-- prosemark-binder:v1 -->\n- [[Chapter]]\n")
+
+	result, diags, err := binder.Parse(context.Background(), src, project)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	found := false
+	for _, d := range diags {
+		if d.Code == binder.CodeCaseInsensitiveMatch {
+			found = true
+			if d.Severity != "warning" {
+				t.Errorf("BNDW009 severity = %q, want %q", d.Severity, "warning")
+			}
+		}
+	}
+	if !found {
+		t.Error("expected BNDW009 for case-insensitive wikilink match, got none")
+	}
+	// The node must still resolve to the actual filename from project.Files.
+	if len(result.Root.Children) != 1 {
+		t.Fatalf("Root.Children len = %d, want 1 (case-insensitive match must still resolve)", len(result.Root.Children))
+	}
+	if result.Root.Children[0].Target != "chapter.md" {
+		t.Errorf("Target = %q, want %q (actual project file casing)", result.Root.Children[0].Target, "chapter.md")
+	}
+}
+
+// --- Secondary Diagnostics: Phase-A step 9 (BNDW002–BNDW008) ---
+
+// TestParse_MultipleStructLinks_EmitsBNDW002 tests that a list item containing more
+// than one structural .md link emits BNDW002 and uses only the first as the node (FR-001).
+func TestParse_MultipleStructLinks_EmitsBNDW002(t *testing.T) {
+	// Two inline .md links in one list item; first becomes the node, second triggers BNDW002.
+	src := []byte("<!-- prosemark-binder:v1 -->\n- [Ch1](ch1.md) and also [Ch2](ch2.md)\n")
+
+	result, diags, err := binder.Parse(context.Background(), src, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	found := false
+	for _, d := range diags {
+		if d.Code == binder.CodeMultipleStructLinks {
+			found = true
+			if d.Severity != "warning" {
+				t.Errorf("BNDW002 severity = %q, want %q", d.Severity, "warning")
+			}
+		}
+	}
+	if !found {
+		t.Error("expected BNDW002 for list item with multiple structural links, got none")
+	}
+	// First link must remain the structural node.
+	if len(result.Root.Children) != 1 {
+		t.Fatalf("Root.Children len = %d, want 1", len(result.Root.Children))
+	}
+	if result.Root.Children[0].Target != "ch1.md" {
+		t.Errorf("Target = %q, want %q (first link must be structural)", result.Root.Children[0].Target, "ch1.md")
+	}
+}
+
+// TestParse_DuplicateFileRef_EmitsBNDW003 tests that referencing the same .md file
+// in more than one list item emits BNDW003 (FR-002).
+func TestParse_DuplicateFileRef_EmitsBNDW003(t *testing.T) {
+	src := []byte("<!-- prosemark-binder:v1 -->\n- [Chapter One](chapter.md)\n- [Chapter Again](chapter.md)\n")
+
+	_, diags, err := binder.Parse(context.Background(), src, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	found := false
+	for _, d := range diags {
+		if d.Code == binder.CodeDuplicateFileRef {
+			found = true
+			if d.Severity != "warning" {
+				t.Errorf("BNDW003 severity = %q, want %q", d.Severity, "warning")
+			}
+		}
+	}
+	if !found {
+		t.Error("expected BNDW003 for duplicate file reference, got none")
+	}
+}
+
+// TestParse_MissingTargetFile_EmitsBNDW004 tests that a link target absent from
+// project.Files emits BNDW004 when project context is provided (FR-002).
+func TestParse_MissingTargetFile_EmitsBNDW004(t *testing.T) {
+	project := &binder.Project{
+		Version: "1",
+		Files:   []string{"other.md"},
+	}
+	// chapter.md is not listed in project.Files.
+	src := []byte("<!-- prosemark-binder:v1 -->\n- [Chapter](chapter.md)\n")
+
+	_, diags, err := binder.Parse(context.Background(), src, project)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	found := false
+	for _, d := range diags {
+		if d.Code == binder.CodeMissingTargetFile {
+			found = true
+			if d.Severity != "warning" {
+				t.Errorf("BNDW004 severity = %q, want %q", d.Severity, "warning")
+			}
+		}
+	}
+	if !found {
+		t.Error("expected BNDW004 for link target not present in project.Files, got none")
+	}
+}
+
+// TestParse_MissingTargetFile_NoProjectContext_NoDiagnostic tests that BNDW004 is NOT
+// emitted when project is nil (no project context to validate against).
+func TestParse_MissingTargetFile_NoProjectContext_NoDiagnostic(t *testing.T) {
+	src := []byte("<!-- prosemark-binder:v1 -->\n- [Chapter](chapter.md)\n")
+
+	_, diags, err := binder.Parse(context.Background(), src, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, d := range diags {
+		if d.Code == binder.CodeMissingTargetFile {
+			t.Errorf("unexpected BNDW004 when project is nil: %+v", d)
+		}
+	}
+}
+
+// TestParse_SelfReferentialLink_EmitsBNDW008 tests that a link targeting the binder
+// file itself (_binder.md) emits BNDW008 (FR-002).
+func TestParse_SelfReferentialLink_EmitsBNDW008(t *testing.T) {
+	src := []byte("<!-- prosemark-binder:v1 -->\n- [Self](_binder.md)\n")
+
+	_, diags, err := binder.Parse(context.Background(), src, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	found := false
+	for _, d := range diags {
+		if d.Code == binder.CodeSelfReferentialLink {
+			found = true
+			if d.Severity != "warning" {
+				t.Errorf("BNDW008 severity = %q, want %q", d.Severity, "warning")
+			}
+		}
+	}
+	if !found {
+		t.Error("expected BNDW008 for link targeting _binder.md itself, got none")
+	}
+}

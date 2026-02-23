@@ -2,6 +2,7 @@ package binder
 
 import (
 	"context"
+	"net/url"
 	"regexp"
 	"strings"
 )
@@ -18,6 +19,12 @@ var (
 	refDefRE       = regexp.MustCompile(`^\[([^\]]+)\]:\s+(\S+)(?:\s+"([^"]*)")?`)
 	mdInlineLinkRE = regexp.MustCompile(`\[[^\]]*\]\([^)]*\.md[^)]*\)`)
 )
+
+// wikilinkEntry holds a project file path and its directory depth (number of "/" separators).
+type wikilinkEntry struct {
+	file  string
+	depth int
+}
 
 // Parse parses a binder file and returns a ParseResult, diagnostics, and any fatal error.
 // project may be nil.
@@ -103,12 +110,17 @@ func Parse(ctx context.Context, src []byte, project *Project) (*ParseResult, []D
 		})
 	}
 
+	// Build O(1) wikilink basename index and project file set.
+	wikiIndex := buildWikilinkIndex(project)
+	projectFileSet := buildProjectFileSet(project)
+
 	// Pass 2: scan list items, build node tree, emit structural diagnostics.
 	type stackEntry struct {
 		indent int
 		node   *Node
 	}
 	stack := []stackEntry{{indent: -1, node: result.Root}}
+	seenTargets := make(map[string]bool)
 
 	inFence = false
 	fenceMarker = ""
@@ -150,12 +162,74 @@ func Parse(ctx context.Context, src []byte, project *Project) (*ParseResult, []D
 		marker := m[2]
 		content := strings.TrimSpace(m[3])
 
-		target, title := parseLink(content, result.RefDefs, project)
+		target, title, linkDiags := parseLink(content, result.RefDefs, project, wikiIndex, lineNum)
+
+		// Emit link-resolution diagnostics (BNDE003, BNDW009).
+		diags = append(diags, linkDiags...)
+
+		// Skip items with no resolved target.
+		if target == "" {
+			continue
+		}
+
+		// Percent-decode the target before validation.
+		decoded, decodeOK := percentDecodeTarget(target)
+		if !decodeOK {
+			diags = append(diags, Diagnostic{
+				Severity: "error",
+				Code:     CodeIllegalPathChars,
+				Message:  "link target contains illegal path characters",
+				Location: &Location{Line: lineNum},
+			})
+			continue
+		}
+		target = decoded
 
 		// Validate target path.
 		if diag := validateTarget(target, lineNum); diag != nil {
 			diags = append(diags, *diag)
 			continue
+		}
+
+		// Check for multiple structural .md links in one list item (BNDW002).
+		if allMd := mdInlineLinkRE.FindAllString(content, -1); len(allMd) > 1 {
+			diags = append(diags, Diagnostic{
+				Severity: "warning",
+				Code:     CodeMultipleStructLinks,
+				Message:  "list item contains multiple structural links; only the first is used",
+				Location: &Location{Line: lineNum},
+			})
+		}
+
+		// Check for self-referential link (BNDW008).
+		if target == "_binder.md" {
+			diags = append(diags, Diagnostic{
+				Severity: "warning",
+				Code:     CodeSelfReferentialLink,
+				Message:  "link targets the binder file itself",
+				Location: &Location{Line: lineNum},
+			})
+		}
+
+		// Check for duplicate file reference (BNDW003).
+		if seenTargets[target] {
+			diags = append(diags, Diagnostic{
+				Severity: "warning",
+				Code:     CodeDuplicateFileRef,
+				Message:  "file referenced more than once in binder",
+				Location: &Location{Line: lineNum},
+			})
+		}
+		seenTargets[target] = true
+
+		// Check for missing target file when project context is available (BNDW004).
+		if project != nil && !projectFileSet[target] {
+			diags = append(diags, Diagnostic{
+				Severity: "warning",
+				Code:     CodeMissingTargetFile,
+				Message:  "link target not found in project files",
+				Location: &Location{Line: lineNum},
+			})
 		}
 
 		node := &Node{
@@ -181,9 +255,9 @@ func Parse(ctx context.Context, src []byte, project *Project) (*ParseResult, []D
 	return result, diags, nil
 }
 
-// parseLink parses the content portion of a list item and returns (target, title).
-// Returns ("", "") if no link can be resolved.
-func parseLink(content string, refDefs map[string]RefDef, project *Project) (target, title string) {
+// parseLink parses the content portion of a list item and returns (target, title, diags).
+// Returns ("", "", nil) if no link can be resolved.
+func parseLink(content string, refDefs map[string]RefDef, project *Project, wikiIndex map[string][]wikilinkEntry, lineNum int) (target, title string, diags []Diagnostic) {
 	if m := inlineLinkRE.FindStringSubmatch(content); m != nil {
 		target, title = m[2], m[1]
 		if title == "" {
@@ -191,17 +265,7 @@ func parseLink(content string, refDefs map[string]RefDef, project *Project) (tar
 		}
 	} else if m := wikilinkRE.FindStringSubmatch(content); m != nil {
 		if project != nil {
-			stem, alias := m[1], m[2]
-			for _, f := range project.Files {
-				if f == stem+".md" {
-					target = f
-					if alias == "" {
-						alias = stemFromPath(f)
-					}
-					title = alias
-					break
-				}
-			}
+			target, title, diags = resolveWikilink(m[1], m[2], wikiIndex, lineNum)
 		}
 	} else if m := fullRefLinkRE.FindStringSubmatch(content); m != nil {
 		if rd, exists := refDefs[strings.ToLower(m[2])]; exists {
@@ -217,6 +281,121 @@ func parseLink(content string, refDefs map[string]RefDef, project *Project) (tar
 		}
 	}
 	return
+}
+
+// resolveWikilink resolves a wikilink stem and alias using the pre-built index.
+// Caller must ensure project is non-nil.
+func resolveWikilink(stem, alias string, wikiIndex map[string][]wikilinkEntry, lineNum int) (target, title string, diags []Diagnostic) {
+	stemFile := stem + ".md"
+	entries := wikiIndex[strings.ToLower(stem)]
+
+	// Case-sensitive: exact path match OR basename match.
+	var csEntries []wikilinkEntry
+	for _, e := range entries {
+		if e.file == stemFile || baseName(e.file) == stemFile {
+			csEntries = append(csEntries, e)
+		}
+	}
+
+	caseInsensitive := false
+	matchEntries := csEntries
+	if len(csEntries) == 0 {
+		matchEntries = entries
+		caseInsensitive = true
+	}
+
+	// Proximity tiebreak: prefer shallowest path (fewest "/" separators).
+	minDepth := -1
+	for _, e := range matchEntries {
+		if minDepth == -1 || e.depth < minDepth {
+			minDepth = e.depth
+		}
+	}
+
+	var atMinDepth []wikilinkEntry
+	for _, e := range matchEntries {
+		if e.depth == minDepth {
+			atMinDepth = append(atMinDepth, e)
+		}
+	}
+
+	switch len(atMinDepth) {
+	case 1:
+		target = atMinDepth[0].file
+		if caseInsensitive {
+			diags = append(diags, Diagnostic{
+				Severity: "warning",
+				Code:     CodeCaseInsensitiveMatch,
+				Message:  "wikilink resolved by case-insensitive match",
+				Location: &Location{Line: lineNum},
+			})
+		}
+		if alias == "" {
+			alias = stemFromPath(target)
+		}
+		title = alias
+	default:
+		if len(atMinDepth) > 1 {
+			diags = append(diags, Diagnostic{
+				Severity: "error",
+				Code:     CodeAmbiguousWikilink,
+				Message:  "wikilink matches multiple files at the same depth",
+				Location: &Location{Line: lineNum},
+			})
+		}
+	}
+	return
+}
+
+// buildWikilinkIndex builds a lowercase-stem → []wikilinkEntry map for O(1) lookup.
+// Each file is indexed by its basename stem; files in subdirectories are also indexed
+// by their full path stem so that [[subdir/file]] wikilinks resolve via the index too.
+func buildWikilinkIndex(project *Project) map[string][]wikilinkEntry {
+	index := make(map[string][]wikilinkEntry)
+	if project == nil {
+		return index
+	}
+	for _, f := range project.Files {
+		depth := strings.Count(f, "/")
+		e := wikilinkEntry{file: f, depth: depth}
+		lowBase := strings.ToLower(strings.TrimSuffix(baseName(f), ".md"))
+		index[lowBase] = append(index[lowBase], e)
+		if depth > 0 {
+			lowPath := strings.ToLower(strings.TrimSuffix(f, ".md"))
+			index[lowPath] = append(index[lowPath], e)
+		}
+	}
+	return index
+}
+
+// buildProjectFileSet builds a set of project file paths for O(1) membership checks.
+func buildProjectFileSet(project *Project) map[string]bool {
+	set := make(map[string]bool)
+	if project == nil {
+		return set
+	}
+	for _, f := range project.Files {
+		set[f] = true
+	}
+	return set
+}
+
+// percentDecodeTarget URL-decodes a percent-encoded path target.
+// Returns (decoded, true) on success, ("", false) if the encoding is malformed.
+func percentDecodeTarget(target string) (string, bool) {
+	decoded, err := url.PathUnescape(target)
+	if err != nil {
+		return "", false
+	}
+	return decoded, true
+}
+
+// baseName returns the final slash-separated component of a path.
+func baseName(p string) string {
+	if i := strings.LastIndex(p, "/"); i >= 0 {
+		return p[i+1:]
+	}
+	return p
 }
 
 // validateTarget returns a Diagnostic if target fails path validation, or nil if valid.
