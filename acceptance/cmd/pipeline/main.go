@@ -55,7 +55,16 @@ func main() {
 
 // runParse reads all spec files and writes IR JSON.
 func runParse() error {
-	specFiles, err := filepath.Glob(filepath.Join(specsDir, specPattern))
+	var specFiles []string
+	err := filepath.WalkDir(specsDir, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !d.IsDir() && strings.HasSuffix(path, ".txt") {
+			specFiles = append(specFiles, path)
+		}
+		return nil
+	})
 	if err != nil {
 		return fmt.Errorf("finding spec files: %w", err)
 	}
@@ -80,7 +89,10 @@ func runParse() error {
 			return fmt.Errorf("serializing IR for %s: %w", specFile, err)
 		}
 
-		irFile := filepath.Join(irDir, strings.TrimSuffix(filepath.Base(specFile), ".txt")+".json")
+		// Build a unique IR filename from the relative path under specsDir.
+		rel, _ := filepath.Rel(specsDir, specFile)
+		irName := strings.ReplaceAll(strings.TrimSuffix(rel, ".txt"), string(filepath.Separator), "-")
+		irFile := filepath.Join(irDir, irName+".json")
 		if err := acceptance.WriteIRImpl(irFile, data); err != nil {
 			return fmt.Errorf("writing IR for %s: %w", specFile, err)
 		}

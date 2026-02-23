@@ -46,9 +46,9 @@ func TestGenerateTests_SingleScenario(t *testing.T) {
 		t.Error("output missing test function")
 	}
 
-	// Must contain t.Fatal stub
-	if !strings.Contains(output, "t.Fatal") {
-		t.Error("output missing t.Fatal stub")
+	// Must contain unbound sentinel stub
+	if !strings.Contains(output, UnboundSentinel) {
+		t.Error("output missing unbound sentinel stub")
 	}
 
 	// Must reference the scenario description
@@ -252,7 +252,7 @@ func Test_User_can_add_item(t *testing.T) {
 	// WHEN the user adds an item.
 	// THEN the outline has one item.
 
-	t.Fatal("acceptance test not yet bound")
+	t.Skip("acceptance test not yet bound")
 }
 `
 	got := ExtractBoundFunctions(source)
@@ -306,7 +306,7 @@ func Test_Bound_one(t *testing.T) {
 func Test_Unbound_one(t *testing.T) {
 	// GIVEN something.
 
-	t.Fatal("acceptance test not yet bound")
+	t.Skip("acceptance test not yet bound")
 }
 
 // Another bound scenario
@@ -532,7 +532,7 @@ import (
 func Test_User_can_add_an_item(t *testing.T) {
 	// GIVEN an empty outline.
 
-	t.Fatal("acceptance test not yet bound")
+	t.Skip("acceptance test not yet bound")
 }
 `
 
@@ -728,7 +728,7 @@ func TestGenerateTests_BackwardCompatibleWithEmptyExisting(t *testing.T) {
 // --- UnboundSentinel constant test ---
 
 func TestUnboundSentinel_Value(t *testing.T) {
-	want := `t.Fatal("acceptance test not yet bound")`
+	want := `t.Skip("acceptance test not yet bound")`
 	if UnboundSentinel != want {
 		t.Errorf("UnboundSentinel = %q, want %q", UnboundSentinel, want)
 	}

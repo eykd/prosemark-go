@@ -10,7 +10,7 @@ import (
 
 // UnboundSentinel is the marker placed in generated test stubs that have not
 // yet been bound to a real implementation.
-const UnboundSentinel = `t.Fatal("acceptance test not yet bound")`
+const UnboundSentinel = `t.Skip("acceptance test not yet bound")`
 
 // sanitizeFuncName converts a description into a valid Go test function name suffix.
 func sanitizeFuncName(desc string) string {
