@@ -1,0 +1,11 @@
+{
+  "version": "1",
+  "operation": "add-child",
+  "params": {
+    "parentSelector": ".",
+    "target": "ch4.md",
+    "title": "Chapter Four",
+    "position": "at",
+    "positionIndex": 3
+  }
+}

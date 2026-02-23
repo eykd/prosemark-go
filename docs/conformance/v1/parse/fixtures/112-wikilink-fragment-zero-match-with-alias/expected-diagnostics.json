@@ -2,8 +2,8 @@
   "version": "1",
   "diagnostics": [
     {
-      "severity": "error",
-      "code": "BNDE001"
+      "severity": "warning",
+      "code": "BNDW004"
     }
   ]
 }

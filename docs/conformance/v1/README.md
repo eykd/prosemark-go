@@ -59,6 +59,8 @@ See `runner-contract.md` § Pass/Fail Rules for the full matching algorithm. Key
 
 The `NNN` prefix in fixture directory names is a stable, three-digit, zero-padded integer. Do not renumber existing fixtures. Append new fixtures at the highest existing NNN + 1 within the domain.
 
+Fixtures 001–040 are the original parse-domain block; 041–070 are the original ops-domain block. From 071 onward, both domains are interleaved: new edge cases for either domain are appended at the next available number regardless of domain. Fixture numbers do not encode domain membership — the directory path (`parse/fixtures/` vs. `ops/fixtures/`) is authoritative.
+
 ## Schema Overview
 
 | Schema File | Validates |
@@ -69,11 +71,11 @@ The `NNN` prefix in fixture directory names is a stable, three-digit, zero-padde
 | `schema/op-spec.schema.json` | `op.json` |
 | `schema/project.schema.json` | `project.json` |
 
-**Total fixtures**: 108. All fixtures are implemented.
+**Total fixtures**: 114. All fixtures are implemented.
 
 ## Test Catalog Summary
 
-### Parse Domain (001–040, 071, 076–086)
+### Parse Domain (001–040, 071, 076–086, 106, 109–112)
 
 | Range | Category |
 |-------|----------|
@@ -92,10 +94,15 @@ The `NNN` prefix in fixture directory names is a stable, three-digit, zero-padde
 | 080 | Non-.md link followed by .md link |
 | 081–082 | Pragma position variants |
 | 083–084 | GFM extension interactions |
-| 085–086 | Wikilink heading and fragment forms |
+| 085 | Wikilink heading with alias (`[[target#heading\|Alias]]`) |
+| 086 | Fragment-only wikilink (`[[#heading]]` → BNDE001 empty-stem path) |
 | 106 | Wikilink fragment zero-match: synthesized target strips fragment (`[[nonexistent#section]]` → `nonexistent.md`) |
+| 109 | Tilde-fence code block exclusion (BNDW005 with `~~~` delimiter) |
+| 110 | Wikilink empty alias (`[[foo\|]]` → title falls back to stem) |
+| 111 | Fragment-only wikilink BNDE001 (dedicated conformance fixture) |
+| 112 | Fragment zero-match with alias (`[[nonexist#section\|Title]]` → synthesized target, alias wins as title) |
 
-### Ops Domain (041–069, 070, 072–075, 087–105)
+### Ops Domain (041–069, 070, 072–075, 087–108, 113–114)
 
 | Range | Operation |
 |-------|-----------|
@@ -127,3 +134,5 @@ The `NNN` prefix in fixture directory names is a stable, three-digit, zero-padde
 | 105 | add-child / title bracket escaping |
 | 107 | ops-error / OPE006 for add-child (parent selector targets node in code fence) |
 | 108 | delete / delete last top-level node (empty structural tree) |
+| 113 | add-child / `--at N` where N equals child count (boundary: valid, appends last) |
+| 114 | add-child / non-sequential ordered-list ordinals (max+1 rule) |

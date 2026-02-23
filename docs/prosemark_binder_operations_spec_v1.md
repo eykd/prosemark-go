@@ -159,13 +159,17 @@ New nodes are always serialized as standard Markdown inline links:
 
 **List marker**: Match the last encountered sibling (the sibling immediately above the insertion point in document order). If there is no previous sibling, match the next sibling. If there are no siblings, use `-`. If the previous and next siblings use conflicting marker types (ordered vs. unordered), use the previous sibling's marker type. If only a next sibling exists and it is ordered, use the next sibling's marker type.
 
-**Ordered list markers** (`1.`, `2.`, etc.): use the maximum ordinal among the parent's existing structural children plus 1. If the parent has no structural children, use `1.`. The marker style (period vs. paren) MUST match the prevailing sibling style.
+**Ordered list markers** (`1.`, `2.`, etc.): use the maximum ordinal among the parent's existing structural children plus 1. If the parent has no structural children, use `1.`. The marker style (period vs. paren) MUST match the immediately preceding sibling's style; if there is no preceding sibling, use the next sibling's style.
 
 **Indentation**: Match the last encountered sibling's indentation character and unit. If the reference sibling uses tab characters for indentation, the new node MUST use tab characters for each indentation level. If the reference sibling uses spaces, use the same number of spaces as the unit. If there is no previous sibling, match the next sibling. If there are no siblings, derive from the parent's nesting depth using a 2-space indent unit (the default).
 
 **Title escaping**: The title text provided by the caller MUST be escaped for use in Markdown link syntax: `[` and `]` characters within the title MUST be backslash-escaped (e.g., `A [note]` becomes `A \[note\]`). Link tooltip attributes (the optional quoted title in `[text](url "tooltip")` syntax) are NOT emitted for new nodes. When moving a node, any tooltip in the original source is preserved as-is.
 
-The serialization resolution order is: previous sibling → next sibling → defaults (`-`, 2-space indent).
+The serialization resolution order for all marker, style, and indentation attributes follows this priority chain:
+
+1. **Previous sibling exists**: use its marker type, marker style, and indentation unit.
+2. **No previous sibling, next sibling exists**: use the next sibling's marker type, marker style, and indentation unit.
+3. **No siblings**: use `-` marker and a 2-space indent per nesting level (default).
 
 ---
 
@@ -223,7 +227,7 @@ If `source-selector` and `destination-parent-selector` resolve such that the sou
 
 - **Relative indentation** within the moved subtree MUST be preserved. Absolute indentation MUST be adjusted to match the destination nesting depth.
 - **Link syntax** within the moved subtree MUST be preserved as-is (wikilinks remain wikilinks, inline links remain inline links).
-- **List markers** MUST be updated to match the destination context, following the same resolution rules as add-child serialization (Section 4.5): previous sibling → next sibling → defaults.
+- **List markers** MUST be updated to match the destination context, following the same resolution rules as add-child serialization (Section 4.5): previous sibling → next sibling → defaults. Only the moved node's own marker is updated; the markers and ordinals of nodes within the moved subtree are preserved as-is.
 
 ### 6.4 Reference Link Definitions
 

@@ -95,6 +95,7 @@ Title derivation rules:
 - Wikilink with alias: `[[foo|My Title]]` → title is `My Title`.
 - Wikilink without alias: `[[foo]]` → title is `foo` (raw target string without `.md`).
 - Wikilink with path: `[[subfolder/foo]]` → title is `foo` (filename stem only, directory stripped).
+- Wikilink with empty alias: `[[foo|]]` → title is `foo` (filename stem, identical to the no-alias case; an empty alias string never produces an empty title).
 
 ### 4.3 Structural Link
 
@@ -187,6 +188,12 @@ The wikilink resolution algorithm matches Obsidian's behavior:
 
 If no file in the project matches the bare stem (zero matches), the implementation MUST synthesize the target as `<stem>.md`, include the structural node in the parse result with that synthesized path, and emit BNDW004 (MissingTargetFile). Before synthesizing the target, the fragment component is stripped: `[[nonexist#section]]` synthesizes target `nonexist.md`, not `nonexist#section.md`.
 
+When a zero-match wikilink also carries an alias (e.g., `[[nonexist#section|My Title]]`), the general alias rule applies: the alias value is used as the node's `title`, taking precedence over the stem. The synthesized target is still derived from the stem alone (fragment stripped before synthesizing), and BNDW004 is emitted.
+
+An empty alias — present but containing no characters (e.g., `[[foo|]]`) — is treated as absent. Title derivation falls back to the filename stem, identical to the no-alias case. An empty alias string does not produce an empty `title`.
+
+A fragment-only wikilink — one whose `Path` component is entirely empty (e.g., `[[#heading]]`, which begins with `#`) — has an empty stem. Synthesizing `<stem>.md` would produce `.md`, a path with no stem. A stemless `.md` path is not a valid binder path; lint MUST emit BNDE001 (IllegalPathChars) and the list item is excluded from the structural parse result.
+
 ---
 
 ## 6. Graph Semantics
@@ -242,6 +249,8 @@ Implementations MUST NOT:
 - Structural node detected inside a fenced code block (`` ``` `` or `~~~`). CommonMark indented code blocks (4-space or tab prefix) do not affect structural node detection; list items cannot appear inside an indented code block by CommonMark syntax rules.
 
   > **Note:** Only fenced code blocks (backtick or tilde delimiters) require the `BNDW005` exclusion treatment. Indented code blocks (4-space or tab prefix per CommonMark) are irrelevant to structural node detection because CommonMark syntax prevents list items from appearing inside them.
+
+  > **Note (BNDW005 and OPE006):** BNDW005 is a parse-time diagnostic: the offending node is excluded from the structural parse result. OPE006 (NodeInCodeFence) is an independent operations-layer check: before mutating a node, the operations layer scans the raw binder document to detect whether the selected node's list item is enclosed in a code fence. If it is, the operation fails with OPE006. This separation means parse-time exclusion (BNDW005) and mutation refusal (OPE006) serve different purposes and may both apply to the same list item in the same binder document.
 
 - Structural link detected outside a list item.
 - Non-`.md` target in a list item link.
