@@ -1,0 +1,58 @@
+;===============================================================
+; All parse scenarios produce the expected outline and diagnostics.
+;===============================================================
+GIVEN the collection of parse test scenarios provided with the specification.
+
+WHEN each scenario's binder file is processed.
+
+THEN the resulting outline matches the expected outline for that scenario.
+THEN the resulting diagnostics match the expected diagnostics for that scenario.
+
+;===============================================================
+; All operation scenarios produce the expected modified binder and diagnostics.
+;===============================================================
+GIVEN the collection of add-chapter, delete, and move test scenarios provided with the specification.
+
+WHEN each scenario's binder file is processed with its specified operation.
+
+THEN the resulting binder file contents match the expected output for that scenario.
+THEN the resulting diagnostics match the expected diagnostics for that scenario.
+
+;===============================================================
+; Stability scenarios produce output byte-for-byte identical to their input.
+;===============================================================
+GIVEN a binder file from a stability scenario, with no operation applied.
+
+WHEN the binder is parsed and the outline is reconstructed.
+
+THEN the output is identical byte-for-byte to the original input.
+
+;===============================================================
+; Error scenarios leave the binder file unchanged and exit with a failure indication.
+;===============================================================
+GIVEN a test scenario that expects an operation-blocking error.
+
+WHEN the operation runs.
+
+THEN the tool signals failure.
+THEN the binder file is byte-for-byte unchanged.
+
+;===============================================================
+; Warning-only scenarios exit with success and apply the mutation as expected.
+;===============================================================
+GIVEN a test scenario that expects only warnings and no errors.
+
+WHEN the operation runs.
+
+THEN the tool signals success.
+THEN the binder file is modified exactly as expected for that scenario.
+
+;===============================================================
+; All 135 conformance scenarios pass with zero failures.
+;===============================================================
+GIVEN all 135 conformance test scenarios from the specification.
+
+WHEN each scenario is run.
+
+THEN every scenario passes.
+THEN there are zero failures.

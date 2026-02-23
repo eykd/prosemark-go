@@ -1,0 +1,91 @@
+;===============================================================
+; New chapter is appended after all existing chapters by default.
+;===============================================================
+GIVEN a binder with one existing top-level chapter.
+
+WHEN the author adds a new chapter at the top level using default placement.
+
+THEN the new chapter appears after the existing chapter.
+
+;===============================================================
+; New chapter is inserted before all existing chapters when first position is requested.
+;===============================================================
+GIVEN a binder with several top-level chapters.
+
+WHEN the author adds a new chapter at the first position.
+
+THEN the new chapter appears before all existing chapters.
+
+;===============================================================
+; New chapter is inserted at a specific numbered position.
+;===============================================================
+GIVEN a binder with several top-level chapters.
+
+WHEN the author adds a new chapter at position one, counting from zero.
+
+THEN the new chapter appears at position one in the list.
+
+;===============================================================
+; New chapter is inserted before a named sibling.
+;===============================================================
+GIVEN a binder with chapters named "A", "B", and "C".
+
+WHEN the author adds a new chapter before "B".
+
+THEN the new chapter appears between "A" and "B".
+
+;===============================================================
+; Adding a chapter that already exists in the same parent is skipped with a warning.
+;===============================================================
+GIVEN a binder where the new chapter's file is already listed under the target parent.
+
+WHEN the author adds the chapter again without the force option.
+
+THEN the binder is unchanged.
+THEN a "duplicate skipped" warning is included in the result.
+
+;===============================================================
+; Adding a duplicate chapter with the force option inserts a second copy.
+;===============================================================
+GIVEN a binder where the new chapter's file is already listed under the target parent.
+
+WHEN the author adds the chapter again with the force option.
+
+THEN the binder now contains two entries for that chapter file.
+
+;===============================================================
+; New chapter inherits the numbered list style of its siblings.
+;===============================================================
+GIVEN a binder where existing chapters are arranged in a numbered list with period markers.
+
+WHEN the author adds a new chapter.
+
+THEN the new chapter uses the next sequential number with the same period marker style.
+
+;===============================================================
+; New chapter inherits the tab indentation of its siblings.
+;===============================================================
+GIVEN a binder where existing nested chapters are indented with tabs.
+
+WHEN the author adds a new nested chapter.
+
+THEN the new chapter is indented with tabs to match its siblings.
+
+;===============================================================
+; A chapter title containing square bracket characters is stored with those characters escaped.
+;===============================================================
+GIVEN the author wants to add a chapter whose title contains square bracket characters.
+
+WHEN the chapter is added to the binder.
+
+THEN the stored title has those square bracket characters properly escaped.
+
+;===============================================================
+; Attempting to add a chapter to a non-existent parent returns an error.
+;===============================================================
+GIVEN a selector that does not match any node in the binder.
+
+WHEN the author tries to add a chapter under that selector as parent.
+
+THEN a "not found" error is returned.
+THEN the binder is unchanged.

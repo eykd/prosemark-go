@@ -1,0 +1,94 @@
+;===============================================================
+; Binder with one top-level chapter link is parsed into a tree.
+;===============================================================
+GIVEN a binder file containing one list item with a chapter link.
+
+WHEN the author requests the parsed outline.
+
+THEN the outline contains a single chapter node.
+THEN the chapter node has the title and file path from the link.
+
+;===============================================================
+; Binder using wiki-style links is parsed correctly.
+;===============================================================
+GIVEN a binder file with a wiki-style link to a chapter file.
+
+WHEN the author requests the parsed outline.
+
+THEN the chapter node title is the name of the file without extension.
+THEN the chapter node path points to the matching file in the project.
+
+;===============================================================
+; Binder using footnote-style links is parsed correctly.
+;===============================================================
+GIVEN a binder file with a footnote-style chapter link and its matching definition.
+
+WHEN the author requests the parsed outline.
+
+THEN the chapter node has the correct title and file path from the link definition.
+
+;===============================================================
+; Binder without a version marker produces a warning.
+;===============================================================
+GIVEN a binder file with no version marker at the top.
+
+WHEN the author requests the parsed outline.
+
+THEN parsing succeeds.
+THEN a "missing version marker" warning is included in the result.
+
+;===============================================================
+; Binder with illegal characters in a file path produces an error.
+;===============================================================
+GIVEN a binder file with a chapter link whose path contains angle-bracket characters.
+
+WHEN the author requests the parsed outline.
+
+THEN an "illegal path characters" error is included in the result.
+
+;===============================================================
+; Binder with a path that escapes the project root produces an error.
+;===============================================================
+GIVEN a binder file with a chapter link that navigates above the project folder using dot-dot path segments.
+
+WHEN the author requests the parsed outline.
+
+THEN a "path escapes project root" error is included in the result.
+
+;===============================================================
+; Binder with a path matching a file only by different letter-case produces a warning.
+;===============================================================
+GIVEN a binder file with a chapter link whose exact path does not exist but a file with the same name in different letter-case does.
+
+WHEN the author requests the parsed outline.
+
+THEN a "case-insensitive match only" warning is included in the result.
+
+;===============================================================
+; Binder with a wiki-style link matching files in two equally-distant folders produces an error.
+;===============================================================
+GIVEN a binder file with a wiki-style link whose name matches files in two different folders at the same depth.
+
+WHEN the author requests the parsed outline.
+
+THEN an "ambiguous link" error is included in the result.
+
+;===============================================================
+; Links inside code blocks are excluded from the outline.
+;===============================================================
+GIVEN a binder file with a chapter link that appears inside a fenced code block.
+
+WHEN the author requests the parsed outline.
+
+THEN that link is not included as a chapter node in the outline.
+THEN a "link found inside code block" warning is included in the result.
+
+;===============================================================
+; Binder files with Windows-style line endings are parsed correctly.
+;===============================================================
+GIVEN a binder file whose lines end with Windows-style line endings.
+
+WHEN the author requests the parsed outline.
+
+THEN the outline is extracted correctly.
+THEN any written output preserves the original Windows-style line endings.

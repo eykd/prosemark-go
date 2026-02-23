@@ -1,0 +1,64 @@
+;===============================================================
+; Moving a chapter to a different position reorders the binder.
+;===============================================================
+GIVEN a binder with two sibling chapters in a certain order.
+
+WHEN the author moves one chapter to the other's position.
+
+THEN the chapters appear in the new order.
+
+;===============================================================
+; Moving a chapter moves its entire sub-chapter tree with it.
+;===============================================================
+GIVEN a binder with a chapter that has nested sub-chapters.
+
+WHEN the author moves that chapter to a different location.
+
+THEN the chapter and all its sub-chapters appear together at the destination.
+
+;===============================================================
+; Moving a chapter into one of its own descendants is rejected.
+;===============================================================
+GIVEN a binder where chapter "A" contains chapter "B".
+
+WHEN the author tries to move "A" to be under "B".
+
+THEN a "circular move" error is returned.
+THEN the binder is unchanged.
+
+;===============================================================
+; Moving a chapter that uses footnote-style links preserves its link format.
+;===============================================================
+GIVEN a binder with a chapter that uses a footnote-style link.
+
+WHEN the author moves that chapter to a different location.
+
+THEN the moved chapter still uses its footnote-style link at the new location.
+
+;===============================================================
+; Moving a chapter with a tooltip preserves the tooltip text.
+;===============================================================
+GIVEN a binder with a chapter whose link has a tooltip.
+
+WHEN the author moves that chapter to a different location.
+
+THEN the moved chapter's link still has the tooltip text at the new location.
+
+;===============================================================
+; Moved chapter uses the indentation style of its new sibling group.
+;===============================================================
+GIVEN a binder where the destination section uses a different indentation style than the source section.
+
+WHEN the author moves a chapter to the destination section.
+
+THEN the moved chapter uses the destination section's indentation style.
+
+;===============================================================
+; Moving a chapter with non-structural text destroys that text with a warning.
+;===============================================================
+GIVEN a binder with a chapter entry that has additional descriptive text after its link.
+
+WHEN the author moves that chapter.
+
+THEN the chapter appears at the destination without the additional text.
+THEN a "non-structural content destroyed" warning is included in the result.

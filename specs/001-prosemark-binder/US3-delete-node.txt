@@ -1,0 +1,75 @@
+;===============================================================
+; Deleting a leaf chapter removes its entry from the binder.
+;===============================================================
+GIVEN a binder with a chapter that has no sub-chapters.
+
+WHEN the author deletes that chapter.
+
+THEN the chapter entry is removed from the binder.
+
+;===============================================================
+; Deleting a chapter also removes all of its nested sub-chapters.
+;===============================================================
+GIVEN a binder with a chapter that contains nested sub-chapters.
+
+WHEN the author deletes the parent chapter.
+
+THEN the parent chapter and all its sub-chapters are removed.
+
+;===============================================================
+; Deleting the only entry inside a nested section prunes the now-empty section.
+;===============================================================
+GIVEN a binder with a nested section containing only one sub-chapter.
+
+WHEN the author deletes that sub-chapter.
+
+THEN the now-empty nested section is also removed.
+THEN an "empty section removed" warning is included in the result.
+
+;===============================================================
+; Consecutive blank lines created by a deletion are collapsed into one.
+;===============================================================
+GIVEN a binder where deleting a chapter would leave two blank lines in a row.
+
+WHEN the author deletes that chapter.
+
+THEN the two consecutive blank lines are collapsed into one.
+
+;===============================================================
+; Deleting a chapter with non-structural text removes that text too, with a warning.
+;===============================================================
+GIVEN a binder with a chapter entry that has additional descriptive text after the chapter link.
+
+WHEN the author deletes that chapter.
+
+THEN the entry and its additional text are both removed.
+THEN a "non-structural content destroyed" warning is included in the result.
+
+;===============================================================
+; Attempting to delete a non-existent chapter returns an error without modifying the binder.
+;===============================================================
+GIVEN a selector that does not match any chapter in the binder.
+
+WHEN the author tries to delete using that selector.
+
+THEN a "not found" error is returned.
+THEN the binder is unchanged.
+
+;===============================================================
+; Deleting a chapter that uses footnote-style links preserves the link definition in the file.
+;===============================================================
+GIVEN a binder with a chapter that uses a footnote-style link, with the definition stored at the bottom of the file.
+
+WHEN the author deletes that chapter.
+
+THEN the chapter entry is removed.
+THEN the footnote link definition at the bottom of the file is kept intact.
+
+;===============================================================
+; Deleting the last top-level chapter removes any trailing blank lines from the file.
+;===============================================================
+GIVEN a binder with only one top-level chapter.
+
+WHEN the author deletes that chapter.
+
+THEN any blank lines remaining at the end of the file are removed.
