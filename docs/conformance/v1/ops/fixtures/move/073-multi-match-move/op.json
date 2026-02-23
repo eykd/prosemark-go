@@ -1,0 +1,10 @@
+{
+  "version": "1",
+  "operation": "move",
+  "params": {
+    "sourceSelector": "ch",
+    "destinationParentSelector": "app",
+    "position": "last",
+    "yes": true
+  }
+}

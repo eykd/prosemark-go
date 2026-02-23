@@ -64,11 +64,10 @@ When an index is omitted, the segment matches **all** occurrences at that level.
 
 ### 3.5 Multi-Match Behavior
 
-All operations accept multi-match selectors. When a selector matches multiple nodes:
+All operations accept multi-match selectors. When a selector matches multiple nodes, the operation is applied to each match in preorder depth-first traversal order.
 
 - The operation applies to all matched nodes.
-- A warning MUST be emitted noting the number of matches.
-- Destructive operations (delete, move) MUST prompt for confirmation in interactive CLI mode. The `--yes` flag overrides confirmation.
+- OPW001 is always emitted. For CLI implementations, destructive operations (delete, move) MUST prompt for interactive confirmation when multi-match occurs; `--yes` suppresses the prompt. Library implementations proceed without prompting but MUST still emit OPW001.
 
 ### 3.6 Selector Examples
 
@@ -150,7 +149,7 @@ New nodes are always serialized as standard Markdown inline links:
 - [Title](target.md)
 ```
 
-**List marker**: Match the last encountered sibling (the sibling immediately above the insertion point in document order). If there is no previous sibling, match the next sibling. If there are no siblings, use `-`.
+**List marker**: Match the last encountered sibling (the sibling immediately above the insertion point in document order). If there is no previous sibling, match the next sibling. If there are no siblings, use `-`. If the previous and next siblings use conflicting marker types (ordered vs. unordered), use the previous sibling's marker type. If only a next sibling exists and it is ordered, use the next sibling's marker type.
 
 **Ordered list markers** (`1.`, `2.`, etc.): use the maximum ordinal among the parent's existing structural children plus 1. If the parent has no structural children, use `1.`. The marker style (period vs. paren) MUST match the prevailing sibling style.
 
@@ -175,7 +174,7 @@ For each node matching `selector`:
 1. Remove the list item occurrence and its entire nested subtree.
 2. If the deleted node's list item contained non-structural content (annotations, free text, task checkboxes), emit a warning noting the destroyed content.
 3. If the deletion leaves the parent with an empty sublist, prune the empty sublist.
-4. Clean up residual blank lines: collapse any doubled blank lines at the deletion site to a single blank line (or zero, matching surrounding context).
+4. After removal, reduce any run of 2 or more consecutive blank lines at the deletion site to a single blank line. If the deletion site is the last item in its containing block and is immediately followed by EOF or the close of its parent list (no following sibling content), reduce the trailing blank lines to zero instead.
 
 Other occurrences referencing the same file remain untouched.
 

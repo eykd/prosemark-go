@@ -1,0 +1,15 @@
+{
+  "version": "1",
+  "diagnostics": [
+    {
+      "severity": "warning",
+      "code": "BNDW003",
+      "message": "Duplicate file reference: ch.md appears as more than one node in the binder tree"
+    },
+    {
+      "severity": "warning",
+      "code": "OPW001",
+      "message": "Selector ch matched 2 nodes; operation applied to all matches"
+    }
+  ]
+}

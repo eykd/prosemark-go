@@ -32,7 +32,7 @@ These are emitted during parsing. Processing continues and a parse result is pro
 | `BNDW002` | MultipleStructuralLinks | A single list item contains more than one structural link. Only the first link is treated as structural; additional links in the same item are ignored. |
 | `BNDW003` | DuplicateFileReference | Two or more nodes in the binder tree reference the same target file. Both nodes are included in the parse result; they are distinct tree entries. |
 | `BNDW004` | MissingTargetFile | A structural link's target file is not present in `project.json`. The node is still included in the parse result. |
-| `BNDW005` | LinkInCodeFence | A list item containing a structural link is inside a fenced code block (`` ``` `` or `~~~`). The item is not treated as structural. |
+| `BNDW005` | LinkInCodeFence | A list item containing a structural link is inside a fenced code block (`` ``` `` or `~~~`). The item is not treated as structural. CommonMark indented code blocks (4-space or tab prefix) do not affect structural node detection; list items cannot appear inside an indented code block by CommonMark syntax rules. |
 | `BNDW006` | LinkOutsideListItem | A structural link appears in a paragraph, blockquote, heading, or other non-list context. The link is not treated as structural. |
 | `BNDW007` | NonMarkdownTarget | A link in a list item points to a non-`.md` file. The item is not treated as structural. |
 | `BNDW008` | SelfReferentialLink | A link in a list item targets `_binder.md` itself. The item is not treated as structural. |
@@ -65,7 +65,7 @@ These are emitted during an operation. The operation **proceeds** and the binder
 
 | Code | Name | Condition |
 |------|------|-----------|
-| `OPW001` | MultiMatch | The selector matched more than one node in the binder tree. The operation is applied to all matched nodes. |
+| `OPW001` | MultiMatch | The selector matched more than one node in the binder tree. The operation is applied to all matched nodes. For CLI implementations, destructive operations (delete, move) must prompt for confirmation when this warning is emitted; `--yes` suppresses the prompt. |
 | `OPW002` | DuplicateSkipped | An `add-child` operation was skipped for a specific parent because the target node already exists as a child and `--force` was not specified. |
 | `OPW003` | NonStructuralContentDestroyed | A `delete` or `move` operation removed a list item that contained non-structural inline content (e.g. annotation text alongside the structural link). The content is permanently lost. |
 | `OPW004` | EmptySublistPruned | Removing or moving the last structural child of a node left that node's sublist empty. The empty sublist markup was automatically removed from the binder file. |

@@ -178,7 +178,7 @@ The wikilink resolution algorithm matches Obsidian's behavior:
 
 1. The search scope is the project root.
 2. Match by basename across the project.
-3. When multiple files share a basename, prefer the one closest to the linking file (same directory first, then shortest relative path).
+3. When multiple files share a basename, prefer the one with the fewest path components from the project root (same directory as `_binder.md` first; then shallowest subdirectory path; ties resolved lexicographically by path). Because `_binder.md` is always at project root, this is equivalent to shortest absolute path within the project.
 4. If still ambiguous after proximity tiebreak, emit a lint error.
 
 If no file in the project matches the bare stem (zero matches), the implementation MUST synthesize the target as `<stem>.md`, include the structural node in the parse result with that synthesized path, and emit BNDW004 (MissingTargetFile).
@@ -235,7 +235,7 @@ Implementations MUST NOT:
 - Multiple structural links in one list item.
 - Multiple nodes referencing the same file (operates at the file level regardless of fragments; fires even if fragments differ).
 - Link target file does not exist.
-- Structural node detected inside code fence.
+- Structural node detected inside a fenced code block (`` ``` `` or `~~~`). CommonMark indented code blocks (4-space or tab prefix) do not affect structural node detection; list items cannot appear inside an indented code block by CommonMark syntax rules.
 - Structural link detected outside a list item.
 - Non-`.md` target in a list item link.
 - Self-referential link targeting `_binder.md`.

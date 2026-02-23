@@ -69,7 +69,7 @@ The `NNN` prefix in fixture directory names is a stable, three-digit, zero-padde
 | `schema/op-spec.schema.json` | `op.json` |
 | `schema/project.schema.json` | `project.json` |
 
-**Scaffold status**: 19 of 69 fixtures are implemented in the initial scaffold. The table below lists the full planned catalog; entries without a fixture directory are pending authoring.
+**Total fixtures**: 76. All fixtures are implemented.
 
 ## Test Catalog Summary
 
@@ -88,7 +88,7 @@ The `NNN` prefix in fixture directory names is a stable, three-digit, zero-padde
 | 034–040 | Edge cases (line endings, GFM checkboxes, indentation) |
 | 071 | Wikilink zero-match (BNDW004 synthesized target) |
 
-### Ops Domain (041–069, 070)
+### Ops Domain (041–069, 070, 072–075)
 
 | Range | Operation |
 |-------|-----------|
@@ -98,3 +98,7 @@ The `NNN` prefix in fixture directory names is a stable, three-digit, zero-padde
 | 061 | move / cycle-detection |
 | 062–067, 070 | ops-error (OPExx abort conditions) |
 | 068–069 | stability (round-trip) |
+| 072 | delete / multi-match warning |
+| 073 | move / multi-match warning |
+| 074 | add-child / ordered-list serialization |
+| 075 | add-child / selector index disambiguation |
