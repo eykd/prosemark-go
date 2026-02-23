@@ -71,11 +71,11 @@ Fixtures 001–040 are the original parse-domain block; 041–070 are the origin
 | `schema/op-spec.schema.json` | `op.json` |
 | `schema/project.schema.json` | `project.json` |
 
-**Total fixtures**: 114. All fixtures are implemented.
+**Total fixtures**: 135. All fixtures are implemented.
 
 ## Test Catalog Summary
 
-### Parse Domain (001–040, 071, 076–086, 106, 109–112)
+### Parse Domain (001–040, 071, 076–086, 106, 109–112, 115–120)
 
 | Range | Category |
 |-------|----------|
@@ -101,8 +101,14 @@ Fixtures 001–040 are the original parse-domain block; 041–070 are the origin
 | 110 | Wikilink empty alias (`[[foo\|]]` → title falls back to stem) |
 | 111 | Fragment-only wikilink BNDE001 (dedicated conformance fixture) |
 | 112 | Fragment zero-match with alias (`[[nonexist#section\|Title]]` → synthesized target, alias wins as title) |
+| 115 | Stem derivation with intermediate dots (`chapter.one.md` → stem `chapter.one`) |
+| 116 | Duplicate references via different fragment variants (`[[ch#intro]]` + `[[ch#body]]` → BNDW003) |
+| 117 | Lint error: control character in link target path (percent-encoded U+0001 decoded → BNDE001) |
+| 118 | Lint error: trailing dot in path segment (`section./file.md` → BNDE001) |
+| 119 | Inline link with tooltip attribute (tooltip silently ignored; title from link text) |
+| 120 | CR-only line endings (U+000D standalone; accepted per §7.1; structural result identical to LF) |
 
-### Ops Domain (041–069, 070, 072–075, 087–108, 113–114)
+### Ops Domain (041–069, 070, 072–075, 087–108, 113–114, 121–135)
 
 | Range | Operation |
 |-------|-----------|
@@ -136,3 +142,18 @@ Fixtures 001–040 are the original parse-domain block; 041–070 are the origin
 | 108 | delete / delete last top-level node (empty structural tree) |
 | 113 | add-child / `--at N` where N equals child count (boundary: valid, appends last) |
 | 114 | add-child / non-sequential ordered-list ordinals (max+1 rule) |
+| 121 | add-child / relative-path selector (`subfolder/chapter-03` targets exact directory) |
+| 122 | add-child / conflicting sibling markers: previous sibling ordered, next unordered → ordered wins |
+| 123 | add-child / indentation inherited from next sibling when `--first` with no previous sibling |
+| 124 | add-child / paren-style ordered marker (`1)`) inherited from next sibling when `--first` |
+| 125 | add-child / lint warnings in binder do not block operations (BNDW001 emitted, op proceeds) |
+| 126 | add-child / idempotent: existing middle child not reordered; OPW002 emitted |
+| 127 | delete / reference link definition preserved after deleting node that referenced it |
+| 128 | delete / fragment-aware index scope: `ch[1]` deletes second occurrence across fragment variants |
+| 129 | move / non-structural content (checkbox) destroyed during move emits OPW003 |
+| 130 | move / subtree markers preserved: only moved node's own marker updated; children retain ordinals |
+| 131 | move / tooltip in source link preserved verbatim after move |
+| 132 | ops-error / OPE004 for non-`.md` target in add-child |
+| 133 | ops-error / OPE001 when root selector `.` used as delete source |
+| 134 | ops-error / OPE001 when root selector `.` used as move source |
+| 135 | ops-error / OPE006 for move when source node is inside a code fence |

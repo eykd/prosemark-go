@@ -1,0 +1,13 @@
+{
+  "version": "1",
+  "diagnostics": [
+    {
+      "severity": "warning",
+      "code": "OPW003"
+    },
+    {
+      "severity": "warning",
+      "code": "OPW004"
+    }
+  ]
+}

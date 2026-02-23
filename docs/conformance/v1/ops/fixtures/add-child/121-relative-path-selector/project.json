@@ -1,0 +1,4 @@
+{
+  "version": "1",
+  "files": ["part.md", "subfolder/chapter-03.md", "intro.md", "appendix.md"]
+}

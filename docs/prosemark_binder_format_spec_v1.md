@@ -211,7 +211,7 @@ The binder does not define cycles; file reuse does not imply structural cycles.
 
 ### 7.1 Line Endings
 
-Parsers MUST accept LF, CRLF, and CR per CommonMark.
+Parsers MUST accept LF, CRLF, and CR per CommonMark. CR here means U+000D used as a standalone line ending (a bare carriage return not followed by LF); this is distinct from CRLF (U+000D U+000A).
 
 Implementations MUST preserve original line endings on untouched lines.
 
@@ -236,7 +236,7 @@ Implementations MUST NOT:
 
 ### 8.1 Errors (non-zero exit)
 
-- Illegal path characters in link target (per Section 4.5).
+- Illegal path characters in link target (per Section 4.5). This covers all §4.5 violations: control characters (U+0000–U+001F), the characters `< > : " | ? * \`, and trailing dots or spaces in path segments. All §4.5 violations emit BNDE001 (IllegalPathChars).
 - Link target resolves outside project root.
 - Ambiguous wikilink resolution (per Section 5.5).
 
@@ -400,7 +400,7 @@ Wikilink targets are resolved using the algorithm defined in Section 5.5.
 
 Fragment components (`#Heading`) are preserved in the source but carry no structural weight.
 
-The node's identity target is the file path only. Fragments do not distinguish nodes for the purposes of the "multiple nodes referencing the same file" lint warning (Section 8.2).
+The node's identity target is the file path only. Fragments do not distinguish nodes for the purposes of the BNDW003 (DuplicateFileReference) warning (Section 8.2). For example, `[[foo#intro]]` and `[[foo#body]]` both reference `foo.md` and together trigger BNDW003.
 
 ---
 

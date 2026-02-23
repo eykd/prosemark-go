@@ -1,0 +1,20 @@
+{
+  "version": "1",
+  "root": {
+    "type": "root",
+    "children": [
+      {
+        "type": "node",
+        "target": "ch.md",
+        "title": "ch",
+        "children": []
+      },
+      {
+        "type": "node",
+        "target": "ch.md",
+        "title": "ch",
+        "children": []
+      }
+    ]
+  }
+}

@@ -79,17 +79,18 @@ Given the binder:
 - [Part One](part-one.md)
   - [Chapter 1](chapter-01.md)
   - [Chapter 3](chapter-03.md)
-  - [Chapter 3](chapter-03.md)
+  - [Chapter 3](sub/chapter-03.md)
 - [Part Two](part-two.md)
   - [Chapter 3](chapter-03.md)
 ```
 
 | Selector | Matches |
 |---|---|
-| `chapter-03` | All three `chapter-03.md` nodes (root-level search) |
-| `part-one:chapter-03` | Both `chapter-03.md` children under all `part-one.md` nodes |
-| `part-one:chapter-03[0]` | First `chapter-03.md` child under all `part-one.md` nodes |
-| `part-one[0]:chapter-03[0]` | Exactly one node: first `chapter-03.md` child under first `part-one.md` |
+| `chapter-03` | All four `chapter-03`-stem nodes (bare stem matches any directory) |
+| `sub/chapter-03` | The single `sub/chapter-03.md` node (relative path disambiguates by directory) |
+| `part-one:chapter-03` | Both `chapter-03`-stem nodes under `part-one.md` (`chapter-03.md` and `sub/chapter-03.md`) |
+| `part-one:chapter-03[0]` | First `chapter-03`-stem child (in document order) under `part-one.md` |
+| `part-one[0]:chapter-03[0]` | Exactly one node: first `chapter-03`-stem child under first `part-one.md` |
 | `part-two:chapter-03` | The single `chapter-03.md` child under `part-two.md` |
 
 ### 3.7 Root-Level Selectors
@@ -100,7 +101,7 @@ A multi-segment selector (e.g., `part-one:chapter-03`) matches the final segment
 
 ### 3.8 Root Selector
 
-The literal string `.` is a reserved selector that matches the **synthetic root** node. It is valid only as a `parent-selector` in add-child operations (inserting top-level children). It is not valid as a source or destination selector for delete or move, and is not valid in multi-segment selectors. When `.` is used as parent-selector, multi-match semantics do not apply (the root is unique).
+The literal string `.` is a reserved selector that matches the **synthetic root** node. It is valid only as a `parent-selector` in add-child operations (inserting top-level children). It is not valid as a source or destination selector for delete or move, and is not valid in multi-segment selectors. Attempting to use `.` as a source selector in `delete` or `move` operations resolves to zero matches and emits OPE001 (SelectorNoMatch). When `.` is used as parent-selector, multi-match semantics do not apply (the root is unique).
 
 ### 3.9 Fragment Handling in Selectors
 
@@ -121,7 +122,7 @@ add-child <parent-selector> <target> --title <title> [position flags] [--force]
 ### 4.2 Parameters
 
 - **parent-selector**: A node selector identifying the parent(s) under which to insert.
-- **target**: The relative file path of the new child (must be a `.md` file, must conform to binder path rules per the format spec Section 4.5).
+- **target**: The relative file path of the new child (must be a `.md` file; a non-`.md` extension emits OPE004; the path must also conform to binder path rules per the format spec Section 4.5, otherwise OPE004 is also emitted).
 - **title** (required): The display text for the link.
 
 ### 4.3 Behavior
@@ -243,7 +244,7 @@ In interactive CLI mode, the CLI MUST display the source and destination and pro
 
 ### 6.7 Cleanup
 
-The source site follows the same cleanup rules as delete (Section 5.2): prune empty sublists, clean up residual blank lines, warn on destroyed non-structural content (if any existed in the moved node's list item beyond the structural link and its subtree).
+The source site follows the same cleanup rules as delete (Section 5.2): prune empty sublists, clean up residual blank lines, emit OPW003 (NonStructuralContentDestroyed) when non-structural content existed in the moved node's list item beyond the structural link and its subtree.
 
 ---
 
@@ -320,7 +321,7 @@ Because mutations are atomic, any error aborts the entire operation. No partial 
 
 Mutations MUST refuse to act on structural nodes detected inside code fences.
 
-If a selector matches a node that appears inside a code fence, the operation MUST fail with an error.
+If a selector matches a node that appears inside a code fence, the operation MUST fail with OPE006 (NodeInCodeFence). This applies to all three mutation operations: add-child (when the parent selector targets a node inside a code fence), delete, and move.
 
 ---
 

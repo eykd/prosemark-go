@@ -1,0 +1,10 @@
+{
+  "version": "1",
+  "operation": "add-child",
+  "params": {
+    "parentSelector": "part",
+    "target": "new.md",
+    "title": "New Chapter",
+    "position": "first"
+  }
+}
