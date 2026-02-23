@@ -153,31 +153,8 @@ func Parse(ctx context.Context, src []byte, project *Project) (*ParseResult, []D
 		target, title := parseLink(content, result.RefDefs, project)
 
 		// Validate target path.
-		if hasIllegalPathChars(target) {
-			diags = append(diags, Diagnostic{
-				Severity: "error",
-				Code:     CodeIllegalPathChars,
-				Message:  "link target contains illegal path characters",
-				Location: &Location{Line: lineNum},
-			})
-			continue
-		}
-		if escapesRoot(target) {
-			diags = append(diags, Diagnostic{
-				Severity: "error",
-				Code:     CodePathEscapesRoot,
-				Message:  "link target escapes project root",
-				Location: &Location{Line: lineNum},
-			})
-			continue
-		}
-		if !isMarkdownTarget(target) {
-			diags = append(diags, Diagnostic{
-				Severity: "warning",
-				Code:     CodeNonMarkdownTarget,
-				Message:  "link target is not a .md file",
-				Location: &Location{Line: lineNum},
-			})
+		if diag := validateTarget(target, lineNum); diag != nil {
+			diags = append(diags, *diag)
 			continue
 		}
 
@@ -242,9 +219,40 @@ func parseLink(content string, refDefs map[string]RefDef, project *Project) (tar
 	return
 }
 
+// validateTarget returns a Diagnostic if target fails path validation, or nil if valid.
+// Checks are applied in order: illegal chars, root escape, non-markdown extension.
+func validateTarget(target string, lineNum int) *Diagnostic {
+	switch {
+	case hasIllegalPathChars(target):
+		return &Diagnostic{
+			Severity: "error",
+			Code:     CodeIllegalPathChars,
+			Message:  "link target contains illegal path characters",
+			Location: &Location{Line: lineNum},
+		}
+	case escapesRoot(target):
+		return &Diagnostic{
+			Severity: "error",
+			Code:     CodePathEscapesRoot,
+			Message:  "link target escapes project root",
+			Location: &Location{Line: lineNum},
+		}
+	case !isMarkdownTarget(target):
+		return &Diagnostic{
+			Severity: "warning",
+			Code:     CodeNonMarkdownTarget,
+			Message:  "link target is not a .md file",
+			Location: &Location{Line: lineNum},
+		}
+	}
+	return nil
+}
+
 // stemFromPath returns the filename stem (basename without extension).
 func stemFromPath(p string) string {
-	p = p[strings.LastIndex(p, "/")+1:]
+	if idx := strings.LastIndex(p, "/"); idx >= 0 {
+		p = p[idx+1:]
+	}
 	return strings.SplitN(p, ".", 2)[0]
 }
 
