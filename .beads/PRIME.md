@@ -11,10 +11,7 @@
 [ ] 1. git status              (check what changed)
 [ ] 2. git add <files>         (stage code changes)
 [ ] 3. git commit -m "..."     (commit code)
-[ ] 4. git pull --rebase       (sync with remote)
-[ ] 5. bd dolt pull            (pull beads updates)
-[ ] 6. git push                (push to remote)
-[ ] 7. bd dolt push            (push beads changes)
+[ ] 4. git push                (push to remote)
 ```
 
 **NEVER skip this.** Work is not done until pushed.
@@ -24,7 +21,7 @@
 - **Prohibited**: Do NOT use TodoWrite, TaskCreate, or markdown files for task tracking
 - **Workflow**: Create beads issue BEFORE writing code, mark in_progress when starting
 - Persistence you don't need beats lost context
-- Git workflow: beads auto-commit to Dolt, run `bd dolt push` then `git push` at session end
+- Git workflow: beads auto-commit to Dolt, run `git push` at session end
 - Session management: check `bd ready` for available work
 
 ## Essential Commands
@@ -53,12 +50,7 @@
 - `bd show <id>` - See what's blocking/blocked by this issue
 
 ### Sync & Collaboration
-- `bd dolt push` - Push beads to Dolt remote
-- `bd dolt pull` - Pull beads from Dolt remote
 - `bd search <query>` - Search issues by keyword
-
-> **Note**: `bd sync` is deprecated as of bd 0.56.1. Use `bd dolt push` to push
-> beads changes to the remote and `bd dolt pull` to pull.
 
 ### Project Health
 - `bd stats` - Project statistics (open/closed/blocked counts)
