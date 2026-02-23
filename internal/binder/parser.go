@@ -45,7 +45,6 @@ func Parse(ctx context.Context, src []byte, project *Project) (*ParseResult, []D
 			Type:     "root",
 			Children: []*Node{},
 		},
-		RefDefs: make(map[string]RefDef),
 	}
 
 	// Strip UTF-8 BOM if present.
@@ -63,44 +62,11 @@ func Parse(ctx context.Context, src []byte, project *Project) (*ParseResult, []D
 	result.Lines, result.LineEnds = splitLines(src)
 
 	// Pass 1: track fences, detect pragma, collect ref defs, warn on links in fences.
-	inFence := false
-	fenceMarker := ""
-
-	for i, line := range result.Lines {
-		lineNum := i + 1
-
-		if !inFence {
-			if marker := openFenceMarker(line); marker != "" {
-				inFence, fenceMarker = true, marker
-			} else {
-				if !result.HasPragma && pragmaRE.MatchString(line) {
-					result.HasPragma = true
-					result.PragmaLine = lineNum
-				}
-				if m := refDefRE.FindStringSubmatch(line); m != nil {
-					label := strings.ToLower(m[1])
-					result.RefDefs[label] = RefDef{
-						Label:  label,
-						Target: m[2],
-						Title:  m[3],
-						Line:   lineNum,
-					}
-				}
-			}
-		} else {
-			if strings.HasPrefix(line, fenceMarker) {
-				inFence = false
-				fenceMarker = ""
-			} else if linkRE.MatchString(line) {
-				diags = append(diags, Diagnostic{
-					Severity: "warning",
-					Code:     CodeLinkInCodeFence,
-					Message:  "Structural link found inside a fenced code block",
-					Location: &Location{Line: lineNum},
-				})
-			}
-		}
-	}
+	p1 := pass1Scan(result.Lines)
+	result.HasPragma = p1.hasPragma
+	result.PragmaLine = p1.pragmaLine
+	result.RefDefs = p1.refDefs
+	diags = append(diags, p1.diags...)
 
 	// Emit BNDW001 if no effective pragma found and file has content (or no project context).
 	if !result.HasPragma && (project == nil || len(result.Lines) > 0) {
@@ -129,8 +95,8 @@ func Parse(ctx context.Context, src []byte, project *Project) (*ParseResult, []D
 	stack := []stackEntry{{indent: -1, node: result.Root}}
 	seenTargets := make(map[string]bool)
 
-	inFence = false
-	fenceMarker = ""
+	inFence := false
+	fenceMarker := ""
 
 	// consumed tracks lines already processed as list item continuations.
 	consumed := make(map[int]bool)
@@ -176,23 +142,17 @@ func Parse(ctx context.Context, src []byte, project *Project) (*ParseResult, []D
 		// Column of the content start within the line (1-based).
 		listItemColumn := len(m[0]) - len(rawContent) + 1
 
-		// Strip GFM task list checkbox prefix: "[ ] " or "[x] " or "[X] ".
-		content = checkboxRE.ReplaceAllString(content, "")
+		content = normalizeListContent(content)
 
-		// Strip GFM strikethrough markup: ~~...~~.
-		content = strings.TrimSpace(strikethroughRE.ReplaceAllString(content, ""))
-
-		target, title, linkDiags := parseLink(content, result.RefDefs, project, wikiIndex, binderDir, lineNum, listItemColumn)
+		target, title, linkDiags := parseLink(content, result.RefDefs, wikiIndex, binderDir, lineNum, listItemColumn)
 
 		// If no link found in content, check the immediately following continuation line.
 		if target == "" && i+1 < len(result.Lines) {
 			nextLine := result.Lines[i+1]
 			// A continuation line has more indentation than the list marker level.
 			if countLeadingWhitespace(nextLine) > indent && !listItemRE.MatchString(nextLine) {
-				contContent := strings.TrimSpace(nextLine)
-				contContent = checkboxRE.ReplaceAllString(contContent, "")
-				contContent = strings.TrimSpace(strikethroughRE.ReplaceAllString(contContent, ""))
-				t, ti, ld := parseLink(contContent, result.RefDefs, project, wikiIndex, binderDir, i+2, 0)
+				contContent := normalizeListContent(strings.TrimSpace(nextLine))
+				t, ti, ld := parseLink(contContent, result.RefDefs, wikiIndex, binderDir, i+2, 0)
 				consumed[i+1] = true
 				if t != "" {
 					target, title = t, ti
@@ -320,9 +280,61 @@ func Parse(ctx context.Context, src []byte, project *Project) (*ParseResult, []D
 	return result, diags, nil
 }
 
+// pass1Data holds the results of the first-pass scan over source lines.
+type pass1Data struct {
+	hasPragma  bool
+	pragmaLine int
+	refDefs    map[string]RefDef
+	diags      []Diagnostic // fence-link diagnostics only
+}
+
+// pass1Scan scans lines to detect the pragma, collect reference definitions, and warn
+// on structural links inside fenced code blocks.
+func pass1Scan(lines []string) pass1Data {
+	result := pass1Data{refDefs: make(map[string]RefDef)}
+	inFence := false
+	fenceMarker := ""
+
+	for i, line := range lines {
+		lineNum := i + 1
+		if !inFence {
+			if marker := openFenceMarker(line); marker != "" {
+				inFence, fenceMarker = true, marker
+			} else {
+				if !result.hasPragma && pragmaRE.MatchString(line) {
+					result.hasPragma = true
+					result.pragmaLine = lineNum
+				}
+				if m := refDefRE.FindStringSubmatch(line); m != nil {
+					label := strings.ToLower(m[1])
+					result.refDefs[label] = RefDef{
+						Label:  label,
+						Target: m[2],
+						Title:  m[3],
+						Line:   lineNum,
+					}
+				}
+			}
+		} else {
+			if strings.HasPrefix(line, fenceMarker) {
+				inFence = false
+				fenceMarker = ""
+			} else if linkRE.MatchString(line) {
+				result.diags = append(result.diags, Diagnostic{
+					Severity: "warning",
+					Code:     CodeLinkInCodeFence,
+					Message:  "Structural link found inside a fenced code block",
+					Location: &Location{Line: lineNum},
+				})
+			}
+		}
+	}
+	return result
+}
+
 // parseLink parses the content portion of a list item and returns (target, title, diags).
 // Returns ("", "", nil) if no link can be resolved.
-func parseLink(content string, refDefs map[string]RefDef, project *Project, wikiIndex map[string][]wikilinkEntry, binderDir string, lineNum, column int) (target, title string, diags []Diagnostic) {
+func parseLink(content string, refDefs map[string]RefDef, wikiIndex map[string][]wikilinkEntry, binderDir string, lineNum, column int) (target, title string, diags []Diagnostic) {
 	if m := inlineLinkRE.FindStringSubmatch(content); m != nil {
 		target, title = m[2], m[1]
 		if title == "" {
@@ -604,6 +616,13 @@ func escapesRoot(path string) bool {
 // isMarkdownTarget reports whether path has a .md extension.
 func isMarkdownTarget(path string) bool {
 	return strings.HasSuffix(strings.ToLower(path), ".md")
+}
+
+// normalizeListContent strips GFM task-list checkbox prefixes and strikethrough markup
+// from list item content, trimming surrounding whitespace.
+func normalizeListContent(s string) string {
+	s = checkboxRE.ReplaceAllString(s, "")
+	return strings.TrimSpace(strikethroughRE.ReplaceAllString(s, ""))
 }
 
 // openFenceMarker returns the fence marker string ("```" or "~~~") if line opens a
