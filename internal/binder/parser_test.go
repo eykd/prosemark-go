@@ -370,3 +370,433 @@ func TestParse_Lines_SplitCorrectly(t *testing.T) {
 		t.Errorf("Lines[2] = %q, want %q", result.Lines[2], "- [B](b.md)")
 	}
 }
+
+// --- List Scanning & Structural Link Extraction Tests (Phase-A steps 5-6) ---
+
+// TestParse_NodeType_IsNode tests that structural list-item nodes have Type "node".
+func TestParse_NodeType_IsNode(t *testing.T) {
+	src := []byte("<!-- prosemark-binder:v1 -->\n- [Chapter](chapter.md)\n")
+
+	result, _, err := binder.Parse(context.Background(), src, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result.Root.Children) < 1 {
+		t.Fatalf("Root.Children is empty; expected one structural node")
+	}
+	if result.Root.Children[0].Type != "node" {
+		t.Errorf("node.Type = %q, want %q", result.Root.Children[0].Type, "node")
+	}
+}
+
+// TestParse_InlineLinks tests inline link extraction for various formats (FR-001, FR-016).
+func TestParse_InlineLinks(t *testing.T) {
+	tests := []struct {
+		name       string
+		src        string
+		wantTarget string
+		wantTitle  string
+		wantNodes  int
+	}{
+		{
+			name:       "simple inline link dash marker",
+			src:        "<!-- prosemark-binder:v1 -->\n- [Chapter One](chapter-one.md)\n",
+			wantTarget: "chapter-one.md",
+			wantTitle:  "Chapter One",
+			wantNodes:  1,
+		},
+		{
+			name:       "inline link with tooltip title is ignored for display",
+			src:        "<!-- prosemark-binder:v1 -->\n- [Chapter](chapter.md \"A tooltip\")\n",
+			wantTarget: "chapter.md",
+			wantTitle:  "Chapter",
+			wantNodes:  1,
+		},
+		{
+			name:       "empty bracket title derives from stem",
+			src:        "<!-- prosemark-binder:v1 -->\n- [](chapter-one.md)\n",
+			wantTarget: "chapter-one.md",
+			wantTitle:  "chapter-one",
+			wantNodes:  1,
+		},
+		{
+			name:       "asterisk list marker",
+			src:        "<!-- prosemark-binder:v1 -->\n* [Chapter](chapter.md)\n",
+			wantTarget: "chapter.md",
+			wantTitle:  "Chapter",
+			wantNodes:  1,
+		},
+		{
+			name:       "plus list marker",
+			src:        "<!-- prosemark-binder:v1 -->\n+ [Chapter](chapter.md)\n",
+			wantTarget: "chapter.md",
+			wantTitle:  "Chapter",
+			wantNodes:  1,
+		},
+		{
+			name:       "multiple top-level nodes",
+			src:        "<!-- prosemark-binder:v1 -->\n- [Ch1](ch1.md)\n- [Ch2](ch2.md)\n- [Ch3](ch3.md)\n",
+			wantTarget: "ch1.md",
+			wantTitle:  "Ch1",
+			wantNodes:  3,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, _, err := binder.Parse(context.Background(), []byte(tt.src), nil)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if len(result.Root.Children) != tt.wantNodes {
+				t.Fatalf("Root.Children len = %d, want %d", len(result.Root.Children), tt.wantNodes)
+			}
+			node := result.Root.Children[0]
+			if node.Target != tt.wantTarget {
+				t.Errorf("Target = %q, want %q", node.Target, tt.wantTarget)
+			}
+			if node.Title != tt.wantTitle {
+				t.Errorf("Title = %q, want %q", node.Title, tt.wantTitle)
+			}
+		})
+	}
+}
+
+// TestParse_Node_SourceMetadata tests that parsed nodes carry correct source metadata.
+func TestParse_Node_SourceMetadata(t *testing.T) {
+	src := []byte("<!-- prosemark-binder:v1 -->\n- [Chapter](chapter.md)\n")
+
+	result, _, err := binder.Parse(context.Background(), src, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result.Root.Children) < 1 {
+		t.Fatalf("Root.Children is empty")
+	}
+	node := result.Root.Children[0]
+	if node.Line != 2 {
+		t.Errorf("node.Line = %d, want 2", node.Line)
+	}
+	if node.ListMarker != "-" {
+		t.Errorf("node.ListMarker = %q, want %q", node.ListMarker, "-")
+	}
+	if node.Indent != 0 {
+		t.Errorf("node.Indent = %d, want 0 (top-level item)", node.Indent)
+	}
+	if node.RawLine != "- [Chapter](chapter.md)" {
+		t.Errorf("node.RawLine = %q, want %q", node.RawLine, "- [Chapter](chapter.md)")
+	}
+}
+
+// TestParse_NestedList_BuildsHierarchy tests that indented list items build a node subtree.
+func TestParse_NestedList_BuildsHierarchy(t *testing.T) {
+	src := []byte("<!-- prosemark-binder:v1 -->\n- [Part](part.md)\n  - [Chapter](chapter.md)\n")
+
+	result, _, err := binder.Parse(context.Background(), src, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result.Root.Children) != 1 {
+		t.Fatalf("Root.Children len = %d, want 1", len(result.Root.Children))
+	}
+	parent := result.Root.Children[0]
+	if parent.Target != "part.md" {
+		t.Errorf("parent.Target = %q, want %q", parent.Target, "part.md")
+	}
+	if len(parent.Children) != 1 {
+		t.Fatalf("parent.Children len = %d, want 1", len(parent.Children))
+	}
+	child := parent.Children[0]
+	if child.Target != "chapter.md" {
+		t.Errorf("child.Target = %q, want %q", child.Target, "chapter.md")
+	}
+	if child.Title != "Chapter" {
+		t.Errorf("child.Title = %q, want %q", child.Title, "Chapter")
+	}
+}
+
+// TestParse_NestedList_DeepHierarchy tests multiple levels of nesting.
+func TestParse_NestedList_DeepHierarchy(t *testing.T) {
+	src := []byte("<!-- prosemark-binder:v1 -->\n" +
+		"- [Part](part.md)\n" +
+		"  - [Chapter](chapter.md)\n" +
+		"    - [Section](section.md)\n")
+
+	result, _, err := binder.Parse(context.Background(), src, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result.Root.Children) != 1 {
+		t.Fatalf("Root.Children len = %d, want 1", len(result.Root.Children))
+	}
+	part := result.Root.Children[0]
+	if len(part.Children) != 1 {
+		t.Fatalf("part.Children len = %d, want 1", len(part.Children))
+	}
+	chapter := part.Children[0]
+	if len(chapter.Children) != 1 {
+		t.Fatalf("chapter.Children len = %d, want 1", len(chapter.Children))
+	}
+	section := chapter.Children[0]
+	if section.Target != "section.md" {
+		t.Errorf("section.Target = %q, want %q", section.Target, "section.md")
+	}
+}
+
+// TestParse_ReferenceStyleLinks tests reference-style link resolution (FR-001).
+func TestParse_ReferenceStyleLinks(t *testing.T) {
+	tests := []struct {
+		name       string
+		src        string
+		wantTarget string
+		wantTitle  string
+	}{
+		{
+			name: "full reference link [Title][label]",
+			src: "<!-- prosemark-binder:v1 -->\n" +
+				"- [My Chapter][ch]\n" +
+				"\n" +
+				"[ch]: chapter.md\n",
+			wantTarget: "chapter.md",
+			wantTitle:  "My Chapter",
+		},
+		{
+			name: "collapsed reference link [Title][]",
+			src: "<!-- prosemark-binder:v1 -->\n" +
+				"- [My Chapter][]\n" +
+				"\n" +
+				"[my chapter]: chapter.md\n",
+			wantTarget: "chapter.md",
+			wantTitle:  "My Chapter",
+		},
+		{
+			name: "shortcut reference link [Title]",
+			src: "<!-- prosemark-binder:v1 -->\n" +
+				"- [My Chapter]\n" +
+				"\n" +
+				"[my chapter]: chapter.md\n",
+			wantTarget: "chapter.md",
+			wantTitle:  "My Chapter",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, _, err := binder.Parse(context.Background(), []byte(tt.src), nil)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if len(result.Root.Children) != 1 {
+				t.Fatalf("Root.Children len = %d, want 1", len(result.Root.Children))
+			}
+			node := result.Root.Children[0]
+			if node.Target != tt.wantTarget {
+				t.Errorf("Target = %q, want %q", node.Target, tt.wantTarget)
+			}
+			if node.Title != tt.wantTitle {
+				t.Errorf("Title = %q, want %q", node.Title, tt.wantTitle)
+			}
+		})
+	}
+}
+
+// TestParse_RefDefs_PopulatedInResult tests that ParseResult.RefDefs is populated
+// with all reference link definitions, keyed by normalized (lowercase) label.
+func TestParse_RefDefs_PopulatedInResult(t *testing.T) {
+	src := []byte("<!-- prosemark-binder:v1 -->\n" +
+		"- [Ch][ref1]\n" +
+		"\n" +
+		"[ref1]: chapter.md\n" +
+		"[Ref2]: part.md \"Part Title\"\n")
+
+	result, _, err := binder.Parse(context.Background(), src, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.RefDefs == nil {
+		t.Fatal("ParseResult.RefDefs is nil")
+	}
+	ref1, ok := result.RefDefs["ref1"]
+	if !ok {
+		t.Fatal("RefDefs missing key 'ref1'")
+	}
+	if ref1.Target != "chapter.md" {
+		t.Errorf("RefDefs[\"ref1\"].Target = %q, want %q", ref1.Target, "chapter.md")
+	}
+	ref2, ok := result.RefDefs["ref2"]
+	if !ok {
+		t.Fatal("RefDefs missing key 'ref2' (label should be normalized to lowercase)")
+	}
+	if ref2.Target != "part.md" {
+		t.Errorf("RefDefs[\"ref2\"].Target = %q, want %q", ref2.Target, "part.md")
+	}
+	if ref2.Title != "Part Title" {
+		t.Errorf("RefDefs[\"ref2\"].Title = %q, want %q", ref2.Title, "Part Title")
+	}
+}
+
+// TestParse_Wikilinks tests Obsidian-style wikilink extraction and title derivation (FR-007, FR-016).
+func TestParse_Wikilinks(t *testing.T) {
+	project := &binder.Project{
+		Version: "1",
+		Files:   []string{"chapter.md", "part.md", "subfolder/deep.md"},
+	}
+	tests := []struct {
+		name       string
+		src        string
+		wantTarget string
+		wantTitle  string
+	}{
+		{
+			name:       "simple wikilink uses stem as title",
+			src:        "<!-- prosemark-binder:v1 -->\n- [[chapter]]\n",
+			wantTarget: "chapter.md",
+			wantTitle:  "chapter",
+		},
+		{
+			name:       "wikilink with alias uses alias as title",
+			src:        "<!-- prosemark-binder:v1 -->\n- [[chapter|My Chapter]]\n",
+			wantTarget: "chapter.md",
+			wantTitle:  "My Chapter",
+		},
+		{
+			name:       "wikilink with empty alias falls back to stem",
+			src:        "<!-- prosemark-binder:v1 -->\n- [[chapter|]]\n",
+			wantTarget: "chapter.md",
+			wantTitle:  "chapter",
+		},
+		{
+			name:       "wikilink with subfolder path uses leaf stem as title",
+			src:        "<!-- prosemark-binder:v1 -->\n- [[subfolder/deep]]\n",
+			wantTarget: "subfolder/deep.md",
+			wantTitle:  "deep",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, _, err := binder.Parse(context.Background(), []byte(tt.src), project)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if len(result.Root.Children) != 1 {
+				t.Fatalf("Root.Children len = %d, want 1", len(result.Root.Children))
+			}
+			node := result.Root.Children[0]
+			if node.Target != tt.wantTarget {
+				t.Errorf("Target = %q, want %q", node.Target, tt.wantTarget)
+			}
+			if node.Title != tt.wantTitle {
+				t.Errorf("Title = %q, want %q", node.Title, tt.wantTitle)
+			}
+		})
+	}
+}
+
+// TestParse_NonMarkdownTarget_EmitsBNDW007 tests that links to non-.md files
+// within list items emit BNDW007 and are not added to the tree (FR-001).
+func TestParse_NonMarkdownTarget_EmitsBNDW007(t *testing.T) {
+	src := []byte("<!-- prosemark-binder:v1 -->\n- [Image](picture.png)\n")
+
+	_, diags, err := binder.Parse(context.Background(), src, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	found := false
+	for _, d := range diags {
+		if d.Code == binder.CodeNonMarkdownTarget {
+			found = true
+			if d.Severity != "warning" {
+				t.Errorf("BNDW007 severity = %q, want %q", d.Severity, "warning")
+			}
+		}
+	}
+	if !found {
+		t.Error("expected BNDW007 for non-.md link target in list item, got none")
+	}
+}
+
+// TestParse_IllegalPathChars_EmitsBNDE001 tests that inline link targets containing
+// illegal characters emit BNDE001 (FR-002).
+func TestParse_IllegalPathChars_EmitsBNDE001(t *testing.T) {
+	tests := []struct {
+		name string
+		src  string
+	}{
+		{
+			name: "greater-than in path",
+			src:  "<!-- prosemark-binder:v1 -->\n- [Bad](chapter>.md)\n",
+		},
+		{
+			name: "null byte in path",
+			src:  "<!-- prosemark-binder:v1 -->\n- [Bad](chapter\x00.md)\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, diags, err := binder.Parse(context.Background(), []byte(tt.src), nil)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			found := false
+			for _, d := range diags {
+				if d.Code == binder.CodeIllegalPathChars {
+					found = true
+					if d.Severity != "error" {
+						t.Errorf("BNDE001 severity = %q, want %q", d.Severity, "error")
+					}
+				}
+			}
+			if !found {
+				t.Errorf("expected BNDE001 for illegal path chars, got none")
+			}
+		})
+	}
+}
+
+// TestParse_PathEscapesRoot_EmitsBNDE002 tests that link targets escaping the project
+// root via ../ emit BNDE002 (FR-002).
+func TestParse_PathEscapesRoot_EmitsBNDE002(t *testing.T) {
+	src := []byte("<!-- prosemark-binder:v1 -->\n- [Bad](../escape.md)\n")
+
+	_, diags, err := binder.Parse(context.Background(), src, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	found := false
+	for _, d := range diags {
+		if d.Code == binder.CodePathEscapesRoot {
+			found = true
+			if d.Severity != "error" {
+				t.Errorf("BNDE002 severity = %q, want %q", d.Severity, "error")
+			}
+		}
+	}
+	if !found {
+		t.Error("expected BNDE002 for path escaping project root, got none")
+	}
+}
+
+// TestParse_LinkOutsideList_EmitsBNDW006 tests that .md links appearing outside of
+// list items (e.g. in prose paragraphs) emit BNDW006 (FR-001).
+func TestParse_LinkOutsideList_EmitsBNDW006(t *testing.T) {
+	src := []byte("<!-- prosemark-binder:v1 -->\nSee also [a chapter](chapter.md) for details.\n")
+
+	_, diags, err := binder.Parse(context.Background(), src, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	found := false
+	for _, d := range diags {
+		if d.Code == binder.CodeLinkOutsideList {
+			found = true
+			if d.Severity != "warning" {
+				t.Errorf("BNDW006 severity = %q, want %q", d.Severity, "warning")
+			}
+		}
+	}
+	if !found {
+		t.Error("expected BNDW006 for .md link outside list item, got none")
+	}
+}

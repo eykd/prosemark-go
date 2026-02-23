@@ -7,15 +7,22 @@ import (
 )
 
 var (
-	pragmaRE = regexp.MustCompile(`<!--\s*prosemark-binder:v1\s*-->`)
-	linkRE   = regexp.MustCompile(`\[[^\]]*\]\([^)]*\)`)
+	pragmaRE       = regexp.MustCompile(`<!--\s*prosemark-binder:v1\s*-->`)
+	linkRE         = regexp.MustCompile(`\[[^\]]*\]\([^)]*\)`)
+	listItemRE     = regexp.MustCompile(`^(\s*)([-*+])\s+(.+)`)
+	inlineLinkRE   = regexp.MustCompile(`^\[([^\]]*)\]\(([^)\s"]+)(?:\s+"[^"]*")?\s*\)`)
+	fullRefLinkRE  = regexp.MustCompile(`^\[([^\]]*)\]\[([^\]]+)\]`)
+	collapsedRefRE = regexp.MustCompile(`^\[([^\]]*)\]\[\]`)
+	wikilinkRE     = regexp.MustCompile(`^\[\[([^\]|]+)(?:\|([^\]]*))?\]\]`)
+	shortcutRefRE  = regexp.MustCompile(`^\[([^\]]+)\]$`)
+	refDefRE       = regexp.MustCompile(`^\[([^\]]+)\]:\s+(\S+)(?:\s+"([^"]*)")?`)
+	mdInlineLinkRE = regexp.MustCompile(`\[[^\]]*\]\([^)]*\.md[^)]*\)`)
 )
 
 // Parse parses a binder file and returns a ParseResult, diagnostics, and any fatal error.
 // project may be nil.
 func Parse(ctx context.Context, src []byte, project *Project) (*ParseResult, []Diagnostic, error) {
 	_ = ctx
-	_ = project
 
 	var diags []Diagnostic
 
@@ -42,7 +49,7 @@ func Parse(ctx context.Context, src []byte, project *Project) (*ParseResult, []D
 	// Split into lines, recording endings per line.
 	result.Lines, result.LineEnds = splitLines(src)
 
-	// Scan lines: track fences, detect pragma, detect links in fences.
+	// Pass 1: track fences, detect pragma, collect ref defs, warn on links in fences.
 	inFence := false
 	fenceMarker := ""
 
@@ -61,6 +68,15 @@ func Parse(ctx context.Context, src []byte, project *Project) (*ParseResult, []D
 				if !result.HasPragma && pragmaRE.MatchString(line) {
 					result.HasPragma = true
 					result.PragmaLine = lineNum
+				}
+				if m := refDefRE.FindStringSubmatch(line); m != nil {
+					label := strings.ToLower(m[1])
+					result.RefDefs[label] = RefDef{
+						Label:  label,
+						Target: m[2],
+						Title:  m[3],
+						Line:   lineNum,
+					}
 				}
 			}
 		} else {
@@ -87,7 +103,170 @@ func Parse(ctx context.Context, src []byte, project *Project) (*ParseResult, []D
 		})
 	}
 
+	// Pass 2: scan list items, build node tree, emit structural diagnostics.
+	type stackEntry struct {
+		indent int
+		node   *Node
+	}
+	stack := []stackEntry{{indent: -1, node: result.Root}}
+
+	inFence = false
+	fenceMarker = ""
+
+	for i, line := range result.Lines {
+		lineNum := i + 1
+
+		if !inFence {
+			if strings.HasPrefix(line, "```") {
+				inFence, fenceMarker = true, "```"
+				continue
+			}
+			if strings.HasPrefix(line, "~~~") {
+				inFence, fenceMarker = true, "~~~"
+				continue
+			}
+		} else {
+			if strings.HasPrefix(line, fenceMarker) {
+				inFence, fenceMarker = false, ""
+			}
+			continue
+		}
+
+		m := listItemRE.FindStringSubmatch(line)
+		if m == nil {
+			// Not a list item: check for .md inline links outside lists (BNDW006).
+			if mdInlineLinkRE.MatchString(line) {
+				diags = append(diags, Diagnostic{
+					Severity: "warning",
+					Code:     CodeLinkOutsideList,
+					Message:  "markdown link to .md file found outside list item",
+					Location: &Location{Line: lineNum},
+				})
+			}
+			continue
+		}
+
+		indent := len(m[1])
+		marker := m[2]
+		content := strings.TrimSpace(m[3])
+
+		target, title := parseLink(content, result.RefDefs, project)
+
+		// Validate target path.
+		if hasIllegalPathChars(target) {
+			diags = append(diags, Diagnostic{
+				Severity: "error",
+				Code:     CodeIllegalPathChars,
+				Message:  "link target contains illegal path characters",
+				Location: &Location{Line: lineNum},
+			})
+			continue
+		}
+		if escapesRoot(target) {
+			diags = append(diags, Diagnostic{
+				Severity: "error",
+				Code:     CodePathEscapesRoot,
+				Message:  "link target escapes project root",
+				Location: &Location{Line: lineNum},
+			})
+			continue
+		}
+		if !isMarkdownTarget(target) {
+			diags = append(diags, Diagnostic{
+				Severity: "warning",
+				Code:     CodeNonMarkdownTarget,
+				Message:  "link target is not a .md file",
+				Location: &Location{Line: lineNum},
+			})
+			continue
+		}
+
+		node := &Node{
+			Type:       "node",
+			Children:   []*Node{},
+			Target:     target,
+			Title:      title,
+			Line:       lineNum,
+			Indent:     indent,
+			ListMarker: marker,
+			RawLine:    line,
+		}
+
+		// Find parent using indent stack.
+		for len(stack) > 1 && stack[len(stack)-1].indent >= indent {
+			stack = stack[:len(stack)-1]
+		}
+		parent := stack[len(stack)-1].node
+		parent.Children = append(parent.Children, node)
+		stack = append(stack, stackEntry{indent: indent, node: node})
+	}
+
 	return result, diags, nil
+}
+
+// parseLink parses the content portion of a list item and returns (target, title).
+// Returns ("", "") if no link can be resolved.
+func parseLink(content string, refDefs map[string]RefDef, project *Project) (target, title string) {
+	if m := inlineLinkRE.FindStringSubmatch(content); m != nil {
+		target, title = m[2], m[1]
+		if title == "" {
+			title = stemFromPath(target)
+		}
+	} else if m := wikilinkRE.FindStringSubmatch(content); m != nil {
+		if project != nil {
+			stem, alias := m[1], m[2]
+			for _, f := range project.Files {
+				if f == stem+".md" {
+					target = f
+					if alias == "" {
+						alias = stemFromPath(f)
+					}
+					title = alias
+					break
+				}
+			}
+		}
+	} else if m := fullRefLinkRE.FindStringSubmatch(content); m != nil {
+		if rd, exists := refDefs[strings.ToLower(m[2])]; exists {
+			target, title = rd.Target, m[1]
+		}
+	} else if m := collapsedRefRE.FindStringSubmatch(content); m != nil {
+		if rd, exists := refDefs[strings.ToLower(m[1])]; exists {
+			target, title = rd.Target, m[1]
+		}
+	} else if m := shortcutRefRE.FindStringSubmatch(content); m != nil {
+		if rd, exists := refDefs[strings.ToLower(m[1])]; exists {
+			target, title = rd.Target, m[1]
+		}
+	}
+	return
+}
+
+// stemFromPath returns the filename stem (basename without extension).
+func stemFromPath(p string) string {
+	p = p[strings.LastIndex(p, "/")+1:]
+	return strings.SplitN(p, ".", 2)[0]
+}
+
+// hasIllegalPathChars reports whether path contains illegal file path characters.
+func hasIllegalPathChars(path string) bool {
+	for i := 0; i < len(path); i++ {
+		c := path[i]
+		if c < 0x20 || c == '>' || c == '<' || c == '|' || c == '?' || c == '*' || c == ':' {
+			return true
+		}
+	}
+	return false
+}
+
+// escapesRoot reports whether path escapes the project root via "..".
+func escapesRoot(path string) bool {
+	return path == ".." || strings.HasPrefix(path, "../")
+}
+
+// isMarkdownTarget reports whether path has a .md extension.
+func isMarkdownTarget(path string) bool {
+	return strings.HasSuffix(strings.ToLower(path), ".md")
 }
 
 // splitLines splits src into lines and their corresponding line endings.
