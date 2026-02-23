@@ -20,7 +20,7 @@ readonly MAX_RETRIES=10
 readonly MAX_RETRY_DELAY=300  # 5 minutes cap
 
 # Claude CLI timeout
-readonly CLAUDE_TIMEOUT=1800  # 30 minutes max per invocation
+readonly CLAUDE_TIMEOUT=3600  # 60 minutes max per invocation
 
 # TDD cycle configuration
 readonly TDD_STEP_RETRIES=3        # retries per step (semantic failures)
