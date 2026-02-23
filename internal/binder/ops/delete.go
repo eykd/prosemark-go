@@ -129,14 +129,22 @@ func deleteEvalSelector(selector string, root *binder.Node) ([]*binder.Node, []b
 }
 
 // deleteSearchTree appends to matches all nodes in the subtree rooted at n
-// whose target stem matches selector.
+// whose target matches selector (by stem, direct path, or stem+".md").
 func deleteSearchTree(n *binder.Node, selector string, matches *[]*binder.Node) {
 	for _, child := range n.Children {
-		if opStemFromPath(child.Target) == selector {
+		if deleteTargetMatchesSelector(child.Target, selector) {
 			*matches = append(*matches, child)
 		}
 		deleteSearchTree(child, selector, matches)
 	}
+}
+
+// deleteTargetMatchesSelector reports whether target matches selector by stem,
+// direct path equality, or stem+".md" equivalence.
+func deleteTargetMatchesSelector(target, selector string) bool {
+	return opStemFromPath(target) == selector ||
+		target == selector ||
+		target == selector+".md"
 }
 
 // deleteComputeSubtreeEnd returns the 1-based line number of the last line in
