@@ -88,9 +88,14 @@ func Move(ctx context.Context, src []byte, project *binder.Project, params binde
 		})
 	}
 
-	// Determine the target indent string for the destination.
 	targetIndentStr, _ := inferMarkerAndIndent(destNode)
+	return moveRebuildDocument(result, sourceNodes, destNode, params.Position, targetIndentStr), allDiags, nil
+}
 
+// moveRebuildDocument removes sourceNodes from their current positions,
+// re-indents them to match targetIndentStr, and inserts them under destNode
+// at the given position ("first" or "last"). Returns the serialized result.
+func moveRebuildDocument(result *binder.ParseResult, sourceNodes []*binder.Node, destNode *binder.Node, position, targetIndentStr string) []byte {
 	// Collect re-indented lines and mark source indices for removal.
 	var movedLines []string
 	var movedLineEnds []string
@@ -110,7 +115,7 @@ func Move(ctx context.Context, src []byte, project *binder.Project, params binde
 
 	// Determine raw insertion index in the original document.
 	var insertIdx int
-	if params.Position == "first" {
+	if position == "first" {
 		insertIdx = insertionLineIdx(destNode, 0, result)
 	} else {
 		insertIdx = insertionLineIdx(destNode, len(destNode.Children), result)
@@ -156,7 +161,7 @@ func Move(ctx context.Context, src []byte, project *binder.Project, params binde
 	result.Lines, result.LineEnds = deleteCollapseBlankLines(result.Lines, result.LineEnds)
 	result.Lines, result.LineEnds = deleteStripTrailingBlanks(result.Lines, result.LineEnds)
 
-	return binder.Serialize(result), allDiags, nil
+	return binder.Serialize(result)
 }
 
 // moveEvalSourceSelector finds source nodes matching selector.
