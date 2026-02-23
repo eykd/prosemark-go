@@ -108,6 +108,13 @@ The `changed` field indicates whether the binder bytes were modified.
 The `diagnostics` array contains all parse and operation diagnostics merged.
 The implementation writes the (possibly mutated) binder in-place at `<binder-path>`.
 
+### Exit codes
+
+| Exit code | Meaning |
+|-----------|---------|
+| `0` | Completed without error; file may or may not have changed; diagnostics may include warnings |
+| non-zero | Aborted with error: at least one OPExx diagnostic or an I/O failure; binder file is unchanged |
+
 ### Human-readable mode
 
 When `--json` is absent, the implementation SHOULD produce concise human-readable

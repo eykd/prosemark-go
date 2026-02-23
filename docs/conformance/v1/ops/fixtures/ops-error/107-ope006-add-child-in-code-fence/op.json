@@ -1,0 +1,9 @@
+{
+  "version": "1",
+  "operation": "add-child",
+  "params": {
+    "parent-selector": "ch1.md",
+    "target": "new.md",
+    "title": "New"
+  }
+}

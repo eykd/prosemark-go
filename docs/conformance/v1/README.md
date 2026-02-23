@@ -69,7 +69,7 @@ The `NNN` prefix in fixture directory names is a stable, three-digit, zero-padde
 | `schema/op-spec.schema.json` | `op.json` |
 | `schema/project.schema.json` | `project.json` |
 
-**Total fixtures**: 105. All fixtures are implemented.
+**Total fixtures**: 108. All fixtures are implemented.
 
 ## Test Catalog Summary
 
@@ -93,6 +93,7 @@ The `NNN` prefix in fixture directory names is a stable, three-digit, zero-padde
 | 081–082 | Pragma position variants |
 | 083–084 | GFM extension interactions |
 | 085–086 | Wikilink heading and fragment forms |
+| 106 | Wikilink fragment zero-match: synthesized target strips fragment (`[[nonexistent#section]]` → `nonexistent.md`) |
 
 ### Ops Domain (041–069, 070, 072–075, 087–105)
 
@@ -124,3 +125,5 @@ The `NNN` prefix in fixture directory names is a stable, three-digit, zero-padde
 | 103 | move / deep cycle detection |
 | 104 | delete / GFM checkbox content destruction |
 | 105 | add-child / title bracket escaping |
+| 107 | ops-error / OPE006 for add-child (parent selector targets node in code fence) |
+| 108 | delete / delete last top-level node (empty structural tree) |

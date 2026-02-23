@@ -36,7 +36,7 @@ These are emitted during parsing. Processing continues and a parse result is pro
 | `BNDW006` | LinkOutsideListItem | A structural link appears in a paragraph, blockquote, heading, or other non-list context. The link is not treated as structural. |
 | `BNDW007` | NonMarkdownTarget | A link in a list item points to a non-`.md` file. The item is not treated as structural. |
 | `BNDW008` | SelfReferentialLink | A link in a list item targets `_binder.md` itself. The item is not treated as structural. |
-| `BNDW009` | CaseInsensitiveMismatch | A link target matches a project file only under case-insensitive comparison (the exact case in the link does not match the file path). The node is included but flagged. |
+| `BNDW009` | CaseInsensitiveMismatch | A link target matches a project file only under case-insensitive comparison (the exact case in the link does not match the file path). The structural node is created with the target path **exactly as written** in the binder (not corrected to the on-disk casing). BNDW004 is NOT emitted — the file is considered present. |
 | `BNDW010` | BOMPresence | A UTF-8 byte order mark (BOM, U+FEFF) was detected at the start of the file. The BOM is stripped before parsing; the rest of the file is parsed normally. |
 
 ---

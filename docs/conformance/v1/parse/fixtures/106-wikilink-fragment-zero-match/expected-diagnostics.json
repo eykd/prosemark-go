@@ -1,0 +1,10 @@
+{
+  "version": "1",
+  "diagnostics": [
+    {
+      "severity": "warning",
+      "code": "BNDW004",
+      "message": "Target file nonexistent.md is not present in the project"
+    }
+  ]
+}

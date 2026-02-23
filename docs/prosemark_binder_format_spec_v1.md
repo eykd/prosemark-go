@@ -51,7 +51,7 @@ A binder file SHOULD contain the pragma:
 <!-- prosemark-binder:v1 -->
 ```
 
-The pragma MUST be the exact string `<!-- prosemark-binder:v1 -->` with no variation in whitespace, casing, or additional content. It MUST appear on its own line.
+The pragma MUST be the exact string `<!-- prosemark-binder:v1 -->` with no variation in whitespace, casing, or additional content. It MUST appear on its own line — leading and trailing whitespace are allowed on that line, but the pragma MUST be the only non-whitespace content on that line. If the pragma string appears inside a fenced code block or block quote, it does not count as the binder pragma.
 
 The pragma MAY appear anywhere in the file.
 
@@ -83,6 +83,8 @@ Each structural node carries two named properties:
 
 - **`target`**: the resolved file path.
 - **`title`**: the display text from the link.
+
+The **filename stem** is the basename of the file with the final `.md` extension stripped. Intermediate dots are preserved: `foo.bar.md` → stem is `foo.bar`.
 
 Title is an attribute of the node, not the referenced file. Two nodes referencing the same file may have different titles.
 
@@ -180,10 +182,10 @@ The wikilink resolution algorithm matches Obsidian's behavior:
 
 1. The search scope is the project root.
 2. Match by basename across the project.
-3. When multiple files share a basename, prefer the one with the fewest path components from the project root (same directory as `_binder.md` first; then shallowest subdirectory path; ties resolved lexicographically by path). Because `_binder.md` is always at project root, this is equivalent to shortest absolute path within the project.
+3. When multiple files share a basename, prefer the one with the fewest path components from the project root (same directory as `_binder.md` first; then shallowest subdirectory path; ties resolved by byte-order case-sensitive comparison of the full relative path from the project root (forward slashes as separators)). Because `_binder.md` is always at project root, this is equivalent to shortest absolute path within the project.
 4. If still ambiguous after proximity tiebreak, emit a lint error.
 
-If no file in the project matches the bare stem (zero matches), the implementation MUST synthesize the target as `<stem>.md`, include the structural node in the parse result with that synthesized path, and emit BNDW004 (MissingTargetFile).
+If no file in the project matches the bare stem (zero matches), the implementation MUST synthesize the target as `<stem>.md`, include the structural node in the parse result with that synthesized path, and emit BNDW004 (MissingTargetFile). Before synthesizing the target, the fragment component is stripped: `[[nonexist#section]]` synthesizes target `nonexist.md`, not `nonexist#section.md`.
 
 ---
 
@@ -253,7 +255,7 @@ CommonMark-valid but visually surprising nesting MUST NOT be treated as error.
 
 Link target resolution is case-sensitive (normative).
 
-Lint MUST warn when a target does not match any file by exact case but does match by case-insensitive comparison.
+Lint MUST warn when a target does not match any file by exact case but does match by case-insensitive comparison. When a link target has no exact-case match but does match case-insensitively, the structural node is created with the target path **exactly as written** in the binder (not corrected to the on-disk casing). BNDW004 is NOT emitted for such links — the file is considered present (only BNDW009 is emitted).
 
 ---
 
@@ -375,7 +377,9 @@ foo bar.md
 
 If `Path` already ends with `.md`, it MUST NOT be modified.
 
-Fragment and alias components do NOT affect the node's identity target.
+The **filename stem** used for title derivation is defined in §4.2: the basename with the final `.md` extension stripped (intermediate dots preserved).
+
+Fragment and alias components do NOT affect the node's identity target. When the wikilink target has zero matches and the target string contains a fragment (e.g., `[[nonexist#section]]`), the fragment is stripped before synthesizing the `.md` path: the synthesized target is `nonexist.md`, not `nonexist#section.md`.
 
 ### Wikilink Resolution
 

@@ -67,7 +67,7 @@ When an index is omitted, the segment matches **all** occurrences at that level.
 All operations accept multi-match selectors. When a selector matches multiple nodes, the operation is applied to each match in preorder depth-first traversal order.
 
 - The operation applies to all matched nodes.
-- OPW001 is always emitted. For CLI implementations, destructive operations (delete, move) MUST prompt for interactive confirmation when multi-match occurs; `--yes` suppresses the prompt. Library implementations proceed without prompting but MUST still emit OPW001.
+- OPW001 is always emitted. For CLI implementations, destructive operations (delete, move) MUST prompt for interactive confirmation when multi-match occurs; `--yes` suppresses the prompt. Add-child is not a destructive operation: CLI implementations MUST NOT prompt for confirmation on add-child multi-match; the operation proceeds silently while still emitting OPW001. Library implementations proceed without prompting but MUST still emit OPW001.
 
 **Index scope in multi-segment selectors**: Indices in a selector apply independently at each segment level during tree traversal. `foo[1]:bar` means "among all nodes at the current level matching `foo`, take the second one (zero-based index 1), then within that node's children, match all nodes whose target file stem is `bar`." Only the segment that bears an `[N]` qualifier is narrowed; other segments continue to match all nodes at their respective levels.
 
@@ -141,7 +141,7 @@ Position is controlled by the following flags, which are mutually exclusive:
 |---|---|
 | `--last` | Append after the last structural child. **(default)** |
 | `--first` | Insert before the first structural child. |
-| `--at <index>` | Insert at the given zero-based index among structural children. |
+| `--at <index>` | Insert at the given zero-based index among structural children. `--at N` where N equals the current count of structural children is valid and equivalent to `--last` (appends after the last child). OPE008 is raised only when N is strictly greater than the count. |
 | `--before <selector>` | Insert immediately before the matched sibling. |
 | `--after <selector>` | Insert immediately after the matched sibling. |
 
@@ -188,7 +188,7 @@ For each node matching `selector`:
    - **Definition**: A *run* is a maximal sequence of consecutive lines that are empty or contain only whitespace characters.
    - **Rule 1**: A run of two or more blank lines anywhere in the file MUST be collapsed to exactly one blank line.
    - **Rule 2 (EOF exception)**: If the run occurs at the very end of the file (nothing but optional whitespace follows), it MUST be collapsed to zero blank lines (the file MUST NOT end with trailing blank lines).
-   - **Rule 3**: Blank lines that existed *before* the deleted node (its preceding sibling's trailing whitespace) are retained unless Rule 1 or Rule 2 applies to them after the deletion.
+   - **Rule 3**: Blank lines that existed *before* the deleted node (blank lines appearing immediately before the deleted node's list item in document order) are retained unless Rule 1 or Rule 2 applies to them after the deletion.
 
 Other occurrences referencing the same file remain untouched.
 
@@ -231,7 +231,7 @@ Reference link definitions (`[label]: url`) are document-global and are NOT move
 
 ### 6.5 Validation
 
-A move MUST fail if it would make a node a descendant of itself (cycle detection).
+A move MUST fail if it would make a node a descendant of itself (cycle detection). A move where the source node and the destination parent resolve to the same tree occurrence (a node moved to become its own child) is also rejected as OPE003.
 
 ### 6.6 Confirmation
 
