@@ -9,7 +9,8 @@ bd ready              # Find available work
 bd show <id>          # View issue details
 bd update <id> --status in_progress  # Claim work
 bd close <id>         # Complete work
-bd sync               # Sync with git
+bd dolt push          # Push beads changes to remote
+bd dolt pull          # Pull beads changes from remote
 ```
 
 ## Landing the Plane (Session Completion)
@@ -24,8 +25,9 @@ bd sync               # Sync with git
 4. **PUSH TO REMOTE** - This is MANDATORY:
    ```bash
    git pull --rebase
-   bd sync
+   bd dolt pull          # Pull beads updates
    git push
+   bd dolt push          # Push beads changes
    git status  # MUST show "up to date with origin"
    ```
 5. **Clean up** - Clear stashes, prune remote branches
