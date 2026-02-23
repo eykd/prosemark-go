@@ -525,7 +525,7 @@ find_epic_id() {
     local feature_name="$1"
     local epics_json
 
-    epics_json=$(npx bd list --type feature --status open --json 2>/dev/null) || {
+    epics_json=$(npx bd list --type epic --status open --json 2>/dev/null) || {
         echo "Error: Failed to query beads for epics" >&2
         return 1
     }
@@ -554,7 +554,7 @@ validate_epic_exists() {
     log DEBUG "Validating epic: $epic_id"
 
     # Query beads for this epic ID
-    epic_data=$(npx bd list --type feature --json 2>/dev/null | \
+    epic_data=$(npx bd list --type epic --json 2>/dev/null | \
         jq -r --arg id "$epic_id" '.[] | select(.id == $id)') || {
         log ERROR "Failed to query beads for epics"
         return 1
