@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"unicode/utf8"
 )
 
 var (
@@ -45,6 +46,11 @@ func Parse(ctx context.Context, src []byte, project *Project) (*ParseResult, []D
 			Type:     "root",
 			Children: []*Node{},
 		},
+	}
+
+	// Reject non-UTF-8 content before any processing.
+	if !utf8.Valid(src) {
+		return result, nil, fmt.Errorf("binder file contains invalid UTF-8 content")
 	}
 
 	// Strip UTF-8 BOM if present.

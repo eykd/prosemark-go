@@ -343,10 +343,10 @@ func TestDelete_ErrorCodesAbortMutation(t *testing.T) {
 // Multi-match selector (OPW001): targets first match only
 // ──────────────────────────────────────────────────────────────────────────────
 
-// TestDelete_MultiMatch_OPW001_TargetsFirst verifies that when a bare-stem
-// selector matches multiple nodes at the same level, OPW001 is emitted and
-// only the first matched node is deleted, leaving all others intact.
-func TestDelete_MultiMatch_OPW001_TargetsFirst(t *testing.T) {
+// TestDelete_MultiMatch_OPW001_DeletesAll verifies that when a bare-stem
+// selector matches multiple nodes, OPW001 is emitted and ALL matched nodes
+// are deleted (all-match semantics).
+func TestDelete_MultiMatch_OPW001_DeletesAll(t *testing.T) {
 	// Two nodes share the bare stem "one" via different directory paths.
 	src := []byte("<!-- prosemark-binder:v1 -->\n\n" +
 		"- [First One](first/one.md)\n" +
@@ -365,14 +365,14 @@ func TestDelete_MultiMatch_OPW001_TargetsFirst(t *testing.T) {
 	if !hasDiagCode(diags, binder.CodeMultiMatch) {
 		t.Errorf("expected OPW001 (multi-match), got: %v", diags)
 	}
-	// First match (first/one.md) should be deleted.
+	// Both matches should be deleted (all-match semantics).
 	if bytes.Contains(out, []byte("first/one.md")) {
 		t.Errorf("first match should be deleted:\n%s", out)
 	}
-	// Second match and other should remain.
-	if !bytes.Contains(out, []byte("second/one.md")) {
-		t.Errorf("second/one.md should remain (only first match deleted):\n%s", out)
+	if bytes.Contains(out, []byte("second/one.md")) {
+		t.Errorf("second match should be deleted (all-match semantics):\n%s", out)
 	}
+	// Unrelated node should remain.
 	if !bytes.Contains(out, []byte("other.md")) {
 		t.Errorf("other.md should remain:\n%s", out)
 	}
@@ -381,6 +381,79 @@ func TestDelete_MultiMatch_OPW001_TargetsFirst(t *testing.T) {
 // ──────────────────────────────────────────────────────────────────────────────
 // Parse error path (OPE009) via deleteParseBinderFn mock
 // ──────────────────────────────────────────────────────────────────────────────
+
+// TestDelete_ColonSelector_DelegatesToEvalSelector verifies that a colon-containing
+// selector delegates to binder.EvalSelector rather than the flat deep search.
+func TestDelete_ColonSelector_DelegatesToEvalSelector(t *testing.T) {
+	src := binderSrc("- [Alpha](alpha.md)", "- [Beta](beta.md)")
+	params := binder.DeleteParams{
+		Selector: ".:alpha", // colon → delegates to EvalSelector
+		Yes:      true,
+	}
+
+	out, _, err := Delete(context.Background(), src, nil, params)
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if bytes.Contains(out, []byte("alpha.md")) {
+		t.Errorf("alpha.md should be deleted:\n%s", out)
+	}
+}
+
+// TestDelete_OPE002_ProjectAmbiguousBareStem verifies that when a bare-stem
+// selector matches multiple files in the project, OPE002 is emitted.
+func TestDelete_OPE002_ProjectAmbiguousBareStem(t *testing.T) {
+	src := binderSrc("- [Alpha](alpha.md)")
+	proj := &binder.Project{
+		Files: []string{"dir1/one.md", "dir2/one.md"},
+	}
+	params := binder.DeleteParams{
+		Selector: "one",
+		Yes:      true,
+	}
+
+	_, diags, _ := Delete(context.Background(), src, proj, params)
+
+	if !hasDiagCode(diags, binder.CodeAmbiguousBareStem) {
+		t.Errorf("expected OPE002 (ambiguous bare stem), got: %v", diags)
+	}
+}
+
+// TestDelete_OPE006_NodeInCodeFence verifies that when the selector matches a
+// node inside a fenced code block, OPE006 is emitted.
+func TestDelete_OPE006_NodeInCodeFence(t *testing.T) {
+	src := []byte("<!-- prosemark-binder:v1 -->\n\n```\n- [Fenced](fenced.md)\n```\n")
+	params := binder.DeleteParams{
+		Selector: "fenced",
+		Yes:      true,
+	}
+
+	_, diags, _ := Delete(context.Background(), src, nil, params)
+
+	if !hasDiagCode(diags, binder.CodeNodeInCodeFence) {
+		t.Errorf("expected OPE006 (node in code fence), got: %v", diags)
+	}
+}
+
+// TestDelete_PathSelector_WithSlash verifies that a selector containing "/"
+// matches a node by its full relative path (deleteNodeMatchesSelector path branch).
+func TestDelete_PathSelector_WithSlash(t *testing.T) {
+	src := []byte("<!-- prosemark-binder:v1 -->\n\n- [Part](part.md)\n  - [Chapter](subfolder/ch.md)\n")
+	params := binder.DeleteParams{
+		Selector: "subfolder/ch", // path selector with "/" → exact target match
+		Yes:      true,
+	}
+
+	out, _, err := Delete(context.Background(), src, nil, params)
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if bytes.Contains(out, []byte("subfolder/ch.md")) {
+		t.Errorf("subfolder/ch.md should be deleted:\n%s", out)
+	}
+}
 
 // TestDelete_ParseError_OPE009 verifies that when the underlying parser
 // returns an error, Delete propagates it and emits an OPE009 diagnostic

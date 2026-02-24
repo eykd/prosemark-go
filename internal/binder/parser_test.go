@@ -1110,6 +1110,17 @@ func TestParse_MissingTargetFile_NoProjectContext_NoDiagnostic(t *testing.T) {
 	}
 }
 
+// TestParse_InvalidUTF8_ReturnsError verifies that Parse returns a fatal error
+// when the source bytes contain invalid UTF-8 content.
+func TestParse_InvalidUTF8_ReturnsError(t *testing.T) {
+	src := []byte("<!-- prosemark-binder:v1 -->\n\xff\xfe invalid\n")
+
+	_, _, err := binder.Parse(context.Background(), src, nil)
+	if err == nil {
+		t.Fatal("expected error for invalid UTF-8, got nil")
+	}
+}
+
 // TestParse_SelfReferentialLink_EmitsBNDW008 tests that a link targeting the binder
 // file itself (_binder.md) emits BNDW008 (FR-002).
 func TestParse_SelfReferentialLink_EmitsBNDW008(t *testing.T) {

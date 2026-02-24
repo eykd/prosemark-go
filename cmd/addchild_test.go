@@ -330,6 +330,22 @@ func TestNewAddChildCmd_FirstFlag(t *testing.T) {
 	}
 }
 
+func TestNewAddChildCmd_AtFlag(t *testing.T) {
+	// --at 0 inserts the new child at index 0 (before all existing children).
+	mock := &mockAddChildIO{
+		binderBytes:  acBinder(),
+		projectBytes: []byte(`{"version":"1","files":["chapter-two.md"]}`),
+	}
+	c := NewAddChildCmd(mock)
+	out := new(bytes.Buffer)
+	c.SetOut(out)
+	c.SetArgs([]string{"--project", "p.json", "--parent", ".", "--target", "chapter-two.md", "--at", "0", "_binder.md"})
+
+	if err := c.Execute(); err != nil {
+		t.Fatalf("unexpected error with --at flag: %v", err)
+	}
+}
+
 func TestNewRootCmd_RegistersAddChildSubcommand(t *testing.T) {
 	root := NewRootCmd()
 	var found bool

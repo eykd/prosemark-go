@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/eykd/prosemark-go/internal/binder"
@@ -39,49 +40,55 @@ func Delete(ctx context.Context, src []byte, project *binder.Project, params bin
 		}), err
 	}
 
-	// Evaluate selector with deep-tree search.
-	nodes, selDiags := deleteEvalSelector(params.Selector, result.Root)
+	// Evaluate selector: supports path navigation (colon), index qualifiers ([N]),
+	// flat deep search (bare stem), and code-fence detection.
+	nodes, selDiags := deleteEvalSelector(params.Selector, result.Root, result.Lines, project)
 	if len(nodes) == 0 {
-		// Fatal selector error (OPE001): return src unchanged.
+		// Fatal selector error (OPE001/OPE002/OPE006): return src unchanged.
 		return src, append(parseDiags, selDiags...), nil
 	}
-
-	node := nodes[0]
 
 	// Collect diagnostics: parse warnings + selector warnings (OPW001).
 	var allDiags []binder.Diagnostic
 	allDiags = append(allDiags, parseDiags...)
 	allDiags = append(allDiags, selDiags...)
 
-	// Emit OPW003 if the node's list-item line has non-structural content.
-	if deleteNodeHasNonStructuralContent(node.RawLine) {
-		allDiags = append(allDiags, binder.Diagnostic{
-			Severity: "warning",
-			Code:     binder.CodeNonStructuralDestroyed,
-			Message:  "non-structural content in the deleted list item was destroyed",
-		})
+	// Emit OPW003 if any node's list-item line has non-structural content.
+	for _, node := range nodes {
+		if deleteNodeHasNonStructuralContent(node.RawLine) {
+			allDiags = append(allDiags, binder.Diagnostic{
+				Severity: "warning",
+				Code:     binder.CodeNonStructuralDestroyed,
+				Message:  "non-structural content in the deleted list item was destroyed",
+			})
+			break
+		}
 	}
 
-	// Find parent to determine whether its sublist will become empty.
-	parent := deleteFindParentNode(result.Root, node)
-	isSoleChildOfListItem := parent != nil && parent.Type != "root" && len(parent.Children) == 1
+	// Emit OPW004 if any node is the sole child of a non-root list item.
+	for _, node := range nodes {
+		parent := deleteFindParentNode(result.Root, node)
+		if parent != nil && parent.Type != "root" && len(parent.Children) == 1 {
+			allDiags = append(allDiags, binder.Diagnostic{
+				Severity: "warning",
+				Code:     binder.CodeEmptySublistPruned,
+				Message:  "empty sublist was pruned after deleting sole child",
+			})
+			break
+		}
+	}
 
-	// Compute the subtree end line (parser does not populate SubtreeEnd).
-	subtreeEndLine := deleteComputeSubtreeEnd(node)
+	// Sort nodes by Line descending so deletions are applied bottom-to-top,
+	// keeping earlier line numbers valid across iterations.
+	sort.Slice(nodes, func(i, j int) bool {
+		return nodes[i].Line > nodes[j].Line
+	})
 
-	// Delete lines node.Line..subtreeEndLine (1-based, inclusive).
-	startIdx := node.Line - 1
-	endIdx := subtreeEndLine - 1
-	result.Lines = deleteRemoveRange(result.Lines, startIdx, endIdx)
-	result.LineEnds = deleteRemoveRange(result.LineEnds, startIdx, endIdx)
-
-	// Emit OPW004 if the parent's sublist is now empty.
-	if isSoleChildOfListItem {
-		allDiags = append(allDiags, binder.Diagnostic{
-			Severity: "warning",
-			Code:     binder.CodeEmptySublistPruned,
-			Message:  "empty sublist was pruned after deleting sole child",
-		})
+	for _, node := range nodes {
+		startIdx := node.Line - 1
+		endIdx := deleteComputeSubtreeEnd(node) - 1
+		result.Lines = deleteRemoveRange(result.Lines, startIdx, endIdx)
+		result.LineEnds = deleteRemoveRange(result.LineEnds, startIdx, endIdx)
 	}
 
 	// Collapse consecutive blank lines (no \n\n\n or more in output).
@@ -93,10 +100,14 @@ func Delete(ctx context.Context, src []byte, project *binder.Project, params bin
 	return binder.Serialize(result), allDiags, nil
 }
 
-// deleteEvalSelector performs a deep tree search for nodes matching the bare-stem
-// selector. Returns OPE001 if no match. Returns OPW001 warning and first match if
-// multiple nodes match (regardless of whether their targets differ).
-func deleteEvalSelector(selector string, root *binder.Node) ([]*binder.Node, []binder.Diagnostic) {
+// deleteEvalSelector evaluates a selector for the delete operation.
+//
+// For selectors containing ":" or "[", path navigation via binder.EvalSelector
+// is used. Otherwise a deep-tree flat search is performed.
+//
+// When no match is found, the function checks for project-level ambiguity
+// (OPE002) and code-fence presence (OPE006) before returning OPE001.
+func deleteEvalSelector(selector string, root *binder.Node, lines []string, project *binder.Project) ([]*binder.Node, []binder.Diagnostic) {
 	// "." refers to the root node, which cannot be deleted.
 	if selector == "." {
 		return nil, []binder.Diagnostic{{
@@ -106,10 +117,42 @@ func deleteEvalSelector(selector string, root *binder.Node) ([]*binder.Node, []b
 		}}
 	}
 
+	// Delegate to EvalSelector for path (colon) or index ([N]) selectors.
+	if strings.Contains(selector, ":") || strings.Contains(selector, "[") {
+		selResult, errDiags := binder.EvalSelector(selector, root)
+		allDiags := append(selResult.Warnings, errDiags...)
+		return selResult.Nodes, allDiags
+	}
+
+	// Flat deep-tree search for bare-stem selectors.
 	var matches []*binder.Node
 	deleteSearchTree(root, selector, &matches)
 
 	if len(matches) == 0 {
+		// Check for project-level stem ambiguity (OPE002).
+		if project != nil {
+			var stemMatches []string
+			for _, f := range project.Files {
+				if opStemFromPath(f) == selector {
+					stemMatches = append(stemMatches, f)
+				}
+			}
+			if len(stemMatches) > 1 {
+				return nil, []binder.Diagnostic{{
+					Severity: "error",
+					Code:     binder.CodeAmbiguousBareStem,
+					Message:  fmt.Sprintf("selector %q is ambiguous: matches multiple project files", selector),
+				}}
+			}
+		}
+		// Check for code-fence presence (OPE006).
+		if isSelectorInCodeFence(lines, selector) {
+			return nil, []binder.Diagnostic{{
+				Severity: "error",
+				Code:     binder.CodeNodeInCodeFence,
+				Message:  fmt.Sprintf("selector %q matches a node inside a code fence", selector),
+			}}
+		}
 		return nil, []binder.Diagnostic{{
 			Severity: "error",
 			Code:     binder.CodeSelectorNoMatch,
@@ -118,10 +161,10 @@ func deleteEvalSelector(selector string, root *binder.Node) ([]*binder.Node, []b
 	}
 
 	if len(matches) > 1 {
-		return []*binder.Node{matches[0]}, []binder.Diagnostic{{
+		return matches, []binder.Diagnostic{{
 			Severity: "warning",
 			Code:     binder.CodeMultiMatch,
-			Message:  fmt.Sprintf("selector %q matched %d nodes; targeting first match", selector, len(matches)),
+			Message:  fmt.Sprintf("selector %q matched %d nodes; operation applied to all matches", selector, len(matches)),
 		}}
 	}
 
@@ -129,22 +172,25 @@ func deleteEvalSelector(selector string, root *binder.Node) ([]*binder.Node, []b
 }
 
 // deleteSearchTree appends to matches all nodes in the subtree rooted at n
-// whose target matches selector (by stem, direct path, or stem+".md").
+// whose target or title matches selector.
 func deleteSearchTree(n *binder.Node, selector string, matches *[]*binder.Node) {
 	for _, child := range n.Children {
-		if deleteTargetMatchesSelector(child.Target, selector) {
+		if deleteNodeMatchesSelector(child, selector) {
 			*matches = append(*matches, child)
 		}
 		deleteSearchTree(child, selector, matches)
 	}
 }
 
-// deleteTargetMatchesSelector reports whether target matches selector by stem,
-// direct path equality, or stem+".md" equivalence.
-func deleteTargetMatchesSelector(target, selector string) bool {
-	return opStemFromPath(target) == selector ||
-		target == selector ||
-		target == selector+".md"
+// deleteNodeMatchesSelector reports whether child matches selector by stem,
+// direct path, stem+".md", or case-insensitive title.
+func deleteNodeMatchesSelector(child *binder.Node, selector string) bool {
+	if strings.Contains(selector, "/") {
+		return child.Target == selector || child.Target == selector+".md"
+	}
+	return opStemFromPath(child.Target) == selector ||
+		child.Target == selector ||
+		strings.EqualFold(child.Title, selector)
 }
 
 // deleteComputeSubtreeEnd returns the 1-based line number of the last line in
@@ -171,14 +217,20 @@ func deleteFindParentNode(root *binder.Node, target *binder.Node) *binder.Node {
 }
 
 // deleteNodeHasNonStructuralContent reports whether rawLine contains content
-// beyond the structural inline link (OPW003 trigger).
+// beyond the structural inline link (OPW003 trigger). Checks both prefix
+// (e.g. GFM checkbox) and suffix.
 func deleteNodeHasNonStructuralContent(rawLine string) bool {
 	loc := deleteInlineLinkRE.FindStringIndex(rawLine)
 	if loc == nil {
 		return false
 	}
-	rest := strings.TrimSpace(rawLine[loc[1]:])
-	return rest != ""
+	// Check suffix (content after the link).
+	if strings.TrimSpace(rawLine[loc[1]:]) != "" {
+		return true
+	}
+	// Check prefix (between list marker and link) — catches GFM checkboxes.
+	prefix := moveListMarkerRE.ReplaceAllString(rawLine[:loc[0]], "")
+	return strings.TrimSpace(prefix) != ""
 }
 
 // deleteRemoveRange returns a copy of s with elements [startIdx, endIdx] removed

@@ -279,6 +279,21 @@ func TestNewMoveCmd_EncodeError(t *testing.T) {
 	}
 }
 
+func TestNewMoveCmd_AtFlag(t *testing.T) {
+	// --at 0 moves the source as the first child of dest.
+	mock := &mockMoveIO{
+		binderBytes:  moveBinder(),
+		projectBytes: []byte(`{"version":"1","files":["chapter-one.md","chapter-two.md"]}`),
+	}
+	c := NewMoveCmd(mock)
+	c.SetOut(new(bytes.Buffer))
+	c.SetArgs([]string{"--project", "p.json", "--source", "chapter-two.md", "--dest", ".", "--at", "0", "--yes", "_binder.md"})
+
+	if err := c.Execute(); err != nil {
+		t.Fatalf("unexpected error with --at flag: %v", err)
+	}
+}
+
 func TestNewRootCmd_RegistersMoveSubcommand(t *testing.T) {
 	root := NewRootCmd()
 	var found bool

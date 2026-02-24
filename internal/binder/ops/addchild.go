@@ -3,7 +3,9 @@ package ops
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/eykd/prosemark-go/internal/binder"
@@ -35,79 +37,105 @@ func AddChild(ctx context.Context, src []byte, project *binder.Project, params b
 		return src, append(parseDiags, *diag), nil
 	}
 
-	// Evaluate the parent selector.
-	selResult, errDiags := binder.EvalSelector(params.ParentSelector, result.Root)
-	if errDiags != nil {
-		// OPE001 may be upgraded to OPE006 when the node exists inside a code fence.
-		for _, d := range errDiags {
-			if d.Code == binder.CodeSelectorNoMatch {
-				if isSelectorInCodeFence(result.Lines, params.ParentSelector) {
-					return src, append(parseDiags, binder.Diagnostic{
-						Severity: "error",
-						Code:     binder.CodeNodeInCodeFence,
-						Message:  fmt.Sprintf("selector %q matches a node inside a code fence", params.ParentSelector),
-					}), nil
-				}
-			}
-		}
-		return src, append(parseDiags, errDiags...), nil
+	// Evaluate the parent selector (supports deep tree search for non-colon selectors).
+	parents, selDiags := addChildEvalParentSelector(params.ParentSelector, result.Root, result.Lines)
+	if len(parents) == 0 {
+		return src, append(parseDiags, selDiags...), nil
 	}
 
-	parent := selResult.Nodes[0]
 	var allDiags []binder.Diagnostic
 	allDiags = append(allDiags, parseDiags...)
-	allDiags = append(allDiags, selResult.Warnings...)
+	allDiags = append(allDiags, selDiags...)
 
-	// Idempotency check (OPW002): skip if target already exists as a direct child.
-	if !params.Force {
-		for _, child := range parent.Children {
-			if child.Target == params.Target {
-				return src, append(allDiags, binder.Diagnostic{
-					Severity: "warning",
-					Code:     binder.CodeDuplicateSkipped,
-					Message:  fmt.Sprintf("target %q already exists as a child; skipping (use --force to override)", params.Target),
-				}), nil
-			}
-		}
-	}
-
-	// Resolve insertion index among parent's children.
-	insertIdx, diagErr := resolveInsertionIndex(parent, params)
-	if diagErr != nil {
-		return src, append(allDiags, *diagErr), nil
-	}
+	// Percent-decode target for storage in the binder.
+	decodedTarget := percentDecodeOpTarget(params.Target)
 
 	// Derive title from stem when empty.
 	title := params.Title
 	if title == "" {
-		title = opStemFromPath(params.Target)
+		title = opStemFromPath(decodedTarget)
 	}
 	title = escapeTitle(title)
-
-	// Build the new list-item line.
-	indentStr, marker := inferMarkerAndIndent(parent)
-	newLine := indentStr + marker + " [" + title + "](" + params.Target + ")"
 
 	// Determine line ending from the file's majority style.
 	lineEnd := majorityLineEnding(result.LineEnds)
 
-	// Find the 0-based position in result.Lines at which to insert.
-	lineIdx := insertionLineIdx(parent, insertIdx, result)
+	// Sort matched parents by line descending so we insert bottom-to-top,
+	// keeping original line numbers valid for each subsequent insertion.
+	sort.Slice(parents, func(i, j int) bool {
+		return parents[i].Line > parents[j].Line
+	})
 
-	// Splice the new line into the ParseResult.
-	result.Lines = sliceInsert(result.Lines, lineIdx, newLine)
-	result.LineEnds = sliceInsert(result.LineEnds, lineIdx, lineEnd)
+	for _, parent := range parents {
+		// Idempotency check (OPW002): skip if target already exists as a direct child.
+		if !params.Force {
+			duplicate := false
+			for _, child := range parent.Children {
+				if child.Target == decodedTarget || child.Target == params.Target {
+					allDiags = append(allDiags, binder.Diagnostic{
+						Severity: "warning",
+						Code:     binder.CodeDuplicateSkipped,
+						Message:  fmt.Sprintf("target %q already exists as a child; skipping (use --force to override)", params.Target),
+					})
+					duplicate = true
+					break
+				}
+			}
+			if duplicate {
+				continue
+			}
+		}
+
+		// Resolve insertion index among parent's children.
+		insertIdx, diagErr := resolveInsertionIndex(parent, params)
+		if diagErr != nil {
+			return src, append(allDiags, *diagErr), nil
+		}
+
+		// Build the new list-item line.
+		indentStr, marker := inferMarkerAndIndent(parent, insertIdx)
+		newLine := indentStr + marker + " [" + title + "](" + decodedTarget + ")"
+
+		// Find the 0-based position in result.Lines at which to insert.
+		lineIdx := insertionLineIdx(parent, insertIdx, result)
+
+		// For the first child of an empty root, prepend a blank separator line.
+		if parent.Type == "root" && len(parent.Children) == 0 {
+			result.Lines = sliceInsert(result.Lines, lineIdx, "")
+			result.LineEnds = sliceInsert(result.LineEnds, lineIdx, lineEnd)
+			lineIdx++
+		}
+
+		// Splice the new line into the ParseResult.
+		result.Lines = sliceInsert(result.Lines, lineIdx, newLine)
+		result.LineEnds = sliceInsert(result.LineEnds, lineIdx, lineEnd)
+	}
 
 	return binder.Serialize(result), allDiags, nil
 }
 
-// validateOpTarget checks OPE004 (path escapes root) and OPE005 (target is binder).
+// validateOpTarget checks OPE004 (path escapes root, illegal chars, non-.md extension)
+// and OPE005 (target is binder).
 func validateOpTarget(target string) *binder.Diagnostic {
 	if opEscapesRoot(target) {
 		return &binder.Diagnostic{
 			Severity: "error",
 			Code:     binder.CodeInvalidTargetPath,
 			Message:  "target path escapes the project root",
+		}
+	}
+	if hasIllegalPathChars(target) {
+		return &binder.Diagnostic{
+			Severity: "error",
+			Code:     binder.CodeInvalidTargetPath,
+			Message:  fmt.Sprintf("target %q contains illegal path characters", target),
+		}
+	}
+	if !strings.HasSuffix(target, ".md") {
+		return &binder.Diagnostic{
+			Severity: "error",
+			Code:     binder.CodeInvalidTargetPath,
+			Message:  fmt.Sprintf("target %q must have a .md extension", target),
 		}
 	}
 	if target == "_binder.md" {
@@ -120,9 +148,73 @@ func validateOpTarget(target string) *binder.Diagnostic {
 	return nil
 }
 
+// hasIllegalPathChars reports whether path contains characters that are
+// not allowed in binder file references (control chars and <>"|\?*).
+func hasIllegalPathChars(path string) bool {
+	for _, c := range path {
+		if c < 0x20 {
+			return true
+		}
+		switch c {
+		case '<', '>', '"', '|', '?', '*':
+			return true
+		}
+	}
+	return false
+}
+
 // opEscapesRoot reports whether path escapes the project root via "..".
 func opEscapesRoot(path string) bool {
 	return path == ".." || strings.HasPrefix(path, "../")
+}
+
+// addChildEvalParentSelector finds parent nodes matching selector for AddChild.
+// "." always returns the root node. Selectors containing ":" or "[" use
+// binder.EvalSelector (path/index navigation). All other selectors use a
+// deep-tree search supporting bare stems, paths with "/" and title matching.
+func addChildEvalParentSelector(selector string, root *binder.Node, lines []string) ([]*binder.Node, []binder.Diagnostic) {
+	if selector == "." {
+		return []*binder.Node{root}, nil
+	}
+	if strings.Contains(selector, ":") || strings.Contains(selector, "[") {
+		selResult, errDiags := binder.EvalSelector(selector, root)
+		allDiags := append(selResult.Warnings, errDiags...)
+		return selResult.Nodes, allDiags
+	}
+	// Deep search (bare stem, relative path with "/", title match).
+	var matches []*binder.Node
+	deleteSearchTree(root, selector, &matches)
+	if len(matches) == 0 {
+		if isSelectorInCodeFence(lines, selector) {
+			return nil, []binder.Diagnostic{{
+				Severity: "error",
+				Code:     binder.CodeNodeInCodeFence,
+				Message:  fmt.Sprintf("selector %q matches a node inside a code fence", selector),
+			}}
+		}
+		return nil, []binder.Diagnostic{{
+			Severity: "error",
+			Code:     binder.CodeSelectorNoMatch,
+			Message:  fmt.Sprintf("selector %q matched no nodes", selector),
+		}}
+	}
+	if len(matches) > 1 {
+		return matches, []binder.Diagnostic{{
+			Severity: "warning",
+			Code:     binder.CodeMultiMatch,
+			Message:  fmt.Sprintf("selector %q matched %d nodes; operation applied to all matches", selector, len(matches)),
+		}}
+	}
+	return matches, nil
+}
+
+// percentDecodeOpTarget URL-decodes a target path for storage in the binder.
+func percentDecodeOpTarget(target string) string {
+	decoded, err := url.QueryUnescape(strings.ReplaceAll(target, "+", "%2B"))
+	if err != nil {
+		return target
+	}
+	return decoded
 }
 
 // isSelectorInCodeFence reports whether any fenced code block in lines contains
@@ -228,15 +320,22 @@ func siblingMatchesSelector(child *binder.Node, selector string) bool {
 }
 
 // inferMarkerAndIndent returns the indentation string and list marker to use for a new
-// child of parent, inherited from existing siblings or defaulted for first children.
-func inferMarkerAndIndent(parent *binder.Node) (indentStr, marker string) {
+// child of parent at the given insertIdx (0-based children index). For ordered list
+// markers, when insertIdx > 0 the ordinal is the preceding sibling's ordinal + 1;
+// when insertIdx == 0 the ordinal is maxOrdinal(children) + 1.
+func inferMarkerAndIndent(parent *binder.Node, insertIdx int) (indentStr, marker string) {
 	if len(parent.Children) > 0 {
 		sibling := parent.Children[0]
 		indentStr = rawIndent(sibling)
 		marker = sibling.ListMarker
 		if isOrderedMarker(marker) {
 			style := orderedStyle(marker)
-			marker = fmt.Sprintf("%d%s", maxOrdinal(parent.Children)+1, style)
+			if insertIdx > 0 {
+				prevOrdinal := ordinalValue(parent.Children[insertIdx-1].ListMarker)
+				marker = fmt.Sprintf("%d%s", prevOrdinal+1, style)
+			} else {
+				marker = fmt.Sprintf("%d%s", maxOrdinal(parent.Children)+1, style)
+			}
 		}
 		return
 	}

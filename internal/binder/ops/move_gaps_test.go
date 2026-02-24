@@ -23,13 +23,12 @@ import (
 // Multi-match: first match only (H2)
 // ──────────────────────────────────────────────────────────────────────────────
 
-// TestMove_MultiMatch_OPW001_FirstMatchOnly verifies that when a bare-stem
-// selector matches multiple nodes, OPW001 is emitted and ONLY the first
-// matched node is moved. The remaining matches must stay in place.
-func TestMove_MultiMatch_OPW001_FirstMatchOnly(t *testing.T) {
+// TestMove_MultiMatch_OPW001_MovesAll verifies that when a bare-stem selector
+// matches multiple nodes, OPW001 is emitted and ALL matched nodes are moved
+// (all-match semantics).
+func TestMove_MultiMatch_OPW001_MovesAll(t *testing.T) {
 	// Two nodes share stem "ch" but have distinct titles so we can tell them apart.
-	// Only "[Chapter]" (first match) should be moved under app.md; "[Chapter (alt)]"
-	// (second match) must remain at root level.
+	// Both should be moved under app.md (all-match semantics).
 	src := []byte("<!-- prosemark-binder:v1 -->\n\n" +
 		"- [Chapter](ch.md)\n" +
 		"- [Chapter (alt)](ch.md)\n" +
@@ -49,11 +48,12 @@ func TestMove_MultiMatch_OPW001_FirstMatchOnly(t *testing.T) {
 	if !hasDiagCode(diags, binder.CodeMultiMatch) {
 		t.Errorf("expected OPW001 (multi-match), got: %v", diags)
 	}
-	// The second match must remain at root level (indented as "  - ..." would mean
-	// it was moved under app.md, which is wrong). The root-level form starts at the
-	// beginning of a line with no leading spaces.
-	if !bytes.Contains(out, []byte("\n- [Chapter (alt)](ch.md)\n")) {
-		t.Errorf("second match must remain at root level (first-match-only semantics):\n%s", out)
+	// Both matches should be moved under app.md (indented with "  - ").
+	if !bytes.Contains(out, []byte("  - [Chapter](ch.md)")) {
+		t.Errorf("first match should be under app.md:\n%s", out)
+	}
+	if !bytes.Contains(out, []byte("  - [Chapter (alt)](ch.md)")) {
+		t.Errorf("second match should also be under app.md (all-match semantics):\n%s", out)
 	}
 }
 
@@ -61,10 +61,9 @@ func TestMove_MultiMatch_OPW001_FirstMatchOnly(t *testing.T) {
 // Multi-match: OPW001 message format (H2)
 // ──────────────────────────────────────────────────────────────────────────────
 
-// TestMove_MultiMatch_OPW001_MessageRecommendsIndexSelector verifies that the
-// OPW001 diagnostic message includes the count of matched nodes AND recommends
-// using an index-qualified selector (e.g. "ch[0]"), as required by plan.md §H2.
-func TestMove_MultiMatch_OPW001_MessageRecommendsIndexSelector(t *testing.T) {
+// TestMove_MultiMatch_OPW001_MessageFormat verifies that the OPW001 diagnostic
+// message includes the count of matched nodes and describes all-match semantics.
+func TestMove_MultiMatch_OPW001_MessageFormat(t *testing.T) {
 	src := []byte("<!-- prosemark-binder:v1 -->\n\n" +
 		"- [Chapter](ch.md)\n" +
 		"- [Chapter (alt)](ch.md)\n" +
@@ -92,9 +91,9 @@ func TestMove_MultiMatch_OPW001_MessageRecommendsIndexSelector(t *testing.T) {
 	if !strings.Contains(opw001Msg, "2") {
 		t.Errorf("OPW001 message must include matched-node count (2), got: %q", opw001Msg)
 	}
-	// Message must recommend using an index-qualified selector (e.g. "[0]", "index").
-	if !strings.Contains(opw001Msg, "index") {
-		t.Errorf("OPW001 message must recommend an index-qualified selector, got: %q", opw001Msg)
+	// Message must describe all-match semantics.
+	if !strings.Contains(opw001Msg, "all matches") {
+		t.Errorf("OPW001 message must describe all-match semantics, got: %q", opw001Msg)
 	}
 }
 
@@ -163,5 +162,23 @@ func TestMove_RootSelectorGuard_OPE001(t *testing.T) {
 				t.Errorf("source bytes must be unchanged on root selector guard for %q", tt.sourceSelector)
 			}
 		})
+	}
+}
+
+// TestMove_OPE006_SourceInCodeFence verifies that when the source selector
+// matches a node inside a fenced code block, OPE006 is emitted.
+func TestMove_OPE006_SourceInCodeFence(t *testing.T) {
+	src := []byte("<!-- prosemark-binder:v1 -->\n\n```\n- [Fenced](fenced.md)\n```\n- [Dest](dest.md)\n")
+	params := binder.MoveParams{
+		SourceSelector:            "fenced",
+		DestinationParentSelector: "dest",
+		Position:                  "last",
+		Yes:                       true,
+	}
+
+	_, diags, _ := Move(context.Background(), src, nil, params)
+
+	if !hasDiagCode(diags, binder.CodeNodeInCodeFence) {
+		t.Errorf("expected OPE006 (node in code fence), got: %v", diags)
 	}
 }

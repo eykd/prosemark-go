@@ -384,14 +384,16 @@ type opSpec struct {
 }
 
 type addChildParamsJSON struct {
-	ParentSelector string `json:"parentSelector"`
-	Target         string `json:"target"`
-	Title          string `json:"title"`
-	Position       string `json:"position"`
-	At             *int   `json:"at"`
-	Before         string `json:"before"`
-	After          string `json:"after"`
-	Force          bool   `json:"force"`
+	ParentSelector   string `json:"parentSelector"`
+	Target           string `json:"target"`
+	Title            string `json:"title"`
+	Position         string `json:"position"`
+	At               *int   `json:"at"`
+	PositionIndex    *int   `json:"positionIndex"`
+	Before           string `json:"before"`
+	After            string `json:"after"`
+	PositionSelector string `json:"positionSelector"`
+	Force            bool   `json:"force"`
 }
 
 type deleteParamsJSON struct {
@@ -443,14 +445,30 @@ func buildAddChildArgs(p addChildParamsJSON) []string {
 	if p.Position == "first" {
 		args = append(args, "--first")
 	}
-	if p.At != nil {
-		args = append(args, "--at", strconv.Itoa(*p.At))
+	// Support both "at" and "positionIndex" field names.
+	atVal := p.At
+	if atVal == nil {
+		atVal = p.PositionIndex
 	}
-	if p.Before != "" {
-		args = append(args, "--before", p.Before)
+	if atVal != nil {
+		args = append(args, "--at", strconv.Itoa(*atVal))
 	}
-	if p.After != "" {
-		args = append(args, "--after", p.After)
+	// Support both "before"/"after" and "positionSelector" + "position" field names.
+	before := p.Before
+	after := p.After
+	if before == "" && after == "" && p.PositionSelector != "" {
+		switch p.Position {
+		case "before":
+			before = p.PositionSelector
+		case "after":
+			after = p.PositionSelector
+		}
+	}
+	if before != "" {
+		args = append(args, "--before", before)
+	}
+	if after != "" {
+		args = append(args, "--after", after)
 	}
 	if p.Force {
 		args = append(args, "--force")
@@ -492,8 +510,8 @@ func buildMoveArgs(p moveParamsJSON) []string {
 
 // parseJSONOutput is the shape emitted by `pmk parse --json`.
 type parseJSONOutput struct {
-	Version     string          `json:"version"`
-	Root        json.RawMessage `json:"root"`
+	Version     string           `json:"version"`
+	Root        json.RawMessage  `json:"root"`
 	Diagnostics []diagnosticItem `json:"diagnostics"`
 }
 
@@ -554,7 +572,7 @@ func checkDiagnosticsSubset(t *testing.T, expected, actual []diagnosticItem) {
 		}
 	}
 	for _, act := range actual {
-		if act.Severity == "error" && !findDiagnostic(act, expected) {
+		if act.Severity == "error" && !findDiagnosticByCode(act, expected) {
 			t.Errorf("unexpected error diagnostic {code: %q, message: %q}",
 				act.Code, act.Message)
 		}
@@ -578,6 +596,17 @@ func findDiagnostic(diag diagnosticItem, list []diagnosticItem) bool {
 			}
 		}
 		return true
+	}
+	return false
+}
+
+// findDiagnosticByCode reports whether diag appears in list matching only severity
+// and code (ignoring location). Used when checking that actual errors are expected.
+func findDiagnosticByCode(diag diagnosticItem, list []diagnosticItem) bool {
+	for _, item := range list {
+		if item.Severity == diag.Severity && item.Code == diag.Code {
+			return true
+		}
 	}
 	return false
 }

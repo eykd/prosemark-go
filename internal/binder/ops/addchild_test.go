@@ -479,6 +479,39 @@ func TestAddChild_ErrorCodesAbortMutation(t *testing.T) {
 			wantCode: binder.CodeInvalidTargetPath,
 		},
 		{
+			name: "OPE004_illegal_char_switch",
+			src:  binderSrc("- [Alpha](alpha.md)"),
+			params: binder.AddChildParams{
+				ParentSelector: ".",
+				Target:         "foo<bar.md",
+				Title:          "FooBar",
+				Position:       "last",
+			},
+			wantCode: binder.CodeInvalidTargetPath,
+		},
+		{
+			name: "OPE004_control_char",
+			src:  binderSrc("- [Alpha](alpha.md)"),
+			params: binder.AddChildParams{
+				ParentSelector: ".",
+				Target:         "\x01foo.md",
+				Title:          "Foo",
+				Position:       "last",
+			},
+			wantCode: binder.CodeInvalidTargetPath,
+		},
+		{
+			name: "OPE004_non_md_extension",
+			src:  binderSrc("- [Alpha](alpha.md)"),
+			params: binder.AddChildParams{
+				ParentSelector: ".",
+				Target:         "foo.txt",
+				Title:          "Foo",
+				Position:       "last",
+			},
+			wantCode: binder.CodeInvalidTargetPath,
+		},
+		{
 			name: "OPE005_target_is_binder",
 			src:  binderSrc("- [Alpha](alpha.md)"),
 			params: binder.AddChildParams{
@@ -552,23 +585,85 @@ func TestAddChild_ErrorCodesAbortMutation(t *testing.T) {
 	}
 }
 
-// TestAddChild_OPE002_AmbiguousBareStem verifies that a bare stem matching
-// multiple nodes at the same depth emits OPE002 and aborts.
-func TestAddChild_OPE002_AmbiguousBareStem(t *testing.T) {
+// TestAddChild_OPW001_MultiMatchAppliesAll verifies that a bare stem matching
+// multiple nodes emits OPW001 (multi-match warning) and applies the operation
+// to all matched parents.
+func TestAddChild_OPW001_MultiMatchAppliesAll(t *testing.T) {
 	// Two nodes whose target bare-stems are identical ("one").
 	src := []byte("<!-- prosemark-binder:v1 -->\n\n" +
 		"- [First One](first/one.md)\n" +
 		"- [Second One](second/one.md)\n")
 	params := binder.AddChildParams{
-		ParentSelector: "one", // ambiguous: matches both first/one and second/one
+		ParentSelector: "one", // matches both first/one and second/one
 		Target:         "new.md",
 		Title:          "New",
 		Position:       "last",
 	}
 
-	_, diags, _ := AddChild(context.Background(), src, nil, params)
+	out, diags, _ := AddChild(context.Background(), src, nil, params)
 
-	if !hasDiagCode(diags, binder.CodeAmbiguousBareStem) {
-		t.Errorf("expected OPE002 (ambiguous bare stem), got: %v", diags)
+	if !hasDiagCode(diags, binder.CodeMultiMatch) {
+		t.Errorf("expected OPW001 (multi-match), got: %v", diags)
+	}
+	// Both parents should receive the new child.
+	if bytes.Count(out, []byte("new.md")) != 2 {
+		t.Errorf("expected child added to both parents, got:\n%s", out)
+	}
+}
+
+// TestAddChild_PercentDecodeError_UsesOriginalTarget verifies that when the
+// target has an invalid percent-encoding, percentDecodeOpTarget falls back to
+// the original target string unchanged.
+func TestAddChild_PercentDecodeError_UsesOriginalTarget(t *testing.T) {
+	src := binderSrc("- [Alpha](alpha.md)")
+	params := binder.AddChildParams{
+		ParentSelector: ".",
+		Target:         "%ZZfoo.md", // invalid percent-encoded sequence
+		Title:          "Foo",
+		Position:       "last",
+	}
+
+	out, _, _ := AddChild(context.Background(), src, nil, params)
+
+	if !bytes.Contains(out, []byte("%ZZfoo.md")) {
+		t.Errorf("expected original (non-decoded) target in output, got:\n%s", out)
+	}
+}
+
+// TestAddChild_TabIndent_FirstChild verifies that when a tab-indented parent
+// node has no children, the new child is indented with a double-tab.
+func TestAddChild_TabIndent_FirstChild(t *testing.T) {
+	src := []byte("<!-- prosemark-binder:v1 -->\n\n- [Part](part.md)\n\t- [Chapter](ch.md)\n")
+	params := binder.AddChildParams{
+		ParentSelector: "ch",
+		Target:         "new.md",
+		Title:          "New",
+		Position:       "last",
+	}
+
+	out, _, _ := AddChild(context.Background(), src, nil, params)
+
+	if !bytes.Contains(out, []byte("\t\t- [New](new.md)")) {
+		t.Errorf("expected double-tab indented new child, got:\n%s", out)
+	}
+}
+
+// TestAddChild_OrderedList_InsertFirst_MaxOrdinalPlusOne verifies that inserting
+// at position "first" (insertIdx=0) in an ordered list assigns maxOrdinal+1 as
+// the new item's ordinal.
+func TestAddChild_OrderedList_InsertFirst_MaxOrdinalPlusOne(t *testing.T) {
+	src := []byte("<!-- prosemark-binder:v1 -->\n\n- [Part](part.md)\n  1) [Ch1](ch1.md)\n  2) [Ch2](ch2.md)\n")
+	params := binder.AddChildParams{
+		ParentSelector: "part",
+		Target:         "ch-new.md",
+		Title:          "Ch New",
+		Position:       "first", // insertIdx = 0 → uses maxOrdinal+1
+	}
+
+	out, _, _ := AddChild(context.Background(), src, nil, params)
+
+	// maxOrdinal([1), 2)]) = 2; new marker = "3)"
+	if !bytes.Contains(out, []byte("3) [Ch New](ch-new.md)")) {
+		t.Errorf("expected '3)' marker for first-position insert in ordered list, got:\n%s", out)
 	}
 }

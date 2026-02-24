@@ -12,6 +12,12 @@ import (
 // moveListMarkerRE matches the leading whitespace + list marker + space of a list item.
 var moveListMarkerRE = regexp.MustCompile(`^[\t ]*(?:[-*+]|\d+[.)]) `)
 
+// moveFirstLineMarkerRE matches only the list marker + space (no leading whitespace).
+var moveFirstLineMarkerRE = regexp.MustCompile(`^(?:[-*+]|\d+[.)]) `)
+
+// moveOpsCheckboxRE matches a GFM task-list checkbox at the start of content.
+var moveOpsCheckboxRE = regexp.MustCompile(`^\[[xX ]\]\s+`)
+
 // moveParseBinderFn is the parse function used by Move. It may be replaced
 // in tests to simulate parse failures.
 var moveParseBinderFn = binder.Parse
@@ -40,7 +46,7 @@ func Move(ctx context.Context, src []byte, project *binder.Project, params binde
 	}
 
 	// Find source nodes.
-	sourceNodes, selDiags := moveEvalSourceSelector(params.SourceSelector, result.Root)
+	sourceNodes, selDiags := moveEvalSourceSelector(params.SourceSelector, result.Root, result.Lines)
 	if len(sourceNodes) == 0 {
 		return src, append(parseDiags, selDiags...), nil
 	}
@@ -88,14 +94,21 @@ func Move(ctx context.Context, src []byte, project *binder.Project, params binde
 		})
 	}
 
-	targetIndentStr, _ := inferMarkerAndIndent(destNode)
-	return moveRebuildDocument(result, sourceNodes, destNode, params.Position, targetIndentStr), allDiags, nil
+	var moveInsertIdx int
+	if params.Position == "first" {
+		moveInsertIdx = 0
+	} else {
+		moveInsertIdx = len(destNode.Children)
+	}
+	targetIndentStr, targetMarker := inferMarkerAndIndent(destNode, moveInsertIdx)
+	return moveRebuildDocument(result, sourceNodes, destNode, params.Position, targetIndentStr, targetMarker), allDiags, nil
 }
 
 // moveRebuildDocument removes sourceNodes from their current positions,
-// re-indents them to match targetIndentStr, and inserts them under destNode
-// at the given position ("first" or "last"). Returns the serialized result.
-func moveRebuildDocument(result *binder.ParseResult, sourceNodes []*binder.Node, destNode *binder.Node, position, targetIndentStr string) []byte {
+// re-indents them to match targetIndentStr (and replaces their list marker
+// with targetMarker), and inserts them under destNode at the given position
+// ("first" or "last"). Returns the serialized result.
+func moveRebuildDocument(result *binder.ParseResult, sourceNodes []*binder.Node, destNode *binder.Node, position, targetIndentStr, targetMarker string) []byte {
 	// Collect re-indented lines and mark source indices for removal.
 	var movedLines []string
 	var movedLineEnds []string
@@ -107,7 +120,14 @@ func moveRebuildDocument(result *binder.ParseResult, sourceNodes []*binder.Node,
 		srcIndentLen := srcNode.Indent
 
 		for i := startIdx; i <= endIdx; i++ {
-			movedLines = append(movedLines, moveReindentLine(result.Lines[i], srcIndentLen, targetIndentStr))
+			var reindented string
+			if i == startIdx {
+				// Replace marker and strip any GFM checkbox on the first line.
+				reindented = moveReindentFirstLine(result.Lines[i], srcIndentLen, targetIndentStr, targetMarker)
+			} else {
+				reindented = moveReindentLine(result.Lines[i], srcIndentLen, targetIndentStr)
+			}
+			movedLines = append(movedLines, reindented)
 			movedLineEnds = append(movedLineEnds, result.LineEnds[i])
 			skipSet[i] = true
 		}
@@ -166,9 +186,9 @@ func moveRebuildDocument(result *binder.ParseResult, sourceNodes []*binder.Node,
 
 // moveEvalSourceSelector finds source nodes matching selector.
 // For selectors containing ":", path navigation via binder.EvalSelector is used.
-// Otherwise a deep-tree search is performed.
+// Otherwise a deep-tree search is performed with OPE006 code-fence detection.
 // The root node is never a valid source: returns OPE001 with an explicit message.
-func moveEvalSourceSelector(selector string, root *binder.Node) ([]*binder.Node, []binder.Diagnostic) {
+func moveEvalSourceSelector(selector string, root *binder.Node, lines []string) ([]*binder.Node, []binder.Diagnostic) {
 	const rootGuardMsg = "root node is not a valid target for this operation"
 	if selector == "." {
 		return nil, []binder.Diagnostic{{
@@ -194,6 +214,14 @@ func moveEvalSourceSelector(selector string, root *binder.Node) ([]*binder.Node,
 	var matches []*binder.Node
 	deleteSearchTree(root, selector, &matches)
 	if len(matches) == 0 {
+		// Check for code-fence presence (OPE006).
+		if isSelectorInCodeFence(lines, selector) {
+			return nil, []binder.Diagnostic{{
+				Severity: "error",
+				Code:     binder.CodeNodeInCodeFence,
+				Message:  fmt.Sprintf("selector %q matches a node inside a code fence", selector),
+			}}
+		}
 		return nil, []binder.Diagnostic{{
 			Severity: "error",
 			Code:     binder.CodeSelectorNoMatch,
@@ -205,11 +233,8 @@ func moveEvalSourceSelector(selector string, root *binder.Node) ([]*binder.Node,
 		diags = []binder.Diagnostic{{
 			Severity: "warning",
 			Code:     binder.CodeMultiMatch,
-			Message: fmt.Sprintf("selector %q matched %d nodes; moving first match only"+
-				" (use an index-qualified selector, e.g. %q, to be explicit)",
-				selector, len(matches), selector+"[0]"),
+			Message:  fmt.Sprintf("selector %q matched %d nodes; operation applied to all matches", selector, len(matches)),
 		}}
-		matches = matches[:1]
 	}
 	return matches, diags
 }
@@ -271,6 +296,30 @@ func moveNodeHasNonStructuralContent(rawLine string) bool {
 	}
 	prefix := moveListMarkerRE.ReplaceAllString(rawLine[:loc[0]], "")
 	return strings.TrimSpace(prefix) != ""
+}
+
+// moveReindentFirstLine adjusts the first line of a moved node: strips the
+// original leading whitespace, original list marker, and any GFM checkbox,
+// then prepends the target indent and target marker.
+func moveReindentFirstLine(line string, srcIndentLen int, targetIndentStr, targetMarker string) string {
+	// Strip leading whitespace.
+	w := 0
+	for w < len(line) && (line[w] == ' ' || line[w] == '\t') {
+		w++
+	}
+	rest := line[w:]
+
+	// Strip the original list marker (marker + space).
+	if loc := moveFirstLineMarkerRE.FindStringIndex(rest); loc != nil {
+		rest = rest[loc[1]:]
+	}
+
+	// Strip GFM task-list checkbox if present.
+	if m := moveOpsCheckboxRE.FindString(rest); m != "" {
+		rest = rest[len(m):]
+	}
+
+	return targetIndentStr + targetMarker + " " + rest
 }
 
 // moveReindentLine adjusts the leading whitespace of line so the moved node

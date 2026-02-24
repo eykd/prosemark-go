@@ -62,12 +62,12 @@ func NewAddChildCmd(io AddChildIO) *cobra.Command {
 
 			projectBytes, err := io.ReadProject(ctx, projectPath)
 			if err != nil {
-				return fmt.Errorf("reading project: %w", err)
+				return emitOPE009AndError(cmd, binderBytes, err)
 			}
 
 			var proj binder.Project
 			if err = json.Unmarshal(projectBytes, &proj); err != nil {
-				return fmt.Errorf("parsing project JSON: %w", err)
+				return emitOPE009AndError(cmd, binderBytes, err)
 			}
 
 			position := "last"
@@ -80,10 +80,12 @@ func NewAddChildCmd(io AddChildIO) *cobra.Command {
 				Target:         target,
 				Title:          title,
 				Position:       position,
-				At:             nil,
 				Before:         before,
 				After:          after,
 				Force:          force,
+			}
+			if cmd.Flags().Changed("at") {
+				params.At = &at
 			}
 
 			modifiedBytes, diags, _ := ops.AddChild(ctx, binderBytes, &proj, params) //nolint:errcheck

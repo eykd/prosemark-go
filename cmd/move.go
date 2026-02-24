@@ -54,12 +54,12 @@ func NewMoveCmd(io MoveIO) *cobra.Command {
 
 			projectBytes, err := io.ReadProject(ctx, projectPath)
 			if err != nil {
-				return fmt.Errorf("reading project: %w", err)
+				return emitOPE009AndError(cmd, binderBytes, err)
 			}
 
 			var proj binder.Project
 			if err = json.Unmarshal(projectBytes, &proj); err != nil {
-				return fmt.Errorf("parsing project JSON: %w", err)
+				return emitOPE009AndError(cmd, binderBytes, err)
 			}
 
 			position := "last"
@@ -71,12 +71,13 @@ func NewMoveCmd(io MoveIO) *cobra.Command {
 				SourceSelector:            source,
 				DestinationParentSelector: dest,
 				Position:                  position,
-				At:                        nil,
 				Before:                    before,
 				After:                     after,
 				Yes:                       yes,
 			}
-			_ = at
+			if cmd.Flags().Changed("at") {
+				params.At = &at
+			}
 
 			modifiedBytes, diags, _ := ops.Move(ctx, binderBytes, &proj, params)
 			if diags == nil {

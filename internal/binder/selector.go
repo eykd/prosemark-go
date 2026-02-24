@@ -106,12 +106,15 @@ func selectorMatchNodes(fileRef string, nodes []*Node) ([]*Node, []Diagnostic, [
 }
 
 // nodeMatchesSelector reports whether n's target matches fileRef.
-// A fileRef containing "/" is matched as a relative path; otherwise as a bare stem.
+// A fileRef containing "/" is matched as a relative path (with or without .md extension).
+// Otherwise matched as a bare stem, a direct target name, or a case-insensitive title match.
 func nodeMatchesSelector(fileRef string, n *Node) bool {
 	if strings.Contains(fileRef, "/") {
-		return n.Target == fileRef+".md"
+		return n.Target == fileRef || n.Target == fileRef+".md"
 	}
-	return stemFromPath(n.Target) == fileRef
+	return stemFromPath(n.Target) == fileRef ||
+		n.Target == fileRef ||
+		strings.EqualFold(n.Title, fileRef)
 }
 
 // newSelectorDiag constructs a Diagnostic with no source location.
