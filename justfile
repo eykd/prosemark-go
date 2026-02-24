@@ -117,8 +117,8 @@ acceptance-regen:
     ./run-acceptance-tests.sh
 
 # Run conformance tests against the pmk binary
-conformance-run:
-    go test -v ./conformance/...
+conformance-run: build
+    go test -v -timeout=120s ./conformance/...
 
 # Run both unit tests and acceptance tests
 test-all: test acceptance conformance-run
