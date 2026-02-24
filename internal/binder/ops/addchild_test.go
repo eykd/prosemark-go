@@ -585,6 +585,110 @@ func TestAddChild_ErrorCodesAbortMutation(t *testing.T) {
 	}
 }
 
+// ──────────────────────────────────────────────────────────────────────────────
+// Percent-encoding round-trip (spaces in filenames)
+// ──────────────────────────────────────────────────────────────────────────────
+
+// TestAddChild_SpaceInTarget_WritesPercentEncoded verifies that a target with a
+// literal space is written as %20 in the binder and the node is recoverable
+// after a round-trip parse.
+func TestAddChild_SpaceInTarget_WritesPercentEncoded(t *testing.T) {
+	src := binderSrc()
+	params := binder.AddChildParams{
+		ParentSelector: ".",
+		Target:         "my chapter.md",
+		Title:          "My Chapter",
+		Position:       "last",
+	}
+
+	out, diags, err := AddChild(context.Background(), src, nil, params)
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if hasDiagCode(diags, "error") {
+		t.Errorf("unexpected error diagnostic: %v", diags)
+	}
+	// Encoded form must appear in the binder.
+	if !bytes.Contains(out, []byte("my%20chapter.md")) {
+		t.Errorf("expected encoded target 'my%%20chapter.md' in output:\n%s", out)
+	}
+	// Literal space must NOT appear in the link URL.
+	if bytes.Contains(out, []byte("(my chapter.md)")) {
+		t.Errorf("literal space should not appear in link URL:\n%s", out)
+	}
+	// Round-trip: parse the written binder and verify the node is visible.
+	result, parseDiags, parseErr := binder.Parse(context.Background(), out, nil)
+	if parseErr != nil {
+		t.Fatalf("round-trip parse failed: %v", parseErr)
+	}
+	if hasDiagCode(parseDiags, "error") {
+		t.Errorf("round-trip parse produced error diagnostics: %v", parseDiags)
+	}
+	if len(result.Root.Children) == 0 {
+		t.Fatalf("no children after round-trip; node was lost")
+	}
+	if result.Root.Children[0].Target != "my chapter.md" {
+		t.Errorf("round-trip target = %q; want %q", result.Root.Children[0].Target, "my chapter.md")
+	}
+}
+
+// TestAddChild_PreEncodedSpaceTarget_RoundTrips verifies that a pre-encoded
+// target (%20) produces the same final binder state as a literal-space target.
+func TestAddChild_PreEncodedSpaceTarget_RoundTrips(t *testing.T) {
+	src := binderSrc()
+	params := binder.AddChildParams{
+		ParentSelector: ".",
+		Target:         "my%20chapter.md", // pre-encoded by caller
+		Title:          "My Chapter",
+		Position:       "last",
+	}
+
+	out, diags, err := AddChild(context.Background(), src, nil, params)
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if hasDiagCode(diags, "error") {
+		t.Errorf("unexpected error diagnostic: %v", diags)
+	}
+	if !bytes.Contains(out, []byte("my%20chapter.md")) {
+		t.Errorf("expected encoded target 'my%%20chapter.md' in output:\n%s", out)
+	}
+	// Round-trip parse must recover the decoded target.
+	result, _, _ := binder.Parse(context.Background(), out, nil)
+	if len(result.Root.Children) == 0 {
+		t.Fatalf("no children after round-trip")
+	}
+	if result.Root.Children[0].Target != "my chapter.md" {
+		t.Errorf("round-trip target = %q; want %q", result.Root.Children[0].Target, "my chapter.md")
+	}
+}
+
+// TestAddChild_ColonInTarget_ReturnsOPE004 verifies that a colon in the target
+// is rejected with OPE004 and leaves the binder unchanged.
+func TestAddChild_ColonInTarget_ReturnsOPE004(t *testing.T) {
+	src := binderSrc("- [Alpha](alpha.md)")
+	params := binder.AddChildParams{
+		ParentSelector: ".",
+		Target:         "part:one.md",
+		Title:          "Part One",
+		Position:       "last",
+	}
+
+	out, diags, err := AddChild(context.Background(), src, nil, params)
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !hasDiagCode(diags, binder.CodeInvalidTargetPath) {
+		t.Errorf("expected OPE004, got: %v", diags)
+	}
+	if !bytes.Equal(out, src) {
+		t.Errorf("source should be unchanged on colon-target rejection:\ngot:  %q\nwant: %q", out, src)
+	}
+}
+
 // TestAddChild_OPW001_MultiMatchAppliesAll verifies that a bare stem matching
 // multiple nodes emits OPW001 (multi-match warning) and applies the operation
 // to all matched parents.
