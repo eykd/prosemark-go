@@ -4,6 +4,7 @@
 package acceptance_test
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -11,82 +12,239 @@ import (
 // Source: specs/001-prosemark-binder/US3-delete-node.txt:2
 func Test_Deleting_a_leaf_chapter_removes_its_entry_from_the_binder(t *testing.T) {
 	// GIVEN a binder with a chapter that has no sub-chapters.
-	// WHEN the author deletes that chapter.
-	// THEN the chapter entry is removed from the binder.
+	dir := t.TempDir()
+	writeFile(t, dir, "_binder.md",
+		"<!-- prosemark-binder:v1 -->\n\n"+
+			"- [Ch One](ch1.md)\n"+
+			"- [Ch Two](ch2.md)\n")
+	projectPath := writeProjectJSON(t, dir, "ch1.md", "ch2.md")
+	binderPath := dir + "/_binder.md"
 
-	t.Skip("acceptance test not yet bound")
+	// WHEN the author deletes that chapter.
+	result := runDelete(t, binderPath, projectPath, "ch1.md", true)
+
+	// THEN the chapter entry is removed from the binder.
+	if !result.OK {
+		t.Fatalf("expected exit 0\nstdout: %s\nstderr: %s", result.Stdout, result.Stderr)
+	}
+	if !strings.Contains(result.Stdout, `"changed":true`) {
+		t.Errorf("expected changed=true\nstdout: %s", result.Stdout)
+	}
+	content := readFile(t, binderPath)
+	if strings.Contains(content, "ch1.md") {
+		t.Errorf("expected ch1.md to be removed from binder\ncontent: %s", content)
+	}
+	if !strings.Contains(content, "ch2.md") {
+		t.Errorf("expected ch2.md to remain in binder\ncontent: %s", content)
+	}
 }
 
 // Deleting a chapter also removes all of its nested sub-chapters.
 // Source: specs/001-prosemark-binder/US3-delete-node.txt:11
 func Test_Deleting_a_chapter_also_removes_all_of_its_nested_sub_chapters(t *testing.T) {
 	// GIVEN a binder with a chapter that contains nested sub-chapters.
-	// WHEN the author deletes the parent chapter.
-	// THEN the parent chapter and all its sub-chapters are removed.
+	dir := t.TempDir()
+	writeFile(t, dir, "_binder.md",
+		"<!-- prosemark-binder:v1 -->\n\n"+
+			"- [Parent](parent.md)\n"+
+			"  - [Child](child.md)\n"+
+			"- [Sibling](sibling.md)\n")
+	projectPath := writeProjectJSON(t, dir, "parent.md", "child.md", "sibling.md")
+	binderPath := dir + "/_binder.md"
 
-	t.Skip("acceptance test not yet bound")
+	// WHEN the author deletes the parent chapter.
+	result := runDelete(t, binderPath, projectPath, "parent.md", true)
+
+	// THEN the parent chapter and all its sub-chapters are removed.
+	if !result.OK {
+		t.Fatalf("expected exit 0\nstdout: %s\nstderr: %s", result.Stdout, result.Stderr)
+	}
+	content := readFile(t, binderPath)
+	if strings.Contains(content, "parent.md") {
+		t.Errorf("expected parent.md to be removed from binder\ncontent: %s", content)
+	}
+	if strings.Contains(content, "child.md") {
+		t.Errorf("expected child.md to be removed with parent\ncontent: %s", content)
+	}
+	if !strings.Contains(content, "sibling.md") {
+		t.Errorf("expected sibling.md to remain in binder\ncontent: %s", content)
+	}
 }
 
 // Deleting the only entry inside a nested section prunes the now-empty section.
 // Source: specs/001-prosemark-binder/US3-delete-node.txt:20
 func Test_Deleting_the_only_entry_inside_a_nested_section_prunes_the_now_empty_section(t *testing.T) {
 	// GIVEN a binder with a nested section containing only one sub-chapter.
-	// WHEN the author deletes that sub-chapter.
-	// THEN the now-empty nested section is also removed.
-	// THEN an "empty section removed" warning is included in the result.
+	dir := t.TempDir()
+	writeFile(t, dir, "_binder.md",
+		"<!-- prosemark-binder:v1 -->\n\n"+
+			"- [Chapter One](ch1.md)\n"+
+			"  - [Section A](sec-a.md)\n"+
+			"- [Chapter Two](ch2.md)\n")
+	projectPath := writeProjectJSON(t, dir, "ch1.md", "sec-a.md", "ch2.md")
+	binderPath := dir + "/_binder.md"
 
-	t.Skip("acceptance test not yet bound")
+	// WHEN the author deletes that sub-chapter.
+	result := runDelete(t, binderPath, projectPath, "sec-a.md", true)
+
+	// THEN the now-empty nested section is also removed.
+	if !result.OK {
+		t.Fatalf("expected exit 0\nstdout: %s\nstderr: %s", result.Stdout, result.Stderr)
+	}
+	content := readFile(t, binderPath)
+	if strings.Contains(content, "sec-a.md") {
+		t.Errorf("expected sec-a.md to be removed from binder\ncontent: %s", content)
+	}
+	// ch1.md remains as a leaf node (its empty sublist is pruned)
+	if !strings.Contains(content, "ch1.md") {
+		t.Errorf("expected ch1.md to remain in binder\ncontent: %s", content)
+	}
+	// THEN an "empty section removed" warning is included in the result.
+	if !strings.Contains(result.Stdout, `"OPW004"`) {
+		t.Errorf("expected OPW004 empty-sublist-pruned warning\nstdout: %s", result.Stdout)
+	}
 }
 
 // Consecutive blank lines created by a deletion are collapsed into one.
 // Source: specs/001-prosemark-binder/US3-delete-node.txt:30
 func Test_Consecutive_blank_lines_created_by_a_deletion_are_collapsed_into_one(t *testing.T) {
 	// GIVEN a binder where deleting a chapter would leave two blank lines in a row.
-	// WHEN the author deletes that chapter.
-	// THEN the two consecutive blank lines are collapsed into one.
+	dir := t.TempDir()
+	writeFile(t, dir, "_binder.md",
+		"<!-- prosemark-binder:v1 -->\n\n"+
+			"- [Chapter One](ch1.md)\n\n"+
+			"- [Chapter Two](ch2.md)\n\n"+
+			"- [Chapter Three](ch3.md)\n")
+	projectPath := writeProjectJSON(t, dir, "ch1.md", "ch2.md", "ch3.md")
+	binderPath := dir + "/_binder.md"
 
-	t.Skip("acceptance test not yet bound")
+	// WHEN the author deletes that chapter.
+	result := runDelete(t, binderPath, projectPath, "ch2.md", true)
+
+	// THEN the two consecutive blank lines are collapsed into one.
+	if !result.OK {
+		t.Fatalf("expected exit 0\nstdout: %s\nstderr: %s", result.Stdout, result.Stderr)
+	}
+	content := readFile(t, binderPath)
+	if strings.Contains(content, "ch2.md") {
+		t.Errorf("expected ch2.md to be removed\ncontent: %s", content)
+	}
+	if strings.Contains(content, "\n\n\n") {
+		t.Errorf("expected no consecutive blank lines (\\n\\n\\n) after deletion\ncontent: %q", content)
+	}
 }
 
 // Deleting a chapter with non-structural text removes that text too, with a warning.
 // Source: specs/001-prosemark-binder/US3-delete-node.txt:39
 func Test_Deleting_a_chapter_with_non_structural_text_removes_that_text_too_with_a_warning(t *testing.T) {
 	// GIVEN a binder with a chapter entry that has additional descriptive text after the chapter link.
-	// WHEN the author deletes that chapter.
-	// THEN the entry and its additional text are both removed.
-	// THEN a "non-structural content destroyed" warning is included in the result.
+	dir := t.TempDir()
+	writeFile(t, dir, "_binder.md",
+		"<!-- prosemark-binder:v1 -->\n\n"+
+			"- [Chapter One](ch1.md) \u2190 work in progress\n")
+	projectPath := writeProjectJSON(t, dir, "ch1.md")
+	binderPath := dir + "/_binder.md"
 
-	t.Skip("acceptance test not yet bound")
+	// WHEN the author deletes that chapter.
+	result := runDelete(t, binderPath, projectPath, "ch1.md", true)
+
+	// THEN the entry and its additional text are both removed.
+	if !result.OK {
+		t.Fatalf("expected exit 0 (non-structural content is a warning)\nstdout: %s\nstderr: %s", result.Stdout, result.Stderr)
+	}
+	content := readFile(t, binderPath)
+	if strings.Contains(content, "ch1.md") {
+		t.Errorf("expected ch1.md entry to be removed\ncontent: %s", content)
+	}
+	if strings.Contains(content, "work in progress") {
+		t.Errorf("expected non-structural text to be removed with chapter\ncontent: %s", content)
+	}
+	// THEN a "non-structural content destroyed" warning is included in the result.
+	if !strings.Contains(result.Stdout, `"OPW003"`) {
+		t.Errorf("expected OPW003 non-structural-content-destroyed warning\nstdout: %s", result.Stdout)
+	}
 }
 
 // Attempting to delete a non-existent chapter returns an error without modifying the binder.
 // Source: specs/001-prosemark-binder/US3-delete-node.txt:49
 func Test_Attempting_to_delete_a_non_existent_chapter_returns_an_error_without_modifying_the_binder(t *testing.T) {
 	// GIVEN a selector that does not match any chapter in the binder.
-	// WHEN the author tries to delete using that selector.
-	// THEN a "not found" error is returned.
-	// THEN the binder is unchanged.
+	dir := t.TempDir()
+	writeFile(t, dir, "_binder.md",
+		"<!-- prosemark-binder:v1 -->\n\n- [Chapter One](ch1.md)\n")
+	projectPath := writeProjectJSON(t, dir, "ch1.md")
+	binderPath := dir + "/_binder.md"
+	before := readFile(t, binderPath)
 
-	t.Skip("acceptance test not yet bound")
+	// WHEN the author tries to delete using that selector.
+	result := runDelete(t, binderPath, projectPath, "nonexistent.md", true)
+
+	// THEN a "not found" error is returned.
+	if result.OK {
+		t.Fatalf("expected non-zero exit for non-existent selector\nstdout: %s", result.Stdout)
+	}
+	if !strings.Contains(result.Stdout, `"OPE001"`) {
+		t.Errorf("expected OPE001 not-found error\nstdout: %s", result.Stdout)
+	}
+	// THEN the binder is unchanged.
+	after := readFile(t, binderPath)
+	if before != after {
+		t.Errorf("expected binder unchanged on error\nbefore: %s\nafter: %s", before, after)
+	}
 }
 
 // Deleting a chapter that uses footnote-style links preserves the link definition in the file.
 // Source: specs/001-prosemark-binder/US3-delete-node.txt:59
 func Test_Deleting_a_chapter_that_uses_footnote_style_links_preserves_the_link_definition_in_the_file(t *testing.T) {
 	// GIVEN a binder with a chapter that uses a footnote-style link, with the definition stored at the bottom of the file.
-	// WHEN the author deletes that chapter.
-	// THEN the chapter entry is removed.
-	// THEN the footnote link definition at the bottom of the file is kept intact.
+	dir := t.TempDir()
+	writeFile(t, dir, "_binder.md",
+		"<!-- prosemark-binder:v1 -->\n\n"+
+			"- [Chapter One](ch1.md)\n"+
+			"- [Chapter Two][ch2]\n\n"+
+			"[ch2]: ch2.md\n")
+	projectPath := writeProjectJSON(t, dir, "ch1.md", "ch2.md")
+	binderPath := dir + "/_binder.md"
 
-	t.Skip("acceptance test not yet bound")
+	// WHEN the author deletes that chapter.
+	result := runDelete(t, binderPath, projectPath, "ch2.md", true)
+
+	// THEN the chapter entry is removed.
+	if !result.OK {
+		t.Fatalf("expected exit 0\nstdout: %s\nstderr: %s", result.Stdout, result.Stderr)
+	}
+	content := readFile(t, binderPath)
+	if strings.Contains(content, "[Chapter Two][ch2]") {
+		t.Errorf("expected chapter list entry to be removed\ncontent: %s", content)
+	}
+	// THEN the footnote link definition at the bottom of the file is kept intact.
+	if !strings.Contains(content, "[ch2]: ch2.md") {
+		t.Errorf("expected footnote definition '[ch2]: ch2.md' to be preserved\ncontent: %s", content)
+	}
 }
 
 // Deleting the last top-level chapter removes any trailing blank lines from the file.
 // Source: specs/001-prosemark-binder/US3-delete-node.txt:69
 func Test_Deleting_the_last_top_level_chapter_removes_any_trailing_blank_lines_from_the_file(t *testing.T) {
 	// GIVEN a binder with only one top-level chapter.
-	// WHEN the author deletes that chapter.
-	// THEN any blank lines remaining at the end of the file are removed.
+	dir := t.TempDir()
+	writeFile(t, dir, "_binder.md",
+		"<!-- prosemark-binder:v1 -->\n\n- [Chapter One](ch1.md)\n")
+	projectPath := writeProjectJSON(t, dir, "ch1.md")
+	binderPath := dir + "/_binder.md"
 
-	t.Skip("acceptance test not yet bound")
+	// WHEN the author deletes that chapter.
+	result := runDelete(t, binderPath, projectPath, "ch1.md", true)
+
+	// THEN any blank lines remaining at the end of the file are removed.
+	if !result.OK {
+		t.Fatalf("expected exit 0\nstdout: %s\nstderr: %s", result.Stdout, result.Stderr)
+	}
+	content := readFile(t, binderPath)
+	if strings.Contains(content, "ch1.md") {
+		t.Errorf("expected ch1.md to be removed\ncontent: %s", content)
+	}
+	if strings.HasSuffix(content, "\n\n") {
+		t.Errorf("expected no trailing blank lines after deleting last chapter\ncontent: %q", content)
+	}
 }

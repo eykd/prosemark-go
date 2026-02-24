@@ -61,3 +61,90 @@ func writeProjectJSON(t *testing.T, dir string, files ...string) string {
 	}
 	return writeFile(t, dir, "project.json", `{"version":"1","files":[`+list+`]}`)
 }
+
+// runAddChild invokes "pmk add-child <binderPath> --project <projectPath>"
+// with any extra flag strings appended.
+func runAddChild(t *testing.T, binderPath, projectPath string, extraArgs ...string) runResult {
+	t.Helper()
+	args := []string{"run", ".", "add-child", "--project", projectPath, binderPath}
+	args = append(args, extraArgs...)
+	cmd := exec.Command("go", args...)
+	cmd.Dir = ".."
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	return runResult{
+		Stdout: stdout.String(),
+		Stderr: stderr.String(),
+		OK:     err == nil,
+	}
+}
+
+// runDelete invokes "pmk delete <binderPath> --project <projectPath> --selector <sel>"
+// and optionally "--yes" if yes is true.
+func runDelete(t *testing.T, binderPath, projectPath, selector string, yes bool) runResult {
+	t.Helper()
+	args := []string{"run", ".", "delete", "--project", projectPath, "--selector", selector}
+	if yes {
+		args = append(args, "--yes")
+	}
+	args = append(args, binderPath)
+	cmd := exec.Command("go", args...)
+	cmd.Dir = ".."
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	return runResult{
+		Stdout: stdout.String(),
+		Stderr: stderr.String(),
+		OK:     err == nil,
+	}
+}
+
+// runMove invokes "pmk move <binderPath> --project <projectPath> --source <source> --dest <dest>"
+// with any extra flag strings appended.
+func runMove(t *testing.T, binderPath, projectPath, source, dest string, extraArgs ...string) runResult {
+	t.Helper()
+	args := []string{"run", ".", "move", "--project", projectPath, "--source", source, "--dest", dest, binderPath}
+	args = append(args, extraArgs...)
+	cmd := exec.Command("go", args...)
+	cmd.Dir = ".."
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	return runResult{
+		Stdout: stdout.String(),
+		Stderr: stderr.String(),
+		OK:     err == nil,
+	}
+}
+
+// runConformance runs the conformance test suite with the given test filter,
+// executed from the repository root (one directory above this test package).
+func runConformance(t *testing.T, filter string) runResult {
+	t.Helper()
+	cmd := exec.Command("go", "test", "-run", filter, "-timeout", "120s", "./conformance/...")
+	cmd.Dir = ".."
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	return runResult{
+		Stdout: stdout.String(),
+		Stderr: stderr.String(),
+		OK:     err == nil,
+	}
+}
+
+// readFile reads the contents of path and returns it as a string.
+func readFile(t *testing.T, path string) string {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("readFile %s: %v", path, err)
+	}
+	return string(data)
+}
