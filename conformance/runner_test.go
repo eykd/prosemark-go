@@ -16,6 +16,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -93,13 +94,7 @@ func TestConformance_ParseFixtures(t *testing.T) {
 func runParseFixture(t *testing.T, fixturePath string) {
 	t.Helper()
 
-	required := []string{"binder.md", "project.json", "expected-parse.json", "expected-diagnostics.json"}
-	for _, f := range required {
-		if _, err := os.Stat(filepath.Join(fixturePath, f)); err != nil {
-			t.Skipf("required file %q missing (%v); skipping", f, err)
-			return
-		}
-	}
+	skipIfMissingFiles(t, fixturePath, []string{"binder.md", "project.json", "expected-parse.json", "expected-diagnostics.json"})
 
 	// Set up temp working directory with _binder.md.
 	tmpDir, err := os.MkdirTemp("", "pmk-parse-*")
@@ -157,12 +152,18 @@ func runParseFixture(t *testing.T, fixturePath string) {
 // TestConformance_OpsFixtures walks docs/conformance/v1/ops/fixtures/*/ and
 // verifies each leaf fixture directory against the pmk binary.
 func TestConformance_OpsFixtures(t *testing.T) {
+	walkOpsFixtures(t, runOpsFixture)
+}
+
+// walkOpsFixtures walks docs/conformance/v1/ops/fixtures/ and calls fn for
+// each leaf fixture directory. It fatals if no fixture directories are found.
+func walkOpsFixtures(t *testing.T, fn func(t *testing.T, fixturePath string)) {
+	t.Helper()
 	opsFixturesDir := filepath.Join(conformanceRoot, "ops", "fixtures")
 	opDirs, err := os.ReadDir(opsFixturesDir)
 	if err != nil {
 		t.Fatalf("os.ReadDir(%s): %v", opsFixturesDir, err)
 	}
-
 	ran := 0
 	for _, opDir := range opDirs {
 		if !opDir.IsDir() {
@@ -182,7 +183,7 @@ func TestConformance_OpsFixtures(t *testing.T) {
 			fixturePath := filepath.Join(opPath, fixtureName)
 			name := opName + "/" + fixtureName
 			t.Run(name, func(t *testing.T) {
-				runOpsFixture(t, fixturePath)
+				fn(t, fixturePath)
 			})
 			ran++
 		}
@@ -204,12 +205,7 @@ func TestConformance_OpsFixtures(t *testing.T) {
 func runOpsFixture(t *testing.T, fixturePath string) {
 	t.Helper()
 
-	for _, f := range []string{"input-binder.md", "project.json", "expected-diagnostics.json"} {
-		if _, err := os.Stat(filepath.Join(fixturePath, f)); err != nil {
-			t.Skipf("required file %q missing; skipping", f)
-			return
-		}
-	}
+	skipIfMissingFiles(t, fixturePath, []string{"input-binder.md", "project.json", "expected-diagnostics.json"})
 
 	inputBinderBytes, err := os.ReadFile(filepath.Join(fixturePath, "input-binder.md"))
 	if err != nil {
@@ -554,6 +550,20 @@ func readExpectedDiagnostics(t *testing.T, path string) []diagnosticItem {
 }
 
 // ---------------------------------------------------------------------------
+// Test helpers
+// ---------------------------------------------------------------------------
+
+// skipIfMissingFiles skips the test if any of the named files are absent from dir.
+func skipIfMissingFiles(t *testing.T, dir string, files []string) {
+	t.Helper()
+	for _, f := range files {
+		if _, err := os.Stat(filepath.Join(dir, f)); err != nil {
+			t.Skipf("required file %q missing; skipping", f)
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
 // Assertion helpers
 // ---------------------------------------------------------------------------
 
@@ -693,4 +703,143 @@ func copyFile(src, dst string) error {
 		return err
 	}
 	return os.WriteFile(dst, data, 0600)
+}
+
+// ---------------------------------------------------------------------------
+// Justfile integration checks (Phase G / runner-contract §6)
+// ---------------------------------------------------------------------------
+
+// TestConformance_JustfileConformanceRunTarget verifies that the justfile
+// contains the conformance-run recipe required by runner-contract.md §6
+// and plan.md Phase-G.
+func TestConformance_JustfileConformanceRunTarget(t *testing.T) {
+	data, err := os.ReadFile("../justfile")
+	if err != nil {
+		t.Fatalf("read justfile: %v", err)
+	}
+	if !bytes.Contains(data, []byte("conformance-run:")) {
+		t.Error("justfile is missing 'conformance-run:' target (required by Phase G / runner-contract §6)")
+	}
+}
+
+// TestConformance_JustfileTestAllIncludesConformance verifies that the
+// test-all recipe includes conformance-run, as required by plan.md Phase-G.
+func TestConformance_JustfileTestAllIncludesConformance(t *testing.T) {
+	data, err := os.ReadFile("../justfile")
+	if err != nil {
+		t.Fatalf("read justfile: %v", err)
+	}
+	for i, line := range strings.Split(string(data), "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "test-all:") {
+			if !strings.Contains(line, "conformance-run") {
+				t.Errorf("justfile test-all (line %d) does not include conformance-run: %q", i+1, line)
+			}
+			return
+		}
+	}
+	t.Error("justfile: no test-all recipe found")
+}
+
+// ---------------------------------------------------------------------------
+// Ops JSON output contract validation (runner-contract §3.5)
+// ---------------------------------------------------------------------------
+
+// TestConformance_OpsChangedField validates the `changed` field in ops JSON
+// output per runner-contract §3.5: changed must be true when the binder bytes
+// were modified and false when unchanged or aborted with an error.
+func TestConformance_OpsChangedField(t *testing.T) {
+	walkOpsFixtures(t, validateChangedField)
+}
+
+// validateChangedField runs a single ops fixture and asserts the `changed`
+// field in the JSON output correctly reflects whether the binder was mutated.
+func validateChangedField(t *testing.T, fixturePath string) {
+	t.Helper()
+
+	// Stability fixtures (no op.json) do not emit ops JSON; skip them here.
+	opJSONPath := filepath.Join(fixturePath, "op.json")
+	if _, err := os.Stat(opJSONPath); os.IsNotExist(err) {
+		t.Skip("stability fixture (no op.json); changed field not applicable")
+		return
+	}
+
+	skipIfMissingFiles(t, fixturePath, []string{"input-binder.md", "project.json", "expected-diagnostics.json"})
+
+	inputBinderBytes, err := os.ReadFile(filepath.Join(fixturePath, "input-binder.md"))
+	if err != nil {
+		t.Fatalf("read input-binder.md: %v", err)
+	}
+
+	tmpDir, err := os.MkdirTemp("", "pmk-ops-*")
+	if err != nil {
+		t.Fatalf("MkdirTemp: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	binderPath := filepath.Join(tmpDir, "_binder.md")
+	if err := os.WriteFile(binderPath, inputBinderBytes, 0600); err != nil {
+		t.Fatalf("write _binder.md: %v", err)
+	}
+	projectPath := filepath.Join(tmpDir, "project.json")
+	if err := copyFile(filepath.Join(fixturePath, "project.json"), projectPath); err != nil {
+		t.Fatalf("copyFile project.json: %v", err)
+	}
+
+	opRaw, err := os.ReadFile(opJSONPath)
+	if err != nil {
+		t.Fatalf("read op.json: %v", err)
+	}
+	var spec opSpec
+	if err := json.Unmarshal(opRaw, &spec); err != nil {
+		t.Fatalf("parse op.json: %v", err)
+	}
+
+	opArgs, err := buildOpArgs(spec)
+	if err != nil {
+		t.Fatalf("buildOpArgs: %v", err)
+	}
+
+	cmdArgs := append([]string{spec.Operation, "--json", binderPath, "--project", projectPath}, opArgs...)
+	cmd := exec.Command(pmkBinary, cmdArgs...)
+	stdout, runErr := cmd.Output()
+	var exitErr *exec.ExitError
+	isErrorExit := runErr != nil && errors.As(runErr, &exitErr)
+	if runErr != nil && !isErrorExit {
+		t.Fatalf("pmk %s: %v", spec.Operation, runErr)
+	}
+
+	if len(stdout) == 0 {
+		t.Errorf("ops command produced no stdout; expected JSON output per runner-contract §3.5")
+		return
+	}
+
+	var actual opsJSONOutput
+	if err := json.Unmarshal(stdout, &actual); err != nil {
+		t.Fatalf("unmarshal pmk %s stdout: %v\nstdout: %s", spec.Operation, err, stdout)
+	}
+
+	// Verify version field (runner-contract §3.5).
+	if actual.Version != "1" {
+		t.Errorf("ops output version must be %q, got %q", "1", actual.Version)
+	}
+
+	// Determine whether binder bytes actually changed after the operation.
+	actualBinderBytes, err := os.ReadFile(binderPath)
+	if err != nil {
+		t.Fatalf("read _binder.md after operation: %v", err)
+	}
+	binderWasModified := !bytes.Equal(inputBinderBytes, actualBinderBytes)
+
+	// changed field MUST match whether binder bytes were actually modified
+	// (runner-contract §3.5: "The `changed` field indicates whether the binder
+	// bytes were modified").
+	if actual.Changed != binderWasModified {
+		t.Errorf("changed field mismatch: JSON reports changed=%v but binder bytes changed=%v",
+			actual.Changed, binderWasModified)
+	}
+
+	// Abort check (runner-contract §4.6): error scenarios must not modify binder.
+	if isErrorExit && actual.Changed {
+		t.Errorf("error scenario (non-zero exit): changed must be false (abort check), got true")
+	}
 }
