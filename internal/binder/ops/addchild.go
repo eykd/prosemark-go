@@ -32,6 +32,11 @@ func AddChild(ctx context.Context, src []byte, project *binder.Project, params b
 		}), err
 	}
 
+	// Normalize wikilink bracket syntax: [[foo.md]] → foo.md
+	if strings.HasPrefix(params.Target, "[[") && strings.HasSuffix(params.Target, "]]") {
+		params.Target = params.Target[2 : len(params.Target)-2]
+	}
+
 	// Validate target path (OPE004, OPE005) before touching the selector.
 	if diag := validateOpTarget(params.Target); diag != nil {
 		return src, append(parseDiags, *diag), nil

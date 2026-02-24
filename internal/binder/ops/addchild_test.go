@@ -512,6 +512,17 @@ func TestAddChild_ErrorCodesAbortMutation(t *testing.T) {
 			wantCode: binder.CodeInvalidTargetPath,
 		},
 		{
+			name: "OPE004_wikilink_no_extension",
+			src:  binderSrc("- [Alpha](alpha.md)"),
+			params: binder.AddChildParams{
+				ParentSelector: ".",
+				Target:         "[[foo]]", // strips to "foo" which has no .md extension
+				Title:          "Foo",
+				Position:       "last",
+			},
+			wantCode: binder.CodeInvalidTargetPath,
+		},
+		{
 			name: "OPE005_target_is_binder",
 			src:  binderSrc("- [Alpha](alpha.md)"),
 			params: binder.AddChildParams{
@@ -773,6 +784,34 @@ func TestAddChild_OrderedList_InsertFirst_MaxOrdinalPlusOne(t *testing.T) {
 // ──────────────────────────────────────────────────────────────────────────────
 // Bracket-title round-trip (BUG 2 fix verification)
 // ──────────────────────────────────────────────────────────────────────────────
+
+// TestAddChild_WikilinkTarget_StripsAndInserts verifies that a target supplied
+// in wikilink bracket form ([[alpha.md]]) is normalized to alpha.md and
+// inserted correctly.
+func TestAddChild_WikilinkTarget_StripsAndInserts(t *testing.T) {
+	src := binderSrc("- [Alpha](alpha.md)")
+	params := binder.AddChildParams{
+		ParentSelector: ".",
+		Target:         "[[beta.md]]",
+		Title:          "Beta",
+		Position:       "last",
+	}
+
+	out, diags, err := AddChild(context.Background(), src, nil, params)
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if hasDiagCode(diags, "error") {
+		t.Errorf("unexpected error diagnostic: %v", diags)
+	}
+	if !bytes.Contains(out, []byte("(beta.md)")) {
+		t.Errorf("expected 'beta.md' (brackets stripped) in output:\n%s", out)
+	}
+	if bytes.Contains(out, []byte("[[beta.md]]")) {
+		t.Errorf("wikilink brackets must be stripped; still present in output:\n%s", out)
+	}
+}
 
 // TestAddChild_BracketTitleRoundTrip verifies that a title containing square
 // brackets survives the write→parse round-trip: AddChild escapes the brackets

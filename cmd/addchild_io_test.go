@@ -68,6 +68,30 @@ func TestFileAddChildIO_WriteBinderAtomicImpl(t *testing.T) {
 	}
 }
 
+func TestFileAddChildIO_WriteBinderAtomicImpl_RejectsReadOnlyFile(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("permission check bypassed as root")
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "_binder.md")
+	original := []byte("original content")
+	if err := os.WriteFile(path, original, 0444); err != nil {
+		t.Fatal(err)
+	}
+	fio := newDefaultAddChildIO()
+	err := fio.WriteBinderAtomic(context.Background(), path, []byte("new content"))
+	if err == nil {
+		t.Error("expected error writing to read-only file")
+	}
+	got, _ := os.ReadFile(path)
+	if !bytes.Equal(got, original) {
+		t.Error("original content must be unchanged after failed write")
+	}
+	if fi, _ := os.Stat(path); fi.Mode().Perm() != 0444 {
+		t.Error("file permissions must be unchanged after failed write")
+	}
+}
+
 func TestFileAddChildIO_WriteBinderAtomicImpl_LeavesOriginalOnError(t *testing.T) {
 	// Write to a path whose directory does not exist → write must fail, original untouched
 	path := filepath.Join(t.TempDir(), "nonexistent-dir", "_binder.md")
