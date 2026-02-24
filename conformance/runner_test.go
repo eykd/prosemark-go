@@ -709,14 +709,73 @@ func copyFile(src, dst string) error {
 // Justfile integration checks (Phase G / runner-contract §6)
 // ---------------------------------------------------------------------------
 
-// TestConformance_JustfileConformanceRunTarget verifies that the justfile
-// contains the conformance-run recipe required by runner-contract.md §6
-// and plan.md Phase-G.
-func TestConformance_JustfileConformanceRunTarget(t *testing.T) {
+// readJustfile reads ../justfile and fatals the test if the file cannot be read.
+func readJustfile(t *testing.T) []byte {
+	t.Helper()
 	data, err := os.ReadFile("../justfile")
 	if err != nil {
 		t.Fatalf("read justfile: %v", err)
 	}
+	return data
+}
+
+// TestConformance_JustfileConformanceRunHasTimeout verifies that the
+// conformance-run recipe includes -timeout=120s, as required by the
+// acceptance criteria for Phase G integration (task prosemark-go-48x.6.5.2).
+func TestConformance_JustfileConformanceRunHasTimeout(t *testing.T) {
+	data := readJustfile(t)
+	// Find the conformance-run recipe body and verify it includes -timeout=120s.
+	lines := strings.Split(string(data), "\n")
+	inConformanceRun := false
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "conformance-run:") {
+			inConformanceRun = true
+			continue
+		}
+		if inConformanceRun {
+			// Recipe body lines are indented; a non-indented line ends the recipe.
+			if len(line) > 0 && line[0] != ' ' && line[0] != '\t' {
+				break
+			}
+			if strings.Contains(trimmed, "go test") {
+				if !strings.Contains(trimmed, "-timeout=120s") {
+					t.Errorf("conformance-run recipe 'go test' invocation is missing -timeout=120s flag: %q", trimmed)
+				}
+				return
+			}
+		}
+	}
+	if !inConformanceRun {
+		t.Error("justfile: no conformance-run recipe found")
+	}
+}
+
+// TestConformance_JustfileConformanceRunDependsOnBuild verifies that the
+// conformance-run recipe declares build as a dependency, so that bin/pmk is
+// built before the conformance tests run (Phase G acceptance criteria).
+func TestConformance_JustfileConformanceRunDependsOnBuild(t *testing.T) {
+	data := readJustfile(t)
+	lines := strings.Split(string(data), "\n")
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "conformance-run:") {
+			// The dependency list follows the colon on the same line.
+			deps := strings.TrimPrefix(trimmed, "conformance-run:")
+			if !strings.Contains(deps, "build") {
+				t.Errorf("conformance-run recipe does not depend on build: %q (want 'conformance-run: build ...')", trimmed)
+			}
+			return
+		}
+	}
+	t.Error("justfile: no conformance-run recipe found")
+}
+
+// TestConformance_JustfileConformanceRunTarget verifies that the justfile
+// contains the conformance-run recipe required by runner-contract.md §6
+// and plan.md Phase-G.
+func TestConformance_JustfileConformanceRunTarget(t *testing.T) {
+	data := readJustfile(t)
 	if !bytes.Contains(data, []byte("conformance-run:")) {
 		t.Error("justfile is missing 'conformance-run:' target (required by Phase G / runner-contract §6)")
 	}
@@ -725,10 +784,7 @@ func TestConformance_JustfileConformanceRunTarget(t *testing.T) {
 // TestConformance_JustfileTestAllIncludesConformance verifies that the
 // test-all recipe includes conformance-run, as required by plan.md Phase-G.
 func TestConformance_JustfileTestAllIncludesConformance(t *testing.T) {
-	data, err := os.ReadFile("../justfile")
-	if err != nil {
-		t.Fatalf("read justfile: %v", err)
-	}
+	data := readJustfile(t)
 	for i, line := range strings.Split(string(data), "\n") {
 		if strings.HasPrefix(strings.TrimSpace(line), "test-all:") {
 			if !strings.Contains(line, "conformance-run") {
