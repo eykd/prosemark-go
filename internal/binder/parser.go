@@ -386,6 +386,8 @@ func resolveWikilink(rawStem, alias string, wikiIndex map[string][]wikilinkEntry
 	if idx := strings.Index(stem, "#"); idx >= 0 {
 		stem = stem[:idx]
 	}
+	// Strip .md extension if already present (e.g., [[foo.md]] → stem "foo").
+	stem = strings.TrimSuffix(stem, ".md")
 
 	// Fragment-only wikilink [[#heading]] → illegal (BNDE001).
 	if stem == "" {

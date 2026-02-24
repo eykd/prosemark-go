@@ -670,6 +670,24 @@ func TestParse_Wikilinks(t *testing.T) {
 			wantTarget: "subfolder/deep.md",
 			wantTitle:  "deep",
 		},
+		{
+			name:       "wikilink with .md extension resolves correctly",
+			src:        "<!-- prosemark-binder:v1 -->\n- [[chapter.md]]\n",
+			wantTarget: "chapter.md",
+			wantTitle:  "chapter",
+		},
+		{
+			name:       "wikilink with .md extension and alias uses alias as title",
+			src:        "<!-- prosemark-binder:v1 -->\n- [[chapter.md|My Chapter]]\n",
+			wantTarget: "chapter.md",
+			wantTitle:  "My Chapter",
+		},
+		{
+			name:       "wikilink with subfolder path and .md extension resolves correctly",
+			src:        "<!-- prosemark-binder:v1 -->\n- [[subfolder/deep.md]]\n",
+			wantTarget: "subfolder/deep.md",
+			wantTitle:  "deep",
+		},
 	}
 
 	for _, tt := range tests {
