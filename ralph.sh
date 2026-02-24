@@ -20,7 +20,7 @@ readonly MAX_RETRIES=10
 readonly MAX_RETRY_DELAY=300  # 5 minutes cap
 
 # Claude CLI timeout
-readonly CLAUDE_TIMEOUT=1800  # 30 minutes max per invocation
+readonly CLAUDE_TIMEOUT=3600  # 60 minutes max per invocation
 
 # TDD cycle configuration
 readonly TDD_STEP_RETRIES=3        # retries per step (semantic failures)
@@ -525,7 +525,7 @@ find_epic_id() {
     local feature_name="$1"
     local epics_json
 
-    epics_json=$(npx bd list --type feature --status open --json 2>/dev/null) || {
+    epics_json=$(npx bd list --type epic --status open --json 2>/dev/null) || {
         echo "Error: Failed to query beads for epics" >&2
         return 1
     }
@@ -554,7 +554,7 @@ validate_epic_exists() {
     log DEBUG "Validating epic: $epic_id"
 
     # Query beads for this epic ID
-    epic_data=$(npx bd list --type feature --json 2>/dev/null | \
+    epic_data=$(npx bd list --type epic --json 2>/dev/null | \
         jq -r --arg id "$epic_id" '.[] | select(.id == $id)') || {
         log ERROR "Failed to query beads for epics"
         return 1
@@ -1944,6 +1944,122 @@ run_acceptance_check() {
     return 0
 }
 
+# Drive the ATDD cycle for each implementation subtask under the
+# [sp:07-implement] container, rather than delegating to the skill
+# as a single monolithic call.
+# Arguments: implement_task_id, epic_id
+# Returns 0 when all subtasks complete, 1 on failure/blocked
+execute_implement_phase() {
+    local implement_task_id="$1"
+    local epic_id="$2"
+    local iteration=0
+
+    log_section "IMPLEMENT PHASE: running ATDD loop for subtasks of $implement_task_id"
+
+    if [[ "$DRY_RUN" == "true" ]]; then
+        log INFO "[DRY RUN] Would run ATDD loop for subtasks of $implement_task_id"
+        return "$EXIT_SUCCESS"
+    fi
+
+    while (( iteration < MAX_ITERATIONS )); do
+        (( iteration++ ))
+        log INFO "Implement iteration $iteration/$MAX_ITERATIONS"
+
+        # Query ready leaf tasks scoped to the implement container
+        local ready_tasks task_count
+        ready_tasks=$(get_ready_tasks "$implement_task_id") || {
+            log ERROR "Failed to query ready tasks under $implement_task_id"
+            return "$EXIT_FAILURE"
+        }
+        task_count=$(echo "$ready_tasks" | jq 'length')
+
+        if [[ "$task_count" -eq 0 ]]; then
+            # No ready tasks — check if all children are already closed
+            local open_count
+            open_count=$(npx bd list --parent "$implement_task_id" --status open \
+                --json 2>/dev/null | jq 'length // 0')
+
+            if [[ "$open_count" == "0" ]]; then
+                log INFO "All implementation tasks complete — closing $implement_task_id"
+                npx bd close "$implement_task_id" 2>/dev/null || true
+                return "$EXIT_SUCCESS"
+            else
+                log WARN "Implement phase has $open_count open task(s) but none ready (blocked)"
+                return "$EXIT_FAILURE"
+            fi
+        fi
+
+        local next_task sub_task_id sub_title
+        next_task=$(echo "$ready_tasks" | jq '.[0]')
+        sub_task_id=$(echo "$next_task" | jq -r '.id // "unknown"')
+        sub_title=$(echo "$next_task"  | jq -r '.title // "unknown"')
+        log INFO "Processing: $sub_task_id | $sub_title"
+
+        if execute_atdd_cycle "$next_task" "$implement_task_id"; then
+            log INFO "Implementation task $sub_task_id completed"
+            auto_close_completed_parents "$sub_task_id" "$implement_task_id"
+        else
+            log WARN "Implementation task $sub_task_id blocked — continuing to next"
+        fi
+    done
+
+    log WARN "Implement phase exhausted $MAX_ITERATIONS iterations"
+    return "$EXIT_LIMIT_REACHED"
+}
+
+# Execute a spec-kit phase task by invoking its corresponding skill.
+# Arguments: task_json, epic_id
+# Returns 0 on success (task complete), 1 on failure (BLOCKED)
+execute_spec_kit_phase_task() {
+    local task_json="$1"
+    local epic_id="$2"
+    local task_id task_title task_description phase_name
+
+    task_id=$(echo "$task_json" | jq -r '.id // "unknown"')
+    task_title=$(echo "$task_json" | jq -r '.title // "unknown"')
+    task_description=$(echo "$task_json" | jq -r '.description // "no description"')
+
+    # Extract phase skill name: "[sp:04-red-team] ..." → "sp:04-red-team"
+    phase_name=$(echo "$task_title" | grep -oP '(?<=\[)sp:[^\]]+(?=\])' | head -1 || true)
+
+    if [[ -z "$phase_name" ]]; then
+        log ERROR "Could not extract phase name from task title: $task_title"
+        return "$EXIT_FAILURE"
+    fi
+
+    # sp:07-implement drives the ATDD loop for each implementation subtask
+    # rather than invoking the skill as a monolithic call.
+    if [[ "$phase_name" == "sp:07-implement" ]]; then
+        execute_implement_phase "$task_id" "$epic_id"
+        return $?
+    fi
+
+    log_section "SPEC-KIT PHASE: $phase_name for $task_id"
+    log INFO "Invoking /$phase_name skill"
+
+    if [[ "$DRY_RUN" == "true" ]]; then
+        log INFO "[DRY RUN] Would invoke /$phase_name with task context"
+        return "$EXIT_SUCCESS"
+    fi
+
+    local prompt
+    prompt="/$phase_name
+
+Task: $task_title
+Task ID: $task_id
+
+$task_description"
+
+    if invoke_claude_with_retry "$prompt"; then
+        log INFO "Spec-kit phase $phase_name completed successfully"
+        bd close "$task_id" 2>/dev/null || true
+        return "$EXIT_SUCCESS"
+    else
+        log ERROR "Spec-kit phase $phase_name failed"
+        return "$EXIT_FAILURE"
+    fi
+}
+
 # Execute ATDD cycle: outer acceptance loop wrapping inner TDD cycles.
 # Tasks with matching spec files get the full ATDD treatment.
 # Tasks without specs fall back to execute_unit_tdd_cycle.
@@ -1957,6 +2073,14 @@ execute_atdd_cycle() {
 
     task_id=$(echo "$task_json" | jq -r '.id // "unknown"')
     task_title=$(echo "$task_json" | jq -r '.title // "unknown"')
+
+    # Spec-kit phase tasks invoke their skill directly — no TDD cycle
+    local phase_name
+    phase_name=$(echo "$task_title" | grep -oP '(?<=\[)sp:[^\]]+(?=\])' | head -1 || true)
+    if [[ -n "$phase_name" ]]; then
+        execute_spec_kit_phase_task "$task_json" "$epic_id"
+        return $?
+    fi
 
     # Try to find a matching spec file
     if ! spec_file=$(find_spec_for_task "$task_json"); then

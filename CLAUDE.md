@@ -94,8 +94,15 @@ Pipeline CLI: `go run ./acceptance/cmd/pipeline -action=<parse|generate|run>`
 ## Active Technologies
 - Go 1.25 + Cobra (CLI framework)
 - Additional dependencies will expand as features are implemented
+- Go 1.25 + cobra v1.10.2, spf13/pflag v1.0.9 (no new external dependencies needed) (001-prosemark-binder)
+- Files (`_binder.md` read/written in-place; `project.json` read-only) (001-prosemark-binder)
 
 
 ---
 
-Always use subagents liberally and aggressively to conserve the main context window.
+## Subagent Usage
+
+Always use subagents liberally and aggressively to conserve the main context window. Delegate research, exploration, and parallelizable work to subagents rather than doing it inline. This keeps the main context clean and allows more work to be done in parallel.
+
+## Recent Changes
+- 001-prosemark-binder: Added Go 1.25 + cobra v1.10.2, spf13/pflag v1.0.9 (no new external dependencies needed)
