@@ -535,6 +535,228 @@ func TestMove_MultiMatch_OPW001_AllMoved(t *testing.T) {
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
+// Positioning: --at, --before, --after, OPE008, OPE007
+// ──────────────────────────────────────────────────────────────────────────────
+
+// TestMove_At_InsertAtIndex verifies that --at=N inserts the source node at the
+// correct position among the destination's children.
+func TestMove_At_InsertAtIndex(t *testing.T) {
+	// ch1, ch2, ch3 at root; move ch3 to position 1 (between ch1 and ch2).
+	src := []byte("<!-- prosemark-binder:v1 -->\n\n" +
+		"- [Chapter One](ch1.md)\n" +
+		"- [Chapter Two](ch2.md)\n" +
+		"- [Chapter Three](ch3.md)\n")
+	at := 1
+	params := binder.MoveParams{
+		SourceSelector:            "ch3.md",
+		DestinationParentSelector: ".",
+		At:                        &at,
+		Yes:                       true,
+	}
+
+	out, diags, err := Move(context.Background(), src, nil, params)
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if hasDiagCode(diags, "error") {
+		t.Errorf("unexpected error diagnostic: %v", diags)
+	}
+	// ch3.md must appear between ch1.md and ch2.md.
+	ch1Pos := bytes.Index(out, []byte("ch1.md"))
+	ch3Pos := bytes.Index(out, []byte("ch3.md"))
+	ch2Pos := bytes.Index(out, []byte("ch2.md"))
+	if ch1Pos < 0 || ch2Pos < 0 || ch3Pos < 0 {
+		t.Fatalf("expected all nodes in output:\n%s", out)
+	}
+	if !(ch1Pos < ch3Pos && ch3Pos < ch2Pos) {
+		t.Errorf("expected order ch1, ch3, ch2 but got positions %d, %d, %d:\n%s",
+			ch1Pos, ch3Pos, ch2Pos, out)
+	}
+}
+
+// TestMove_At_OutOfBounds_OPE008 verifies that --at=N where N > len(children)
+// returns OPE008 and leaves source bytes unchanged.
+func TestMove_At_OutOfBounds_OPE008(t *testing.T) {
+	src := []byte("<!-- prosemark-binder:v1 -->\n\n" +
+		"- [Chapter One](ch1.md)\n" +
+		"- [Chapter Two](ch2.md)\n" +
+		"- [Chapter Three](ch3.md)\n")
+	at := 99
+	params := binder.MoveParams{
+		SourceSelector:            "ch3.md",
+		DestinationParentSelector: ".",
+		At:                        &at,
+		Yes:                       true,
+	}
+
+	out, diags, err := Move(context.Background(), src, nil, params)
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !hasDiagCode(diags, binder.CodeIndexOutOfBounds) {
+		t.Errorf("expected OPE008 for out-of-bounds --at, got: %v", diags)
+	}
+	if !bytes.Equal(out, src) {
+		t.Error("source bytes must be unchanged on OPE008 abort")
+	}
+}
+
+// TestMove_Before_InsertBeforeSibling verifies that --before=X inserts the
+// source node immediately before sibling X in the destination's children.
+func TestMove_Before_InsertBeforeSibling(t *testing.T) {
+	// ch1, ch2, ch3 at root; move ch3 before ch2 → ch1, ch3, ch2.
+	src := []byte("<!-- prosemark-binder:v1 -->\n\n" +
+		"- [Chapter One](ch1.md)\n" +
+		"- [Chapter Two](ch2.md)\n" +
+		"- [Chapter Three](ch3.md)\n")
+	params := binder.MoveParams{
+		SourceSelector:            "ch3.md",
+		DestinationParentSelector: ".",
+		Before:                    "ch2",
+		Yes:                       true,
+	}
+
+	out, diags, err := Move(context.Background(), src, nil, params)
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if hasDiagCode(diags, "error") {
+		t.Errorf("unexpected error diagnostic: %v", diags)
+	}
+	ch1Pos := bytes.Index(out, []byte("ch1.md"))
+	ch3Pos := bytes.Index(out, []byte("ch3.md"))
+	ch2Pos := bytes.Index(out, []byte("ch2.md"))
+	if ch1Pos < 0 || ch2Pos < 0 || ch3Pos < 0 {
+		t.Fatalf("expected all nodes in output:\n%s", out)
+	}
+	if !(ch1Pos < ch3Pos && ch3Pos < ch2Pos) {
+		t.Errorf("expected order ch1, ch3, ch2 but got positions %d, %d, %d:\n%s",
+			ch1Pos, ch3Pos, ch2Pos, out)
+	}
+}
+
+// TestMove_Before_SiblingNotFound_OPE007 verifies that --before=X where X
+// doesn't exist among the destination's children returns OPE007.
+func TestMove_Before_SiblingNotFound_OPE007(t *testing.T) {
+	src := []byte("<!-- prosemark-binder:v1 -->\n\n" +
+		"- [Chapter One](ch1.md)\n" +
+		"- [Chapter Two](ch2.md)\n")
+	params := binder.MoveParams{
+		SourceSelector:            "ch1.md",
+		DestinationParentSelector: ".",
+		Before:                    "nonexistent",
+		Yes:                       true,
+	}
+
+	out, diags, _ := Move(context.Background(), src, nil, params)
+
+	if !hasDiagCode(diags, binder.CodeSiblingNotFound) {
+		t.Errorf("expected OPE007 for missing before-sibling, got: %v", diags)
+	}
+	if !bytes.Equal(out, src) {
+		t.Error("source bytes must be unchanged on OPE007 abort")
+	}
+}
+
+// TestMove_After_InsertAfterSibling verifies that --after=X inserts the source
+// node immediately after sibling X in the destination's children.
+func TestMove_After_InsertAfterSibling(t *testing.T) {
+	// ch1, ch2, ch3 at root; move ch1 after ch2 → ch2, ch1, ch3.
+	src := []byte("<!-- prosemark-binder:v1 -->\n\n" +
+		"- [Chapter One](ch1.md)\n" +
+		"- [Chapter Two](ch2.md)\n" +
+		"- [Chapter Three](ch3.md)\n")
+	params := binder.MoveParams{
+		SourceSelector:            "ch1.md",
+		DestinationParentSelector: ".",
+		After:                     "ch2",
+		Yes:                       true,
+	}
+
+	out, diags, err := Move(context.Background(), src, nil, params)
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if hasDiagCode(diags, "error") {
+		t.Errorf("unexpected error diagnostic: %v", diags)
+	}
+	ch2Pos := bytes.Index(out, []byte("ch2.md"))
+	ch1Pos := bytes.Index(out, []byte("ch1.md"))
+	ch3Pos := bytes.Index(out, []byte("ch3.md"))
+	if ch1Pos < 0 || ch2Pos < 0 || ch3Pos < 0 {
+		t.Fatalf("expected all nodes in output:\n%s", out)
+	}
+	if !(ch2Pos < ch1Pos && ch1Pos < ch3Pos) {
+		t.Errorf("expected order ch2, ch1, ch3 but got positions %d, %d, %d:\n%s",
+			ch2Pos, ch1Pos, ch3Pos, out)
+	}
+}
+
+// TestMove_After_LastSibling verifies that --after=<last-child> inserts the
+// source node at the end of the destination's children (after the last one).
+// This exercises the ri >= len(remaining) branch in moveresolveInsertionIndex.
+func TestMove_After_LastSibling(t *testing.T) {
+	// ch1, ch2, ch3, ch4 at root; move ch1 after ch4 → ch2, ch3, ch4, ch1.
+	src := []byte("<!-- prosemark-binder:v1 -->\n\n" +
+		"- [Chapter One](ch1.md)\n" +
+		"- [Chapter Two](ch2.md)\n" +
+		"- [Chapter Three](ch3.md)\n" +
+		"- [Chapter Four](ch4.md)\n")
+	params := binder.MoveParams{
+		SourceSelector:            "ch1.md",
+		DestinationParentSelector: ".",
+		After:                     "ch4",
+		Yes:                       true,
+	}
+
+	out, diags, err := Move(context.Background(), src, nil, params)
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if hasDiagCode(diags, "error") {
+		t.Errorf("unexpected error diagnostic: %v", diags)
+	}
+	// ch1 must appear after ch4 (at the end).
+	ch4Pos := bytes.Index(out, []byte("ch4.md"))
+	ch1Pos := bytes.Index(out, []byte("ch1.md"))
+	if ch4Pos < 0 || ch1Pos < 0 {
+		t.Fatalf("expected all nodes in output:\n%s", out)
+	}
+	if ch4Pos >= ch1Pos {
+		t.Errorf("expected ch4 before ch1 (after-last), got positions ch4=%d ch1=%d:\n%s",
+			ch4Pos, ch1Pos, out)
+	}
+}
+
+// TestMove_After_SiblingNotFound_OPE007 verifies that --after=X where X
+// doesn't exist among the destination's children returns OPE007.
+func TestMove_After_SiblingNotFound_OPE007(t *testing.T) {
+	src := []byte("<!-- prosemark-binder:v1 -->\n\n" +
+		"- [Chapter One](ch1.md)\n" +
+		"- [Chapter Two](ch2.md)\n")
+	params := binder.MoveParams{
+		SourceSelector:            "ch1.md",
+		DestinationParentSelector: ".",
+		After:                     "nonexistent",
+		Yes:                       true,
+	}
+
+	out, diags, _ := Move(context.Background(), src, nil, params)
+
+	if !hasDiagCode(diags, binder.CodeSiblingNotFound) {
+		t.Errorf("expected OPE007 for missing after-sibling, got: %v", diags)
+	}
+	if !bytes.Equal(out, src) {
+		t.Error("source bytes must be unchanged on OPE007 abort")
+	}
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
 // Parse error path (OPE009) via moveParseBinderFn mock
 // ──────────────────────────────────────────────────────────────────────────────
 

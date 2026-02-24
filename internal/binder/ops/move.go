@@ -94,21 +94,93 @@ func Move(ctx context.Context, src []byte, project *binder.Project, params binde
 		})
 	}
 
-	var moveInsertIdx int
-	if params.Position == "first" {
-		moveInsertIdx = 0
-	} else {
-		moveInsertIdx = len(destNode.Children)
+	// Resolve the insertion index among destNode's children (excluding sourceNodes).
+	// We build a view of destNode's children after the source nodes are removed,
+	// because that's what the user sees when specifying --before/--after/--at.
+	moveInsertIdx, diagErr := moveresolveInsertionIndex(destNode, sourceNodes, params)
+	if diagErr != nil {
+		return src, append(allDiags, *diagErr), nil
 	}
 	targetIndentStr, targetMarker := inferMarkerAndIndent(destNode, moveInsertIdx)
-	return moveRebuildDocument(result, sourceNodes, destNode, params.Position, targetIndentStr, targetMarker), allDiags, nil
+	return moveRebuildDocument(result, sourceNodes, destNode, moveInsertIdx, targetIndentStr, targetMarker), allDiags, nil
+}
+
+// moveresolveInsertionIndex returns the 0-based index in destNode.Children at
+// which to insert the moved nodes. The sourceNodes are excluded from the child
+// list when evaluating --before/--after/--at positions (because they will be
+// removed before insertion). Returns an error diagnostic on invalid input.
+func moveresolveInsertionIndex(destNode *binder.Node, sourceNodes []*binder.Node, params binder.MoveParams) (int, *binder.Diagnostic) {
+	// Build the post-removal child list and a parallel slice of their full indices.
+	sourceSet := make(map[*binder.Node]bool, len(sourceNodes))
+	for _, s := range sourceNodes {
+		sourceSet[s] = true
+	}
+	remaining := make([]*binder.Node, 0, len(destNode.Children))
+	remainingFullIdx := make([]int, 0, len(destNode.Children))
+	for i, child := range destNode.Children {
+		if !sourceSet[child] {
+			remaining = append(remaining, child)
+			remainingFullIdx = append(remainingFullIdx, i)
+		}
+	}
+	n := len(remaining)
+
+	// toFullIdx maps a post-removal index to a full-children index for insertionLineIdx.
+	toFullIdx := func(ri int) int {
+		if ri >= len(remaining) {
+			return len(destNode.Children)
+		}
+		return remainingFullIdx[ri]
+	}
+
+	if params.At != nil {
+		idx := *params.At
+		if idx < 0 || idx > n {
+			return 0, &binder.Diagnostic{
+				Severity: "error",
+				Code:     binder.CodeIndexOutOfBounds,
+				Message:  fmt.Sprintf("at index %d out of bounds: %d children", idx, n),
+			}
+		}
+		return toFullIdx(idx), nil
+	}
+
+	if params.Before != "" {
+		i := findSiblingIndex(remaining, params.Before)
+		if i < 0 {
+			return 0, &binder.Diagnostic{
+				Severity: "error",
+				Code:     binder.CodeSiblingNotFound,
+				Message:  fmt.Sprintf("before-sibling %q not found", params.Before),
+			}
+		}
+		return toFullIdx(i), nil
+	}
+
+	if params.After != "" {
+		i := findSiblingIndex(remaining, params.After)
+		if i < 0 {
+			return 0, &binder.Diagnostic{
+				Severity: "error",
+				Code:     binder.CodeSiblingNotFound,
+				Message:  fmt.Sprintf("after-sibling %q not found", params.After),
+			}
+		}
+		return toFullIdx(i + 1), nil
+	}
+
+	if params.Position == "first" {
+		return 0, nil
+	}
+
+	return len(destNode.Children), nil
 }
 
 // moveRebuildDocument removes sourceNodes from their current positions,
 // re-indents them to match targetIndentStr (and replaces their list marker
-// with targetMarker), and inserts them under destNode at the given position
-// ("first" or "last"). Returns the serialized result.
-func moveRebuildDocument(result *binder.ParseResult, sourceNodes []*binder.Node, destNode *binder.Node, position, targetIndentStr, targetMarker string) []byte {
+// with targetMarker), and inserts them under destNode at insertIdx (0-based
+// index into destNode.Children). Returns the serialized result.
+func moveRebuildDocument(result *binder.ParseResult, sourceNodes []*binder.Node, destNode *binder.Node, insertIdx int, targetIndentStr, targetMarker string) []byte {
 	// Collect re-indented lines and mark source indices for removal.
 	var movedLines []string
 	var movedLineEnds []string
@@ -133,22 +205,17 @@ func moveRebuildDocument(result *binder.ParseResult, sourceNodes []*binder.Node,
 		}
 	}
 
-	// Determine raw insertion index in the original document.
-	var insertIdx int
-	if position == "first" {
-		insertIdx = insertionLineIdx(destNode, 0, result)
-	} else {
-		insertIdx = insertionLineIdx(destNode, len(destNode.Children), result)
-	}
+	// Determine raw insertion line index in the original document.
+	lineInsertIdx := insertionLineIdx(destNode, insertIdx, result)
 
-	// Count source lines before insertIdx to compute the adjusted insert position.
+	// Count source lines before lineInsertIdx to compute the adjusted insert position.
 	removedBefore := 0
 	for idx := range skipSet {
-		if idx < insertIdx {
+		if idx < lineInsertIdx {
 			removedBefore++
 		}
 	}
-	adjustedInsertIdx := insertIdx - removedBefore
+	adjustedInsertIdx := lineInsertIdx - removedBefore
 
 	// Build the new document.
 	newLines := make([]string, 0, len(result.Lines)+len(movedLines))
