@@ -46,7 +46,7 @@ func delBinder() []byte {
 
 func TestNewDeleteCmd_HasRequiredFlags(t *testing.T) {
 	c := NewDeleteCmd(nil)
-	required := []string{"selector", "yes", "json"}
+	required := []string{"project", "selector", "yes", "json"}
 	for _, name := range required {
 		name := name
 		t.Run(name, func(t *testing.T) {
@@ -57,40 +57,46 @@ func TestNewDeleteCmd_HasRequiredFlags(t *testing.T) {
 	}
 }
 
-func TestNewDeleteCmd_RejectsNon_binderMdFilename(t *testing.T) {
-	tests := []struct {
-		name       string
-		binderPath string
-		wantErr    bool
-	}{
-		{"valid _binder.md", "_binder.md", false},
-		{"valid nested path", "project/_binder.md", false},
-		{"invalid notes.md", "notes.md", true},
-		{"invalid binder.md without underscore", "binder.md", true},
-		{"invalid README.md", "README.md", true},
+func TestNewDeleteCmd_DefaultsToCWD(t *testing.T) {
+	mock := &mockDeleteIO{
+		binderBytes: delBinder(),
+		project:     &binder.Project{Files: []string{"chapter-one.md"}, BinderDir: "."},
 	}
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			mock := &mockDeleteIO{
-				binderBytes: delBinder(),
-				project:     &binder.Project{Files: []string{"chapter-one.md"}, BinderDir: "."},
-			}
-			c := NewDeleteCmd(mock)
-			out := new(bytes.Buffer)
-			errOut := new(bytes.Buffer)
-			c.SetOut(out)
-			c.SetErr(errOut)
-			c.SetArgs([]string{"--selector", "chapter-one.md", "--yes", tt.binderPath})
+	c := NewDeleteCmd(mock)
+	out := new(bytes.Buffer)
+	c.SetOut(out)
+	c.SetArgs([]string{"--selector", "chapter-one.md", "--yes"})
 
-			err := c.Execute()
-			if (err != nil) != tt.wantErr {
-				t.Errorf("Execute() error = %v, wantErr %v", err, tt.wantErr)
-			}
-			if tt.wantErr && out.Len() > 0 {
-				t.Errorf("expected no stdout output on filename validation error, got: %s", out.String())
-			}
-		})
+	if err := c.Execute(); err != nil {
+		t.Fatalf("expected success with no --project (CWD default): %v", err)
+	}
+}
+
+func TestNewDeleteCmd_AcceptsProjectFlag(t *testing.T) {
+	mock := &mockDeleteIO{
+		binderBytes: delBinder(),
+		project:     &binder.Project{Files: []string{"chapter-one.md"}, BinderDir: "."},
+	}
+	c := NewDeleteCmd(mock)
+	out := new(bytes.Buffer)
+	c.SetOut(out)
+	c.SetArgs([]string{"--selector", "chapter-one.md", "--yes", "--project", "/some/dir"})
+
+	if err := c.Execute(); err != nil {
+		t.Fatalf("expected success with --project flag: %v", err)
+	}
+}
+
+func TestNewDeleteCmd_GetCWDError(t *testing.T) {
+	mock := &mockDeleteIO{binderBytes: delBinder()}
+	c := newDeleteCmdWithGetCWD(mock, func() (string, error) {
+		return "", errors.New("getwd failed")
+	})
+	c.SetOut(new(bytes.Buffer))
+	c.SetArgs([]string{"--selector", "chapter-one.md", "--yes"})
+
+	if err := c.Execute(); err == nil {
+		t.Error("expected error when getwd fails")
 	}
 }
 
@@ -102,7 +108,7 @@ func TestNewDeleteCmd_PrintsConfirmationOnSuccess(t *testing.T) {
 	c := NewDeleteCmd(mock)
 	out := new(bytes.Buffer)
 	c.SetOut(out)
-	c.SetArgs([]string{"--selector", "chapter-one.md", "--yes", "_binder.md"})
+	c.SetArgs([]string{"--selector", "chapter-one.md", "--yes", "--project", "."})
 
 	if err := c.Execute(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -120,7 +126,7 @@ func TestNewDeleteCmd_WritesModifiedBinderOnChange(t *testing.T) {
 	}
 	c := NewDeleteCmd(mock)
 	c.SetOut(new(bytes.Buffer))
-	c.SetArgs([]string{"--selector", "chapter-one.md", "--yes", "_binder.md"})
+	c.SetArgs([]string{"--selector", "chapter-one.md", "--yes", "--project", "."})
 
 	if err := c.Execute(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -139,7 +145,7 @@ func TestNewDeleteCmd_ReadBinderError(t *testing.T) {
 	c := NewDeleteCmd(mock)
 	out := new(bytes.Buffer)
 	c.SetOut(out)
-	c.SetArgs([]string{"--selector", "chapter-one.md", "--yes", "_binder.md"})
+	c.SetArgs([]string{"--selector", "chapter-one.md", "--yes", "--project", "."})
 
 	if err := c.Execute(); err == nil {
 		t.Error("expected error when ReadBinder fails")
@@ -156,7 +162,7 @@ func TestNewDeleteCmd_ScanProjectError(t *testing.T) {
 	}
 	c := NewDeleteCmd(mock)
 	c.SetOut(new(bytes.Buffer))
-	c.SetArgs([]string{"--selector", "chapter-one.md", "--yes", "_binder.md"})
+	c.SetArgs([]string{"--selector", "chapter-one.md", "--yes", "--project", "."})
 
 	if err := c.Execute(); err == nil {
 		t.Error("expected error when ScanProject fails")
@@ -171,7 +177,7 @@ func TestNewDeleteCmd_WriteError(t *testing.T) {
 	}
 	c := NewDeleteCmd(mock)
 	c.SetOut(new(bytes.Buffer))
-	c.SetArgs([]string{"--selector", "chapter-one.md", "--yes", "_binder.md"})
+	c.SetArgs([]string{"--selector", "chapter-one.md", "--yes", "--project", "."})
 
 	if err := c.Execute(); err == nil {
 		t.Error("expected error when WriteBinderAtomic fails")
@@ -188,7 +194,7 @@ func TestNewDeleteCmd_ExitsNonZeroOnOpErrors(t *testing.T) {
 	errOut := new(bytes.Buffer)
 	c.SetOut(out)
 	c.SetErr(errOut)
-	c.SetArgs([]string{"--selector", "nonexistent.md", "--yes", "_binder.md"})
+	c.SetArgs([]string{"--selector", "nonexistent.md", "--yes", "--project", "."})
 
 	err := c.Execute()
 	if err == nil {
@@ -217,7 +223,7 @@ func TestNewDeleteCmd_MissingYesFlagReturnsError(t *testing.T) {
 	errOut := new(bytes.Buffer)
 	c.SetOut(out)
 	c.SetErr(errOut)
-	c.SetArgs([]string{"--selector", "chapter-one.md", "_binder.md"})
+	c.SetArgs([]string{"--selector", "chapter-one.md", "--project", "."})
 
 	if err := c.Execute(); err == nil {
 		t.Error("expected error when --yes flag is missing (OPE009)")
@@ -236,7 +242,7 @@ func TestNewDeleteCmd_WriteSuccessMessageError(t *testing.T) {
 	}
 	c := NewDeleteCmd(mock)
 	c.SetOut(&errWriter{err: errors.New("write error")})
-	c.SetArgs([]string{"--selector", "chapter-one.md", "--yes", "_binder.md"})
+	c.SetArgs([]string{"--selector", "chapter-one.md", "--yes", "--project", "."})
 
 	if err := c.Execute(); err == nil {
 		t.Error("expected error when writing success message fails")
@@ -251,7 +257,7 @@ func TestNewDeleteCmd_OutputsOpResultJSONOnSuccess(t *testing.T) {
 	c := NewDeleteCmd(mock)
 	out := new(bytes.Buffer)
 	c.SetOut(out)
-	c.SetArgs([]string{"--selector", "chapter-one.md", "--yes", "--json", "_binder.md"})
+	c.SetArgs([]string{"--selector", "chapter-one.md", "--yes", "--json", "--project", "."})
 
 	if err := c.Execute(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -276,7 +282,7 @@ func TestNewDeleteCmd_JSONEncodeError(t *testing.T) {
 	}
 	c := NewDeleteCmd(mock)
 	c.SetOut(&errWriter{err: errors.New("write error")})
-	c.SetArgs([]string{"--selector", "chapter-one.md", "--yes", "--json", "_binder.md"})
+	c.SetArgs([]string{"--selector", "chapter-one.md", "--yes", "--json", "--project", "."})
 
 	if err := c.Execute(); err == nil {
 		t.Error("expected error when JSON encoding fails")
@@ -291,7 +297,7 @@ func TestNewDeleteCmd_ScanProjectErrorWithJSON(t *testing.T) {
 	c := NewDeleteCmd(mock)
 	out := new(bytes.Buffer)
 	c.SetOut(out)
-	c.SetArgs([]string{"--selector", "chapter-one.md", "--yes", "--json", "_binder.md"})
+	c.SetArgs([]string{"--selector", "chapter-one.md", "--yes", "--json", "--project", "."})
 
 	if err := c.Execute(); err == nil {
 		t.Error("expected error when ScanProject fails")

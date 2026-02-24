@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"errors"
+	"path/filepath"
 	"testing"
 )
 
@@ -27,5 +29,34 @@ func TestBuildCommandTree_AllCommandsHandleNilService(t *testing.T) {
 				t.Errorf("command %q has nil RunE; must wire RunE for error visibility", c.Name())
 			}
 		})
+	}
+}
+
+func TestResolveBinderPath_UsesProjectWhenSet(t *testing.T) {
+	got, err := resolveBinderPath("/my/project", nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := filepath.Join("/my/project", "_binder.md")
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestResolveBinderPath_UsesCWDWhenProjectEmpty(t *testing.T) {
+	got, err := resolveBinderPath("", func() (string, error) { return "/cwd", nil })
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := filepath.Join("/cwd", "_binder.md")
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestResolveBinderPath_ReturnsErrorWhenGetCWDFails(t *testing.T) {
+	_, err := resolveBinderPath("", func() (string, error) { return "", errors.New("getwd failed") })
+	if err == nil {
+		t.Error("expected error when getwd fails")
 	}
 }

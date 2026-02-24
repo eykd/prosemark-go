@@ -46,7 +46,7 @@ func acBinder() []byte {
 
 func TestNewAddChildCmd_HasRequiredFlags(t *testing.T) {
 	c := NewAddChildCmd(nil)
-	required := []string{"parent", "target", "title", "first", "at", "before", "after", "force", "json"}
+	required := []string{"project", "parent", "target", "title", "first", "at", "before", "after", "force", "json"}
 	for _, name := range required {
 		name := name
 		t.Run(name, func(t *testing.T) {
@@ -57,40 +57,47 @@ func TestNewAddChildCmd_HasRequiredFlags(t *testing.T) {
 	}
 }
 
-func TestNewAddChildCmd_RejectsNon_binderMdFilename(t *testing.T) {
-	tests := []struct {
-		name       string
-		binderPath string
-		wantErr    bool
-	}{
-		{"valid _binder.md", "_binder.md", false},
-		{"valid nested path", "project/_binder.md", false},
-		{"invalid notes.md", "notes.md", true},
-		{"invalid binder.md without underscore", "binder.md", true},
-		{"invalid README.md", "README.md", true},
+func TestNewAddChildCmd_DefaultsToCWD(t *testing.T) {
+	// When no --project flag is given, command resolves path from CWD.
+	mock := &mockAddChildIO{
+		binderBytes: acBinder(),
+		project:     &binder.Project{Files: []string{"chapter-two.md"}, BinderDir: "."},
 	}
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			mock := &mockAddChildIO{
-				binderBytes: acBinder(),
-				project:     &binder.Project{Files: []string{"chapter-two.md"}, BinderDir: "."},
-			}
-			c := NewAddChildCmd(mock)
-			out := new(bytes.Buffer)
-			errOut := new(bytes.Buffer)
-			c.SetOut(out)
-			c.SetErr(errOut)
-			c.SetArgs([]string{"--parent", ".", "--target", "chapter-two.md", tt.binderPath})
+	c := NewAddChildCmd(mock)
+	out := new(bytes.Buffer)
+	c.SetOut(out)
+	c.SetArgs([]string{"--parent", ".", "--target", "chapter-two.md"})
 
-			err := c.Execute()
-			if (err != nil) != tt.wantErr {
-				t.Errorf("Execute() error = %v, wantErr %v", err, tt.wantErr)
-			}
-			if tt.wantErr && out.Len() > 0 {
-				t.Errorf("expected no stdout output on filename validation error, got: %s", out.String())
-			}
-		})
+	if err := c.Execute(); err != nil {
+		t.Fatalf("expected success with no --project (CWD default): %v", err)
+	}
+}
+
+func TestNewAddChildCmd_AcceptsProjectFlag(t *testing.T) {
+	mock := &mockAddChildIO{
+		binderBytes: acBinder(),
+		project:     &binder.Project{Files: []string{"chapter-two.md"}, BinderDir: "."},
+	}
+	c := NewAddChildCmd(mock)
+	out := new(bytes.Buffer)
+	c.SetOut(out)
+	c.SetArgs([]string{"--parent", ".", "--target", "chapter-two.md", "--project", "/some/dir"})
+
+	if err := c.Execute(); err != nil {
+		t.Fatalf("expected success with --project flag: %v", err)
+	}
+}
+
+func TestNewAddChildCmd_GetCWDError(t *testing.T) {
+	mock := &mockAddChildIO{binderBytes: acBinder()}
+	c := newAddChildCmdWithGetCWD(mock, func() (string, error) {
+		return "", errors.New("getwd failed")
+	})
+	c.SetOut(new(bytes.Buffer))
+	c.SetArgs([]string{"--parent", ".", "--target", "chapter-two.md"})
+
+	if err := c.Execute(); err == nil {
+		t.Error("expected error when getwd fails")
 	}
 }
 
@@ -102,7 +109,7 @@ func TestNewAddChildCmd_PrintsConfirmationOnSuccess(t *testing.T) {
 	c := NewAddChildCmd(mock)
 	out := new(bytes.Buffer)
 	c.SetOut(out)
-	c.SetArgs([]string{"--parent", ".", "--target", "chapter-two.md", "_binder.md"})
+	c.SetArgs([]string{"--parent", ".", "--target", "chapter-two.md", "--project", "."})
 
 	if err := c.Execute(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -120,7 +127,7 @@ func TestNewAddChildCmd_WritesModifiedBinderOnChange(t *testing.T) {
 	}
 	c := NewAddChildCmd(mock)
 	c.SetOut(new(bytes.Buffer))
-	c.SetArgs([]string{"--parent", ".", "--target", "chapter-two.md", "_binder.md"})
+	c.SetArgs([]string{"--parent", ".", "--target", "chapter-two.md", "--project", "."})
 
 	if err := c.Execute(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -144,7 +151,7 @@ func TestNewAddChildCmd_DoesNotWriteBinderWhenUnchanged(t *testing.T) {
 	out := new(bytes.Buffer)
 	c.SetOut(out)
 	// chapter-one.md already exists in binder → OPW002 (duplicate skipped, changed=false)
-	c.SetArgs([]string{"--parent", ".", "--target", "chapter-one.md", "_binder.md"})
+	c.SetArgs([]string{"--parent", ".", "--target", "chapter-one.md", "--project", "."})
 
 	if err := c.Execute(); err != nil {
 		t.Fatalf("expected exit 0 for OPW002, got: %v", err)
@@ -159,7 +166,7 @@ func TestNewAddChildCmd_ReadBinderError(t *testing.T) {
 	c := NewAddChildCmd(mock)
 	out := new(bytes.Buffer)
 	c.SetOut(out)
-	c.SetArgs([]string{"--parent", ".", "--target", "chapter-two.md", "_binder.md"})
+	c.SetArgs([]string{"--parent", ".", "--target", "chapter-two.md", "--project", "."})
 
 	if err := c.Execute(); err == nil {
 		t.Error("expected error when ReadBinder fails")
@@ -176,7 +183,7 @@ func TestNewAddChildCmd_ScanProjectError(t *testing.T) {
 	}
 	c := NewAddChildCmd(mock)
 	c.SetOut(new(bytes.Buffer))
-	c.SetArgs([]string{"--parent", ".", "--target", "chapter-two.md", "_binder.md"})
+	c.SetArgs([]string{"--parent", ".", "--target", "chapter-two.md", "--project", "."})
 
 	if err := c.Execute(); err == nil {
 		t.Error("expected error when ScanProject fails")
@@ -191,7 +198,7 @@ func TestNewAddChildCmd_WriteError(t *testing.T) {
 	}
 	c := NewAddChildCmd(mock)
 	c.SetOut(new(bytes.Buffer))
-	c.SetArgs([]string{"--parent", ".", "--target", "chapter-two.md", "_binder.md"})
+	c.SetArgs([]string{"--parent", ".", "--target", "chapter-two.md", "--project", "."})
 
 	if err := c.Execute(); err == nil {
 		t.Error("expected error when WriteBinderAtomic fails")
@@ -208,7 +215,7 @@ func TestNewAddChildCmd_ExitsNonZeroOnOpErrors(t *testing.T) {
 	errOut := new(bytes.Buffer)
 	c.SetOut(out)
 	c.SetErr(errOut)
-	c.SetArgs([]string{"--parent", "nonexistent.md", "--target", "ch.md", "_binder.md"})
+	c.SetArgs([]string{"--parent", "nonexistent.md", "--target", "ch.md", "--project", "."})
 
 	err := c.Execute()
 	if err == nil {
@@ -237,7 +244,7 @@ func TestNewAddChildCmd_ExitsZeroOnWarningOnly(t *testing.T) {
 	errOut := new(bytes.Buffer)
 	c.SetOut(out)
 	c.SetErr(errOut)
-	c.SetArgs([]string{"--parent", ".", "--target", "chapter-one.md", "_binder.md"})
+	c.SetArgs([]string{"--parent", ".", "--target", "chapter-one.md", "--project", "."})
 
 	if err := c.Execute(); err != nil {
 		t.Errorf("expected exit 0 for warning-only (OPW002), got: %v", err)
@@ -259,7 +266,7 @@ func TestNewAddChildCmd_ForceFlag(t *testing.T) {
 	c := NewAddChildCmd(mock)
 	out := new(bytes.Buffer)
 	c.SetOut(out)
-	c.SetArgs([]string{"--parent", ".", "--target", "chapter-one.md", "--force", "_binder.md"})
+	c.SetArgs([]string{"--parent", ".", "--target", "chapter-one.md", "--force", "--project", "."})
 
 	if err := c.Execute(); err != nil {
 		t.Fatalf("unexpected error with --force on duplicate: %v", err)
@@ -275,7 +282,7 @@ func TestNewAddChildCmd_WriteSuccessMessageError(t *testing.T) {
 	}
 	c := NewAddChildCmd(mock)
 	c.SetOut(&errWriter{err: errors.New("write error")})
-	c.SetArgs([]string{"--parent", ".", "--target", "ch.md", "_binder.md"})
+	c.SetArgs([]string{"--parent", ".", "--target", "ch.md", "--project", "."})
 
 	if err := c.Execute(); err == nil {
 		t.Error("expected error when writing success message fails")
@@ -290,7 +297,7 @@ func TestNewAddChildCmd_WriteSkippedMessageError(t *testing.T) {
 	}
 	c := NewAddChildCmd(mock)
 	c.SetOut(&errWriter{err: errors.New("write error")})
-	c.SetArgs([]string{"--parent", ".", "--target", "chapter-one.md", "_binder.md"})
+	c.SetArgs([]string{"--parent", ".", "--target", "chapter-one.md", "--project", "."})
 
 	if err := c.Execute(); err == nil {
 		t.Error("expected error when writing skipped message fails")
@@ -306,7 +313,7 @@ func TestNewAddChildCmd_FirstFlag(t *testing.T) {
 	c := NewAddChildCmd(mock)
 	out := new(bytes.Buffer)
 	c.SetOut(out)
-	c.SetArgs([]string{"--parent", ".", "--target", "chapter-two.md", "--first", "_binder.md"})
+	c.SetArgs([]string{"--parent", ".", "--target", "chapter-two.md", "--first", "--project", "."})
 
 	if err := c.Execute(); err != nil {
 		t.Fatalf("unexpected error with --first: %v", err)
@@ -325,7 +332,7 @@ func TestNewAddChildCmd_AtFlag(t *testing.T) {
 	c := NewAddChildCmd(mock)
 	out := new(bytes.Buffer)
 	c.SetOut(out)
-	c.SetArgs([]string{"--parent", ".", "--target", "chapter-two.md", "--at", "0", "_binder.md"})
+	c.SetArgs([]string{"--parent", ".", "--target", "chapter-two.md", "--at", "0", "--project", "."})
 
 	if err := c.Execute(); err != nil {
 		t.Fatalf("unexpected error with --at flag: %v", err)
@@ -340,7 +347,7 @@ func TestNewAddChildCmd_OutputsOpResultJSONOnSuccess(t *testing.T) {
 	c := NewAddChildCmd(mock)
 	out := new(bytes.Buffer)
 	c.SetOut(out)
-	c.SetArgs([]string{"--parent", ".", "--target", "chapter-two.md", "--json", "_binder.md"})
+	c.SetArgs([]string{"--parent", ".", "--target", "chapter-two.md", "--json", "--project", "."})
 
 	if err := c.Execute(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -365,7 +372,7 @@ func TestNewAddChildCmd_JSONEncodeError(t *testing.T) {
 	}
 	c := NewAddChildCmd(mock)
 	c.SetOut(&errWriter{err: errors.New("write error")})
-	c.SetArgs([]string{"--parent", ".", "--target", "chapter-two.md", "--json", "_binder.md"})
+	c.SetArgs([]string{"--parent", ".", "--target", "chapter-two.md", "--json", "--project", "."})
 
 	if err := c.Execute(); err == nil {
 		t.Error("expected error when JSON encoding fails")
@@ -380,7 +387,7 @@ func TestNewAddChildCmd_ScanProjectErrorWithJSON(t *testing.T) {
 	c := NewAddChildCmd(mock)
 	out := new(bytes.Buffer)
 	c.SetOut(out)
-	c.SetArgs([]string{"--parent", ".", "--target", "chapter-two.md", "--json", "_binder.md"})
+	c.SetArgs([]string{"--parent", ".", "--target", "chapter-two.md", "--json", "--project", "."})
 
 	if err := c.Execute(); err == nil {
 		t.Error("expected error when ScanProject fails")

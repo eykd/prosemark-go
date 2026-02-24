@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 
 	"github.com/spf13/cobra"
 
@@ -27,15 +26,20 @@ type parseOutput struct {
 
 // NewParseCmd creates the parse subcommand.
 func NewParseCmd(reader ParseReader) *cobra.Command {
+	return newParseCmdWithGetCWD(reader, os.Getwd)
+}
+
+func newParseCmdWithGetCWD(reader ParseReader, getwd func() (string, error)) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:          "parse <binder-path>",
+		Use:          "parse",
 		Short:        "Parse a binder file and output JSON",
-		Args:         cobra.ExactArgs(1),
+		Args:         cobra.NoArgs,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			binderPath := args[0]
-			if filepath.Base(binderPath) != "_binder.md" {
-				return fmt.Errorf("binder path must point to a file named _binder.md")
+			project, _ := cmd.Flags().GetString("project")
+			binderPath, err := resolveBinderPath(project, getwd)
+			if err != nil {
+				return err
 			}
 
 			ctx := cmd.Context()
@@ -80,6 +84,7 @@ func NewParseCmd(reader ParseReader) *cobra.Command {
 		},
 	}
 
+	cmd.Flags().String("project", "", "project directory containing _binder.md (default: current directory)")
 	cmd.Flags().Bool("json", false, "Output result as JSON (always enabled for parse)")
 
 	return cmd

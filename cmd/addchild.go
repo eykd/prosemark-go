@@ -23,6 +23,10 @@ type AddChildIO interface {
 
 // NewAddChildCmd creates the add-child subcommand.
 func NewAddChildCmd(io AddChildIO) *cobra.Command {
+	return newAddChildCmdWithGetCWD(io, os.Getwd)
+}
+
+func newAddChildCmdWithGetCWD(io AddChildIO, getwd func() (string, error)) *cobra.Command {
 	var (
 		parent   string
 		target   string
@@ -36,14 +40,15 @@ func NewAddChildCmd(io AddChildIO) *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:          "add-child <binder-path>",
+		Use:          "add-child",
 		Short:        "Add a child node to a binder",
-		Args:         cobra.ExactArgs(1),
+		Args:         cobra.NoArgs,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			binderPath := args[0]
-			if filepath.Base(binderPath) != "_binder.md" {
-				return fmt.Errorf("binder path must point to a file named _binder.md")
+			project, _ := cmd.Flags().GetString("project")
+			binderPath, err := resolveBinderPath(project, getwd)
+			if err != nil {
+				return err
 			}
 
 			ctx := cmd.Context()
@@ -126,6 +131,7 @@ func NewAddChildCmd(io AddChildIO) *cobra.Command {
 		},
 	}
 
+	cmd.Flags().String("project", "", "project directory containing _binder.md (default: current directory)")
 	cmd.Flags().StringVar(&parent, "parent", "", "Parent selector")
 	cmd.Flags().StringVar(&target, "target", "", "Target path for new child")
 	cmd.Flags().StringVar(&title, "title", "", "Display title (empty = derive from stem)")

@@ -23,6 +23,10 @@ type MoveIO interface {
 
 // NewMoveCmd creates the move subcommand.
 func NewMoveCmd(io MoveIO) *cobra.Command {
+	return newMoveCmdWithGetCWD(io, os.Getwd)
+}
+
+func newMoveCmdWithGetCWD(io MoveIO, getwd func() (string, error)) *cobra.Command {
 	var (
 		source   string
 		dest     string
@@ -35,14 +39,15 @@ func NewMoveCmd(io MoveIO) *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:          "move <binder-path>",
+		Use:          "move",
 		Short:        "Move a node within a binder",
-		Args:         cobra.ExactArgs(1),
+		Args:         cobra.NoArgs,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			binderPath := args[0]
-			if filepath.Base(binderPath) != "_binder.md" {
-				return fmt.Errorf("binder path must point to a file named _binder.md")
+			project, _ := cmd.Flags().GetString("project")
+			binderPath, err := resolveBinderPath(project, getwd)
+			if err != nil {
+				return err
 			}
 
 			ctx := cmd.Context()
@@ -118,6 +123,7 @@ func NewMoveCmd(io MoveIO) *cobra.Command {
 		},
 	}
 
+	cmd.Flags().String("project", "", "project directory containing _binder.md (default: current directory)")
 	cmd.Flags().StringVar(&source, "source", "", "Source selector")
 	cmd.Flags().StringVar(&dest, "dest", "", "Destination parent selector")
 	cmd.Flags().BoolVar(&first, "first", false, "Insert as first child")

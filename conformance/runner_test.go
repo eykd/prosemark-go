@@ -112,7 +112,7 @@ func runParseFixture(t *testing.T, fixturePath string) {
 
 	// Invoke pmk parse --json. Non-zero exit is acceptable for error fixtures;
 	// stdout still contains JSON diagnostics per the runner contract.
-	cmd := exec.Command(pmkBinary, "parse", "--json", binderPath)
+	cmd := exec.Command(pmkBinary, "parse", "--json", "--project", filepath.Dir(binderPath))
 	stdout, runErr := cmd.Output()
 	var exitErr *exec.ExitError
 	if runErr != nil && !errors.As(runErr, &exitErr) {
@@ -245,7 +245,7 @@ func runOpsFixture(t *testing.T, fixturePath string) {
 		t.Fatalf("buildOpArgs: %v", err)
 	}
 
-	cmdArgs := append([]string{spec.Operation, "--json", binderPath}, opArgs...)
+	cmdArgs := append([]string{spec.Operation, "--json", "--project", filepath.Dir(binderPath)}, opArgs...)
 	cmd := exec.Command(pmkBinary, cmdArgs...)
 	stdout, runErr := cmd.Output()
 	var exitErr *exec.ExitError
@@ -338,7 +338,7 @@ func runStabilityFixture(t *testing.T, fixturePath, binderPath string, inputBind
 
 	// Invoke pmk parse --json to verify diagnostics and that parse does not
 	// mutate the binder file.
-	cmd := exec.Command(pmkBinary, "parse", "--json", binderPath)
+	cmd := exec.Command(pmkBinary, "parse", "--json", "--project", filepath.Dir(binderPath))
 	stdout, runErr := cmd.Output()
 	var exitErr *exec.ExitError
 	if runErr != nil && !errors.As(runErr, &exitErr) {
@@ -886,7 +886,7 @@ func validateChangedField(t *testing.T, fixturePath string) {
 		t.Fatalf("buildOpArgs: %v", err)
 	}
 
-	cmdArgs := append([]string{spec.Operation, "--json", binderPath}, opArgs...)
+	cmdArgs := append([]string{spec.Operation, "--json", "--project", filepath.Dir(binderPath)}, opArgs...)
 	cmd := exec.Command(pmkBinary, cmdArgs...)
 	stdout, runErr := cmd.Output()
 	var exitErr *exec.ExitError

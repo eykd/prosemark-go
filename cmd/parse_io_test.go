@@ -21,7 +21,7 @@ func TestNewParseCmd_ReadBinderError(t *testing.T) {
 	c := NewParseCmd(reader)
 	out := new(bytes.Buffer)
 	c.SetOut(out)
-	c.SetArgs([]string{"_binder.md"})
+	c.SetArgs([]string{"--project", "."})
 
 	err := c.Execute()
 	if err == nil {
@@ -40,7 +40,7 @@ func TestNewParseCmd_ScanProjectError(t *testing.T) {
 	c := NewParseCmd(reader)
 	out := new(bytes.Buffer)
 	c.SetOut(out)
-	c.SetArgs([]string{"_binder.md"})
+	c.SetArgs([]string{"--project", "."})
 
 	err := c.Execute()
 	if err == nil {
@@ -54,7 +54,7 @@ func TestNewParseCmd_EncodeError(t *testing.T) {
 	}
 	c := NewParseCmd(reader)
 	c.SetOut(&errWriter{err: errors.New("write error")})
-	c.SetArgs([]string{"_binder.md"})
+	c.SetArgs([]string{"--project", "."})
 
 	err := c.Execute()
 	if err == nil {

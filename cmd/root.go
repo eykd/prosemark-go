@@ -4,6 +4,7 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 
@@ -28,6 +29,19 @@ func NewRootCmd() *cobra.Command {
 
 func rootRunE(_ *cobra.Command, _ []string) error {
 	return nil
+}
+
+// resolveBinderPath derives the binder path from a project directory.
+// If project is empty, getwd is called to determine the current directory.
+func resolveBinderPath(project string, getwd func() (string, error)) (string, error) {
+	if project == "" {
+		cwd, err := getwd()
+		if err != nil {
+			return "", fmt.Errorf("getting working directory: %w", err)
+		}
+		project = cwd
+	}
+	return filepath.Join(project, "_binder.md"), nil
 }
 
 // emitOPE009AndError writes an OPE009 error diagnostic and returns a non-nil

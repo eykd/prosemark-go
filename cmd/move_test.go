@@ -46,7 +46,7 @@ func moveBinder() []byte {
 
 func TestNewMoveCmd_HasRequiredFlags(t *testing.T) {
 	c := NewMoveCmd(nil)
-	required := []string{"source", "dest", "first", "at", "before", "after", "yes", "json"}
+	required := []string{"project", "source", "dest", "first", "at", "before", "after", "yes", "json"}
 	for _, name := range required {
 		name := name
 		t.Run(name, func(t *testing.T) {
@@ -57,40 +57,46 @@ func TestNewMoveCmd_HasRequiredFlags(t *testing.T) {
 	}
 }
 
-func TestNewMoveCmd_RejectsNon_binderMdFilename(t *testing.T) {
-	tests := []struct {
-		name       string
-		binderPath string
-		wantErr    bool
-	}{
-		{"valid _binder.md", "_binder.md", false},
-		{"valid nested path", "project/_binder.md", false},
-		{"invalid notes.md", "notes.md", true},
-		{"invalid binder.md without underscore", "binder.md", true},
-		{"invalid README.md", "README.md", true},
+func TestNewMoveCmd_DefaultsToCWD(t *testing.T) {
+	mock := &mockMoveIO{
+		binderBytes: moveBinder(),
+		project:     &binder.Project{Files: []string{"chapter-one.md", "chapter-two.md"}, BinderDir: "."},
 	}
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			mock := &mockMoveIO{
-				binderBytes: moveBinder(),
-				project:     &binder.Project{Files: []string{"chapter-one.md", "chapter-two.md"}, BinderDir: "."},
-			}
-			c := NewMoveCmd(mock)
-			out := new(bytes.Buffer)
-			errOut := new(bytes.Buffer)
-			c.SetOut(out)
-			c.SetErr(errOut)
-			c.SetArgs([]string{"--source", "chapter-two.md", "--dest", "chapter-one.md", "--yes", tt.binderPath})
+	c := NewMoveCmd(mock)
+	out := new(bytes.Buffer)
+	c.SetOut(out)
+	c.SetArgs([]string{"--source", "chapter-two.md", "--dest", "chapter-one.md", "--yes"})
 
-			err := c.Execute()
-			if (err != nil) != tt.wantErr {
-				t.Errorf("Execute() error = %v, wantErr %v", err, tt.wantErr)
-			}
-			if tt.wantErr && out.Len() > 0 {
-				t.Errorf("expected no stdout output on filename validation error, got: %s", out.String())
-			}
-		})
+	if err := c.Execute(); err != nil {
+		t.Fatalf("expected success with no --project (CWD default): %v", err)
+	}
+}
+
+func TestNewMoveCmd_AcceptsProjectFlag(t *testing.T) {
+	mock := &mockMoveIO{
+		binderBytes: moveBinder(),
+		project:     &binder.Project{Files: []string{"chapter-one.md", "chapter-two.md"}, BinderDir: "."},
+	}
+	c := NewMoveCmd(mock)
+	out := new(bytes.Buffer)
+	c.SetOut(out)
+	c.SetArgs([]string{"--source", "chapter-two.md", "--dest", "chapter-one.md", "--yes", "--project", "/some/dir"})
+
+	if err := c.Execute(); err != nil {
+		t.Fatalf("expected success with --project flag: %v", err)
+	}
+}
+
+func TestNewMoveCmd_GetCWDError(t *testing.T) {
+	mock := &mockMoveIO{binderBytes: moveBinder()}
+	c := newMoveCmdWithGetCWD(mock, func() (string, error) {
+		return "", errors.New("getwd failed")
+	})
+	c.SetOut(new(bytes.Buffer))
+	c.SetArgs([]string{"--source", "chapter-two.md", "--dest", "chapter-one.md", "--yes"})
+
+	if err := c.Execute(); err == nil {
+		t.Error("expected error when getwd fails")
 	}
 }
 
@@ -102,7 +108,7 @@ func TestNewMoveCmd_PrintsConfirmationOnSuccess(t *testing.T) {
 	c := NewMoveCmd(mock)
 	out := new(bytes.Buffer)
 	c.SetOut(out)
-	c.SetArgs([]string{"--source", "chapter-two.md", "--dest", "chapter-one.md", "--yes", "_binder.md"})
+	c.SetArgs([]string{"--source", "chapter-two.md", "--dest", "chapter-one.md", "--yes", "--project", "."})
 
 	if err := c.Execute(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -120,7 +126,7 @@ func TestNewMoveCmd_FirstFlagSetsPositionFirst(t *testing.T) {
 	}
 	c := NewMoveCmd(mock)
 	c.SetOut(new(bytes.Buffer))
-	c.SetArgs([]string{"--source", "chapter-two.md", "--dest", "chapter-one.md", "--first", "--yes", "_binder.md"})
+	c.SetArgs([]string{"--source", "chapter-two.md", "--dest", "chapter-one.md", "--first", "--yes", "--project", "."})
 
 	if err := c.Execute(); err != nil {
 		t.Fatalf("unexpected error with --first flag: %v", err)
@@ -134,7 +140,7 @@ func TestNewMoveCmd_WritesModifiedBinderOnChange(t *testing.T) {
 	}
 	c := NewMoveCmd(mock)
 	c.SetOut(new(bytes.Buffer))
-	c.SetArgs([]string{"--source", "chapter-two.md", "--dest", "chapter-one.md", "--yes", "_binder.md"})
+	c.SetArgs([]string{"--source", "chapter-two.md", "--dest", "chapter-one.md", "--yes", "--project", "."})
 
 	if err := c.Execute(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -153,7 +159,7 @@ func TestNewMoveCmd_ReadBinderError(t *testing.T) {
 	c := NewMoveCmd(mock)
 	out := new(bytes.Buffer)
 	c.SetOut(out)
-	c.SetArgs([]string{"--source", "chapter-two.md", "--dest", "chapter-one.md", "--yes", "_binder.md"})
+	c.SetArgs([]string{"--source", "chapter-two.md", "--dest", "chapter-one.md", "--yes", "--project", "."})
 
 	if err := c.Execute(); err == nil {
 		t.Error("expected error when ReadBinder fails")
@@ -170,7 +176,7 @@ func TestNewMoveCmd_ScanProjectError(t *testing.T) {
 	}
 	c := NewMoveCmd(mock)
 	c.SetOut(new(bytes.Buffer))
-	c.SetArgs([]string{"--source", "chapter-two.md", "--dest", "chapter-one.md", "--yes", "_binder.md"})
+	c.SetArgs([]string{"--source", "chapter-two.md", "--dest", "chapter-one.md", "--yes", "--project", "."})
 
 	if err := c.Execute(); err == nil {
 		t.Error("expected error when ScanProject fails")
@@ -185,7 +191,7 @@ func TestNewMoveCmd_WriteError(t *testing.T) {
 	}
 	c := NewMoveCmd(mock)
 	c.SetOut(new(bytes.Buffer))
-	c.SetArgs([]string{"--source", "chapter-two.md", "--dest", "chapter-one.md", "--yes", "_binder.md"})
+	c.SetArgs([]string{"--source", "chapter-two.md", "--dest", "chapter-one.md", "--yes", "--project", "."})
 
 	if err := c.Execute(); err == nil {
 		t.Error("expected error when WriteBinderAtomic fails")
@@ -202,7 +208,7 @@ func TestNewMoveCmd_ExitsNonZeroOnOpErrors(t *testing.T) {
 	errOut := new(bytes.Buffer)
 	c.SetOut(out)
 	c.SetErr(errOut)
-	c.SetArgs([]string{"--source", "nonexistent.md", "--dest", "chapter-one.md", "--yes", "_binder.md"})
+	c.SetArgs([]string{"--source", "nonexistent.md", "--dest", "chapter-one.md", "--yes", "--project", "."})
 
 	err := c.Execute()
 	if err == nil {
@@ -231,7 +237,7 @@ func TestNewMoveCmd_MissingYesFlagReturnsError(t *testing.T) {
 	errOut := new(bytes.Buffer)
 	c.SetOut(out)
 	c.SetErr(errOut)
-	c.SetArgs([]string{"--source", "chapter-two.md", "--dest", "chapter-one.md", "_binder.md"})
+	c.SetArgs([]string{"--source", "chapter-two.md", "--dest", "chapter-one.md", "--project", "."})
 
 	if err := c.Execute(); err == nil {
 		t.Error("expected error when --yes flag is missing (OPE009)")
@@ -250,7 +256,7 @@ func TestNewMoveCmd_WriteSuccessMessageError(t *testing.T) {
 	}
 	c := NewMoveCmd(mock)
 	c.SetOut(&errWriter{err: errors.New("write error")})
-	c.SetArgs([]string{"--source", "chapter-two.md", "--dest", "chapter-one.md", "--yes", "_binder.md"})
+	c.SetArgs([]string{"--source", "chapter-two.md", "--dest", "chapter-one.md", "--yes", "--project", "."})
 
 	if err := c.Execute(); err == nil {
 		t.Error("expected error when writing success message fails")
@@ -265,7 +271,7 @@ func TestNewMoveCmd_AtFlag(t *testing.T) {
 	}
 	c := NewMoveCmd(mock)
 	c.SetOut(new(bytes.Buffer))
-	c.SetArgs([]string{"--source", "chapter-two.md", "--dest", ".", "--at", "0", "--yes", "_binder.md"})
+	c.SetArgs([]string{"--source", "chapter-two.md", "--dest", ".", "--at", "0", "--yes", "--project", "."})
 
 	if err := c.Execute(); err != nil {
 		t.Fatalf("unexpected error with --at flag: %v", err)
@@ -280,7 +286,7 @@ func TestNewMoveCmd_OutputsOpResultJSONOnSuccess(t *testing.T) {
 	c := NewMoveCmd(mock)
 	out := new(bytes.Buffer)
 	c.SetOut(out)
-	c.SetArgs([]string{"--source", "chapter-two.md", "--dest", "chapter-one.md", "--yes", "--json", "_binder.md"})
+	c.SetArgs([]string{"--source", "chapter-two.md", "--dest", "chapter-one.md", "--yes", "--json", "--project", "."})
 
 	if err := c.Execute(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -302,7 +308,7 @@ func TestNewMoveCmd_JSONEncodeError(t *testing.T) {
 	}
 	c := NewMoveCmd(mock)
 	c.SetOut(&errWriter{err: errors.New("write error")})
-	c.SetArgs([]string{"--source", "chapter-two.md", "--dest", "chapter-one.md", "--yes", "--json", "_binder.md"})
+	c.SetArgs([]string{"--source", "chapter-two.md", "--dest", "chapter-one.md", "--yes", "--json", "--project", "."})
 
 	if err := c.Execute(); err == nil {
 		t.Error("expected error when JSON encoding fails")
@@ -317,7 +323,7 @@ func TestNewMoveCmd_ScanProjectErrorWithJSON(t *testing.T) {
 	c := NewMoveCmd(mock)
 	out := new(bytes.Buffer)
 	c.SetOut(out)
-	c.SetArgs([]string{"--source", "chapter-two.md", "--dest", "chapter-one.md", "--yes", "--json", "_binder.md"})
+	c.SetArgs([]string{"--source", "chapter-two.md", "--dest", "chapter-one.md", "--yes", "--json", "--project", "."})
 
 	if err := c.Execute(); err == nil {
 		t.Error("expected error when ScanProject fails")

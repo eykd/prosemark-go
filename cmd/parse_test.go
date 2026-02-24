@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 
 	"github.com/eykd/prosemark-go/internal/binder"
@@ -28,40 +29,60 @@ func (m *mockParseReader) ScanProject(_ context.Context, _ string) (*binder.Proj
 	return &binder.Project{Files: []string{}, BinderDir: "."}, m.projectErr
 }
 
-func TestNewParseCmd_RejectsNon_binderMdFilename(t *testing.T) {
-	tests := []struct {
-		name       string
-		binderPath string
-		wantErr    bool
-	}{
-		{"valid _binder.md", "_binder.md", false},
-		{"valid nested _binder.md", "project/_binder.md", false},
-		{"invalid notes.md", "notes.md", true},
-		{"invalid binder.md without underscore", "binder.md", true},
-		{"invalid README.md", "README.md", true},
+func TestNewParseCmd_HasProjectFlag(t *testing.T) {
+	c := NewParseCmd(nil)
+	if c.Flags().Lookup("project") == nil {
+		t.Error("expected --project flag on parse command")
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			reader := &mockParseReader{
-				binderBytes: []byte("<!-- prosemark-binder:v1 -->\n"),
-				project:     &binder.Project{Files: []string{}, BinderDir: "."},
-			}
-			c := NewParseCmd(reader)
-			out := new(bytes.Buffer)
-			errOut := new(bytes.Buffer)
-			c.SetOut(out)
-			c.SetErr(errOut)
-			c.SetArgs([]string{tt.binderPath})
+}
 
-			err := c.Execute()
-			if (err != nil) != tt.wantErr {
-				t.Errorf("Execute() error = %v, wantErr %v", err, tt.wantErr)
-			}
-			// On validation error no JSON must appear on stdout (it is a CLI usage error)
-			if tt.wantErr && out.Len() > 0 {
-				t.Errorf("expected no stdout output on validation error, got: %s", out.String())
-			}
-		})
+func TestNewParseCmd_DefaultsToCWD(t *testing.T) {
+	// When no --project flag is given, command resolves path from CWD.
+	// The mock ignores path, so this verifies the command succeeds with no args.
+	reader := &mockParseReader{
+		binderBytes: []byte("<!-- prosemark-binder:v1 -->\n"),
+		project:     &binder.Project{Files: []string{}, BinderDir: "."},
+	}
+	c := NewParseCmd(reader)
+	out := new(bytes.Buffer)
+	c.SetOut(out)
+	c.SetArgs([]string{})
+
+	if err := c.Execute(); err != nil {
+		t.Fatalf("expected success with no args (CWD default): %v", err)
+	}
+	if out.Len() == 0 {
+		t.Error("expected JSON output")
+	}
+}
+
+func TestNewParseCmd_AcceptsProjectFlag(t *testing.T) {
+	reader := &mockParseReader{
+		binderBytes: []byte("<!-- prosemark-binder:v1 -->\n"),
+		project:     &binder.Project{Files: []string{}, BinderDir: "."},
+	}
+	c := NewParseCmd(reader)
+	out := new(bytes.Buffer)
+	c.SetOut(out)
+	c.SetArgs([]string{"--project", "/some/dir"})
+
+	if err := c.Execute(); err != nil {
+		t.Fatalf("expected success with --project flag: %v", err)
+	}
+}
+
+func TestNewParseCmd_GetCWDError(t *testing.T) {
+	reader := &mockParseReader{
+		binderBytes: []byte("<!-- prosemark-binder:v1 -->\n"),
+	}
+	c := newParseCmdWithGetCWD(reader, func() (string, error) {
+		return "", errors.New("getwd failed")
+	})
+	c.SetOut(new(bytes.Buffer))
+	c.SetArgs([]string{}) // no --project, triggers getwd
+
+	if err := c.Execute(); err == nil {
+		t.Error("expected error when getwd fails")
 	}
 }
 
@@ -73,7 +94,7 @@ func TestNewParseCmd_OutputsJSONOnSuccess(t *testing.T) {
 	c := NewParseCmd(reader)
 	out := new(bytes.Buffer)
 	c.SetOut(out)
-	c.SetArgs([]string{"_binder.md"})
+	c.SetArgs([]string{"--project", "."})
 
 	err := c.Execute()
 	if err != nil {
@@ -104,7 +125,7 @@ func TestNewParseCmd_ExitsZeroOnWarningsOnly(t *testing.T) {
 	c := NewParseCmd(reader)
 	out := new(bytes.Buffer)
 	c.SetOut(out)
-	c.SetArgs([]string{"_binder.md"})
+	c.SetArgs([]string{"--project", "."})
 
 	err := c.Execute()
 	if err != nil {
@@ -122,7 +143,7 @@ func TestNewParseCmd_ExitsNonZeroOnBNDErrors(t *testing.T) {
 	errOut := new(bytes.Buffer)
 	c.SetOut(out)
 	c.SetErr(errOut)
-	c.SetArgs([]string{"_binder.md"})
+	c.SetArgs([]string{"--project", "."})
 
 	err := c.Execute()
 	if err == nil {
@@ -150,7 +171,7 @@ func TestNewParseCmd_AcceptsJSONFlag(t *testing.T) {
 	c := NewParseCmd(reader)
 	out := new(bytes.Buffer)
 	c.SetOut(out)
-	c.SetArgs([]string{"--json", "_binder.md"})
+	c.SetArgs([]string{"--json", "--project", "."})
 
 	if err := c.Execute(); err != nil {
 		t.Fatalf("expected --json flag to be accepted without error: %v", err)
@@ -169,7 +190,7 @@ func TestNewParseCmd_ReturnsOPE009OnInvalidUTF8(t *testing.T) {
 	errOut := new(bytes.Buffer)
 	c.SetOut(out)
 	c.SetErr(errOut)
-	c.SetArgs([]string{"_binder.md"})
+	c.SetArgs([]string{"--project", "."})
 
 	err := c.Execute()
 	if err == nil {

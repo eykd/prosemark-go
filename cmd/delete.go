@@ -23,6 +23,10 @@ type DeleteIO interface {
 
 // NewDeleteCmd creates the delete subcommand.
 func NewDeleteCmd(io DeleteIO) *cobra.Command {
+	return newDeleteCmdWithGetCWD(io, os.Getwd)
+}
+
+func newDeleteCmdWithGetCWD(io DeleteIO, getwd func() (string, error)) *cobra.Command {
 	var (
 		selector string
 		yes      bool
@@ -30,14 +34,15 @@ func NewDeleteCmd(io DeleteIO) *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:          "delete <binder-path>",
+		Use:          "delete",
 		Short:        "Delete a node from a binder",
-		Args:         cobra.ExactArgs(1),
+		Args:         cobra.NoArgs,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			binderPath := args[0]
-			if filepath.Base(binderPath) != "_binder.md" {
-				return fmt.Errorf("binder path must point to a file named _binder.md")
+			project, _ := cmd.Flags().GetString("project")
+			binderPath, err := resolveBinderPath(project, getwd)
+			if err != nil {
+				return err
 			}
 
 			ctx := cmd.Context()
@@ -101,6 +106,7 @@ func NewDeleteCmd(io DeleteIO) *cobra.Command {
 		},
 	}
 
+	cmd.Flags().String("project", "", "project directory containing _binder.md (default: current directory)")
 	cmd.Flags().StringVar(&selector, "selector", "", "Selector for node to delete")
 	cmd.Flags().BoolVar(&yes, "yes", false, "Required confirmation flag")
 	cmd.Flags().BoolVar(&jsonMode, "json", false, "Output result as JSON")
