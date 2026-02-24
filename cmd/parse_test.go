@@ -51,7 +51,7 @@ func TestNewParseCmd_RejectsNon_binderMdFilename(t *testing.T) {
 			errOut := new(bytes.Buffer)
 			c.SetOut(out)
 			c.SetErr(errOut)
-			c.SetArgs([]string{"--json", tt.binderPath})
+			c.SetArgs([]string{tt.binderPath})
 
 			err := c.Execute()
 			if (err != nil) != tt.wantErr {
@@ -73,7 +73,7 @@ func TestNewParseCmd_OutputsJSONOnSuccess(t *testing.T) {
 	c := NewParseCmd(reader)
 	out := new(bytes.Buffer)
 	c.SetOut(out)
-	c.SetArgs([]string{"--json", "_binder.md"})
+	c.SetArgs([]string{"_binder.md"})
 
 	err := c.Execute()
 	if err != nil {
@@ -104,7 +104,7 @@ func TestNewParseCmd_ExitsZeroOnWarningsOnly(t *testing.T) {
 	c := NewParseCmd(reader)
 	out := new(bytes.Buffer)
 	c.SetOut(out)
-	c.SetArgs([]string{"--json", "_binder.md"})
+	c.SetArgs([]string{"_binder.md"})
 
 	err := c.Execute()
 	if err != nil {
@@ -122,7 +122,7 @@ func TestNewParseCmd_ExitsNonZeroOnBNDErrors(t *testing.T) {
 	errOut := new(bytes.Buffer)
 	c.SetOut(out)
 	c.SetErr(errOut)
-	c.SetArgs([]string{"--json", "_binder.md"})
+	c.SetArgs([]string{"_binder.md"})
 
 	err := c.Execute()
 	if err == nil {
@@ -142,9 +142,43 @@ func TestNewParseCmd_ExitsNonZeroOnBNDErrors(t *testing.T) {
 	}
 }
 
-func TestNewParseCmd_HasRequiredFlags(t *testing.T) {
-	c := NewParseCmd(nil)
-	if c.Flags().Lookup("json") == nil {
-		t.Error("expected --json flag on parse command")
+func TestNewParseCmd_ReturnsOPE009OnInvalidUTF8(t *testing.T) {
+	reader := &mockParseReader{
+		binderBytes: []byte("<!-- prosemark-binder:v1 -->\n\xff\xfe"),
+	}
+	c := NewParseCmd(reader)
+	out := new(bytes.Buffer)
+	errOut := new(bytes.Buffer)
+	c.SetOut(out)
+	c.SetErr(errOut)
+	c.SetArgs([]string{"_binder.md"})
+
+	err := c.Execute()
+	if err == nil {
+		t.Error("expected non-zero exit for invalid UTF-8 content")
+	}
+	if out.Len() == 0 {
+		t.Error("expected JSON written to stdout even when UTF-8 invalid")
+	}
+	var result map[string]interface{}
+	if jsonErr := json.Unmarshal(out.Bytes(), &result); jsonErr != nil {
+		t.Fatalf("output is not valid JSON: %v\noutput: %s", jsonErr, out.String())
+	}
+	diags, ok := result["diagnostics"].([]interface{})
+	if !ok || len(diags) == 0 {
+		t.Fatal("expected non-empty diagnostics array for invalid UTF-8")
+	}
+	found := false
+	for _, d := range diags {
+		dm, ok := d.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		if dm["severity"] == "error" && dm["code"] == "OPE009" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected OPE009 error diagnostic for invalid UTF-8, got: %v", diags)
 	}
 }

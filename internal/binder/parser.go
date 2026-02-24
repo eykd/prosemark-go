@@ -14,7 +14,7 @@ var (
 	pragmaRE        = regexp.MustCompile(`<\\?!--\s*prosemark-binder:v1\s*-->`)
 	linkRE          = regexp.MustCompile(`\[[^\]]*\]\([^)]*\)`)
 	listItemRE      = regexp.MustCompile(`^(\s*)([-*+]|\d+[.)])\s+(.+)`)
-	inlineLinkRE    = regexp.MustCompile(`^\[([^\]]*)\]\(([^)"]+)(?:\s+"[^"]*")?\s*\)`)
+	inlineLinkRE    = regexp.MustCompile(`^\[((?:[^\]\\]|\\.)*)\]\(([^)"]+)(?:\s+"[^"]*")?\s*\)`)
 	fullRefLinkRE   = regexp.MustCompile(`^\[([^\]]*)\]\[([^\]]+)\]`)
 	collapsedRefRE  = regexp.MustCompile(`^\[([^\]]*)\]\[\]`)
 	wikilinkRE      = regexp.MustCompile(`^!?\[\[([^\]|]+)(?:\|([^\]]*))?\]\]`)
@@ -24,7 +24,7 @@ var (
 	checkboxRE      = regexp.MustCompile(`^\[[xX ]\]\s+`)
 	strikethroughRE = regexp.MustCompile(`~~[^~]*~~`)
 	// allInlineLinkRE finds all inline links anywhere in content.
-	allInlineLinkRE = regexp.MustCompile(`\[([^\]]*)\]\(([^)"]+)(?:\s+"[^"]*")?\s*\)`)
+	allInlineLinkRE = regexp.MustCompile(`\[((?:[^\]\\]|\\.)*)\]\(([^)"]+)(?:\s+"[^"]*")?\s*\)`)
 )
 
 // wikilinkEntry holds a project file path and its directory depth (number of "/" separators).

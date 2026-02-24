@@ -3,7 +3,6 @@ package cmd
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -80,14 +79,7 @@ func NewMoveCmd(io MoveIO) *cobra.Command {
 
 			changed := !bytes.Equal(binderBytes, modifiedBytes)
 
-			out := binder.OpResult{
-				Version:     "1",
-				Changed:     changed,
-				Diagnostics: diags,
-			}
-			if encErr := json.NewEncoder(cmd.OutOrStdout()).Encode(out); encErr != nil {
-				return fmt.Errorf("encoding output: %w", encErr)
-			}
+			printDiagnostics(cmd, diags)
 
 			for _, d := range diags {
 				if d.Severity == "error" {
@@ -101,11 +93,14 @@ func NewMoveCmd(io MoveIO) *cobra.Command {
 				}
 			}
 
+			if _, err := fmt.Fprintln(cmd.OutOrStdout(), "Moved "+source+" in "+binderPath); err != nil {
+				return fmt.Errorf("writing output: %w", err)
+			}
+
 			return nil
 		},
 	}
 
-	cmd.Flags().Bool("json", false, "Output result as JSON")
 	cmd.Flags().StringVar(&source, "source", "", "Source selector")
 	cmd.Flags().StringVar(&dest, "dest", "", "Destination parent selector")
 	cmd.Flags().BoolVar(&first, "first", false, "Insert as first child")

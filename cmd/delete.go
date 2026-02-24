@@ -3,7 +3,6 @@ package cmd
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -19,13 +18,6 @@ type DeleteIO interface {
 	ReadBinder(ctx context.Context, path string) ([]byte, error)
 	ScanProject(ctx context.Context, binderPath string) (*binder.Project, error)
 	WriteBinderAtomic(ctx context.Context, path string, data []byte) error
-}
-
-// deleteOutput is the JSON output schema for the delete command.
-type deleteOutput struct {
-	Version     string              `json:"version"`
-	Changed     bool                `json:"changed"`
-	Diagnostics []binder.Diagnostic `json:"diagnostics"`
 }
 
 // NewDeleteCmd creates the delete subcommand.
@@ -70,14 +62,7 @@ func NewDeleteCmd(io DeleteIO) *cobra.Command {
 
 			changed := !bytes.Equal(binderBytes, modifiedBytes)
 
-			out := deleteOutput{
-				Version:     "1",
-				Changed:     changed,
-				Diagnostics: diags,
-			}
-			if encErr := json.NewEncoder(cmd.OutOrStdout()).Encode(out); encErr != nil {
-				return fmt.Errorf("encoding output: %w", encErr)
-			}
+			printDiagnostics(cmd, diags)
 
 			for _, d := range diags {
 				if d.Severity == "error" {
@@ -91,11 +76,14 @@ func NewDeleteCmd(io DeleteIO) *cobra.Command {
 				}
 			}
 
+			if _, err := fmt.Fprintln(cmd.OutOrStdout(), "Deleted "+selector+" from "+binderPath); err != nil {
+				return fmt.Errorf("writing output: %w", err)
+			}
+
 			return nil
 		},
 	}
 
-	cmd.Flags().Bool("json", false, "Output result as JSON")
 	cmd.Flags().StringVar(&selector, "selector", "", "Selector for node to delete")
 	cmd.Flags().BoolVar(&yes, "yes", false, "Required confirmation flag")
 

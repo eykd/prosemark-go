@@ -3,7 +3,6 @@ package cmd
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -19,13 +18,6 @@ type AddChildIO interface {
 	ReadBinder(ctx context.Context, path string) ([]byte, error)
 	ScanProject(ctx context.Context, binderPath string) (*binder.Project, error)
 	WriteBinderAtomic(ctx context.Context, path string, data []byte) error
-}
-
-// addChildOutput is the JSON output schema for the add-child command.
-type addChildOutput struct {
-	Version     string              `json:"version"`
-	Changed     bool                `json:"changed"`
-	Diagnostics []binder.Diagnostic `json:"diagnostics"`
 }
 
 // NewAddChildCmd creates the add-child subcommand.
@@ -89,14 +81,7 @@ func NewAddChildCmd(io AddChildIO) *cobra.Command {
 
 			changed := !bytes.Equal(binderBytes, modifiedBytes)
 
-			out := addChildOutput{
-				Version:     "1",
-				Changed:     changed,
-				Diagnostics: diags,
-			}
-			if encErr := json.NewEncoder(cmd.OutOrStdout()).Encode(out); encErr != nil {
-				return fmt.Errorf("encoding output: %w", encErr)
-			}
+			printDiagnostics(cmd, diags)
 
 			for _, d := range diags {
 				if d.Severity == "error" {
@@ -110,11 +95,20 @@ func NewAddChildCmd(io AddChildIO) *cobra.Command {
 				}
 			}
 
+			if changed {
+				if _, err := fmt.Fprintln(cmd.OutOrStdout(), "Added "+target+" to "+binderPath); err != nil {
+					return fmt.Errorf("writing output: %w", err)
+				}
+			} else {
+				if _, err := fmt.Fprintln(cmd.OutOrStdout(), target+" already in "+binderPath+" (skipped)"); err != nil {
+					return fmt.Errorf("writing output: %w", err)
+				}
+			}
+
 			return nil
 		},
 	}
 
-	cmd.Flags().Bool("json", false, "Output result as JSON")
 	cmd.Flags().StringVar(&parent, "parent", "", "Parent selector")
 	cmd.Flags().StringVar(&target, "target", "", "Target path for new child")
 	cmd.Flags().StringVar(&title, "title", "", "Display title (empty = derive from stem)")

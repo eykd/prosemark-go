@@ -1186,3 +1186,20 @@ func TestParse_SelfReferentialLink_EmitsBNDW008(t *testing.T) {
 		t.Error("expected BNDW008 for link targeting _binder.md itself, got none")
 	}
 }
+
+// TestParse_EscapedBracketTitle verifies that a title with backslash-escaped
+// brackets (produced by escapeTitle in addchild) is parsed back correctly.
+func TestParse_EscapedBracketTitle(t *testing.T) {
+	src := []byte("<!-- prosemark-binder:v1 -->\n- [\\[Special\\] Title](ch1.md)\n")
+
+	result, _, err := binder.Parse(context.Background(), src, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result.Root.Children) != 1 {
+		t.Fatalf("expected 1 child, got %d; escaped-bracket title broke parse", len(result.Root.Children))
+	}
+	if result.Root.Children[0].Target != "ch1.md" {
+		t.Errorf("Target = %q, want %q", result.Root.Children[0].Target, "ch1.md")
+	}
+}

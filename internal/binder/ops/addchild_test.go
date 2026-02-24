@@ -769,3 +769,43 @@ func TestAddChild_OrderedList_InsertFirst_MaxOrdinalPlusOne(t *testing.T) {
 		t.Errorf("expected '3)' marker for first-position insert in ordered list, got:\n%s", out)
 	}
 }
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Bracket-title round-trip (BUG 2 fix verification)
+// ──────────────────────────────────────────────────────────────────────────────
+
+// TestAddChild_BracketTitleRoundTrip verifies that a title containing square
+// brackets survives the write→parse round-trip: AddChild escapes the brackets
+// when writing, and Parse must recover the node correctly.
+func TestAddChild_BracketTitleRoundTrip(t *testing.T) {
+	src := binderSrc()
+	proj := &binder.Project{Files: []string{"chapter.md"}, BinderDir: "."}
+	params := binder.AddChildParams{
+		ParentSelector: ".",
+		Target:         "chapter.md",
+		Title:          "[Special] Title",
+		Position:       "last",
+	}
+
+	out, diags, err := AddChild(context.Background(), src, proj, params)
+	if err != nil {
+		t.Fatalf("unexpected error from AddChild: %v", err)
+	}
+	for _, d := range diags {
+		if d.Severity == "error" {
+			t.Errorf("unexpected error diagnostic: %+v", d)
+		}
+	}
+
+	// Round-trip: parse the output and verify the node survived.
+	result, _, parseErr := binder.Parse(context.Background(), out, proj)
+	if parseErr != nil {
+		t.Fatalf("parse error after add-child: %v", parseErr)
+	}
+	if len(result.Root.Children) != 1 {
+		t.Fatalf("expected 1 child after parse, got %d; bracket-title broke round-trip", len(result.Root.Children))
+	}
+	if result.Root.Children[0].Target != "chapter.md" {
+		t.Errorf("Target = %q, want %q", result.Root.Children[0].Target, "chapter.md")
+	}
+}

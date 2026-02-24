@@ -50,8 +50,14 @@ func NewParseCmd(reader ParseReader) *cobra.Command {
 				return fmt.Errorf("scanning project: %w", err)
 			}
 
-			// binder.Parse accumulates errors into diagnostics; the error return is always nil.
-			result, diags, _ := binder.Parse(ctx, binderBytes, proj) //nolint:errcheck
+			result, diags, parseErr := binder.Parse(ctx, binderBytes, proj)
+			if parseErr != nil {
+				diags = append(diags, binder.Diagnostic{
+					Severity: "error",
+					Code:     binder.CodeIOOrParseFailure,
+					Message:  fmt.Sprintf("parse error: %v", parseErr),
+				})
+			}
 			if diags == nil {
 				diags = []binder.Diagnostic{}
 			}
@@ -74,7 +80,6 @@ func NewParseCmd(reader ParseReader) *cobra.Command {
 		},
 	}
 
-	cmd.Flags().Bool("json", false, "Output parse result as JSON")
 	return cmd
 }
 
