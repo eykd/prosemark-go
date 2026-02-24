@@ -6,12 +6,14 @@ import (
 	"encoding/json"
 	"errors"
 	"testing"
+
+	"github.com/eykd/prosemark-go/internal/binder"
 )
 
 // mockMoveIO is a test double for MoveIO.
 type mockMoveIO struct {
 	binderBytes  []byte
-	projectBytes []byte
+	project      *binder.Project
 	binderErr    error
 	projectErr   error
 	writeErr     error
@@ -23,8 +25,11 @@ func (m *mockMoveIO) ReadBinder(_ context.Context, _ string) ([]byte, error) {
 	return m.binderBytes, m.binderErr
 }
 
-func (m *mockMoveIO) ReadProject(_ context.Context, _ string) ([]byte, error) {
-	return m.projectBytes, m.projectErr
+func (m *mockMoveIO) ScanProject(_ context.Context, _ string) (*binder.Project, error) {
+	if m.project != nil {
+		return m.project, m.projectErr
+	}
+	return &binder.Project{Files: []string{}, BinderDir: "."}, m.projectErr
 }
 
 func (m *mockMoveIO) WriteBinderAtomic(_ context.Context, path string, data []byte) error {
@@ -40,7 +45,7 @@ func moveBinder() []byte {
 
 func TestNewMoveCmd_HasRequiredFlags(t *testing.T) {
 	c := NewMoveCmd(nil)
-	required := []string{"json", "project", "source", "dest", "first", "at", "before", "after", "yes"}
+	required := []string{"json", "source", "dest", "first", "at", "before", "after", "yes"}
 	for _, name := range required {
 		name := name
 		t.Run(name, func(t *testing.T) {
@@ -67,15 +72,15 @@ func TestNewMoveCmd_RejectsNon_binderMdFilename(t *testing.T) {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			mock := &mockMoveIO{
-				binderBytes:  moveBinder(),
-				projectBytes: []byte(`{"version":"1","files":["chapter-one.md","chapter-two.md"]}`),
+				binderBytes: moveBinder(),
+				project:     &binder.Project{Files: []string{"chapter-one.md", "chapter-two.md"}, BinderDir: "."},
 			}
 			c := NewMoveCmd(mock)
 			out := new(bytes.Buffer)
 			errOut := new(bytes.Buffer)
 			c.SetOut(out)
 			c.SetErr(errOut)
-			c.SetArgs([]string{"--project", "p.json", "--source", "chapter-two.md", "--dest", "chapter-one.md", "--yes", tt.binderPath})
+			c.SetArgs([]string{"--source", "chapter-two.md", "--dest", "chapter-one.md", "--yes", tt.binderPath})
 
 			err := c.Execute()
 			if (err != nil) != tt.wantErr {
@@ -90,13 +95,13 @@ func TestNewMoveCmd_RejectsNon_binderMdFilename(t *testing.T) {
 
 func TestNewMoveCmd_OutputsOpResultJSONOnSuccess(t *testing.T) {
 	mock := &mockMoveIO{
-		binderBytes:  moveBinder(),
-		projectBytes: []byte(`{"version":"1","files":["chapter-one.md","chapter-two.md"]}`),
+		binderBytes: moveBinder(),
+		project:     &binder.Project{Files: []string{"chapter-one.md", "chapter-two.md"}, BinderDir: "."},
 	}
 	c := NewMoveCmd(mock)
 	out := new(bytes.Buffer)
 	c.SetOut(out)
-	c.SetArgs([]string{"--json", "--project", "p.json", "--source", "chapter-two.md", "--dest", "chapter-one.md", "--yes", "_binder.md"})
+	c.SetArgs([]string{"--json", "--source", "chapter-two.md", "--dest", "chapter-one.md", "--yes", "_binder.md"})
 
 	if err := c.Execute(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -119,12 +124,12 @@ func TestNewMoveCmd_OutputsOpResultJSONOnSuccess(t *testing.T) {
 
 func TestNewMoveCmd_FirstFlagSetsPositionFirst(t *testing.T) {
 	mock := &mockMoveIO{
-		binderBytes:  moveBinder(),
-		projectBytes: []byte(`{"version":"1","files":["chapter-one.md","chapter-two.md"]}`),
+		binderBytes: moveBinder(),
+		project:     &binder.Project{Files: []string{"chapter-one.md", "chapter-two.md"}, BinderDir: "."},
 	}
 	c := NewMoveCmd(mock)
 	c.SetOut(new(bytes.Buffer))
-	c.SetArgs([]string{"--json", "--project", "p.json", "--source", "chapter-two.md", "--dest", "chapter-one.md", "--first", "--yes", "_binder.md"})
+	c.SetArgs([]string{"--json", "--source", "chapter-two.md", "--dest", "chapter-one.md", "--first", "--yes", "_binder.md"})
 
 	if err := c.Execute(); err != nil {
 		t.Fatalf("unexpected error with --first flag: %v", err)
@@ -133,12 +138,12 @@ func TestNewMoveCmd_FirstFlagSetsPositionFirst(t *testing.T) {
 
 func TestNewMoveCmd_WritesModifiedBinderOnChange(t *testing.T) {
 	mock := &mockMoveIO{
-		binderBytes:  moveBinder(),
-		projectBytes: []byte(`{"version":"1","files":["chapter-one.md","chapter-two.md"]}`),
+		binderBytes: moveBinder(),
+		project:     &binder.Project{Files: []string{"chapter-one.md", "chapter-two.md"}, BinderDir: "."},
 	}
 	c := NewMoveCmd(mock)
 	c.SetOut(new(bytes.Buffer))
-	c.SetArgs([]string{"--json", "--project", "p.json", "--source", "chapter-two.md", "--dest", "chapter-one.md", "--yes", "_binder.md"})
+	c.SetArgs([]string{"--json", "--source", "chapter-two.md", "--dest", "chapter-one.md", "--yes", "_binder.md"})
 
 	if err := c.Execute(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -157,7 +162,7 @@ func TestNewMoveCmd_ReadBinderError(t *testing.T) {
 	c := NewMoveCmd(mock)
 	out := new(bytes.Buffer)
 	c.SetOut(out)
-	c.SetArgs([]string{"--json", "--project", "p.json", "--source", "chapter-two.md", "--dest", "chapter-one.md", "--yes", "_binder.md"})
+	c.SetArgs([]string{"--json", "--source", "chapter-two.md", "--dest", "chapter-one.md", "--yes", "_binder.md"})
 
 	if err := c.Execute(); err == nil {
 		t.Error("expected error when ReadBinder fails")
@@ -167,43 +172,29 @@ func TestNewMoveCmd_ReadBinderError(t *testing.T) {
 	}
 }
 
-func TestNewMoveCmd_ReadProjectError(t *testing.T) {
+func TestNewMoveCmd_ScanProjectError(t *testing.T) {
 	mock := &mockMoveIO{
 		binderBytes: moveBinder(),
 		projectErr:  errors.New("disk error"),
 	}
 	c := NewMoveCmd(mock)
 	c.SetOut(new(bytes.Buffer))
-	c.SetArgs([]string{"--json", "--project", "p.json", "--source", "chapter-two.md", "--dest", "chapter-one.md", "--yes", "_binder.md"})
+	c.SetArgs([]string{"--json", "--source", "chapter-two.md", "--dest", "chapter-one.md", "--yes", "_binder.md"})
 
 	if err := c.Execute(); err == nil {
-		t.Error("expected error when ReadProject fails")
-	}
-}
-
-func TestNewMoveCmd_InvalidProjectJSON(t *testing.T) {
-	mock := &mockMoveIO{
-		binderBytes:  moveBinder(),
-		projectBytes: []byte("not valid json"),
-	}
-	c := NewMoveCmd(mock)
-	c.SetOut(new(bytes.Buffer))
-	c.SetArgs([]string{"--json", "--project", "p.json", "--source", "chapter-two.md", "--dest", "chapter-one.md", "--yes", "_binder.md"})
-
-	if err := c.Execute(); err == nil {
-		t.Error("expected error when project JSON is invalid")
+		t.Error("expected error when ScanProject fails")
 	}
 }
 
 func TestNewMoveCmd_WriteError(t *testing.T) {
 	mock := &mockMoveIO{
-		binderBytes:  moveBinder(),
-		projectBytes: []byte(`{"version":"1","files":["chapter-one.md","chapter-two.md"]}`),
-		writeErr:     errors.New("write failed"),
+		binderBytes: moveBinder(),
+		project:     &binder.Project{Files: []string{"chapter-one.md", "chapter-two.md"}, BinderDir: "."},
+		writeErr:    errors.New("write failed"),
 	}
 	c := NewMoveCmd(mock)
 	c.SetOut(new(bytes.Buffer))
-	c.SetArgs([]string{"--json", "--project", "p.json", "--source", "chapter-two.md", "--dest", "chapter-one.md", "--yes", "_binder.md"})
+	c.SetArgs([]string{"--json", "--source", "chapter-two.md", "--dest", "chapter-one.md", "--yes", "_binder.md"})
 
 	if err := c.Execute(); err == nil {
 		t.Error("expected error when WriteBinderAtomic fails")
@@ -213,15 +204,14 @@ func TestNewMoveCmd_WriteError(t *testing.T) {
 func TestNewMoveCmd_ExitsNonZeroOnOpErrors(t *testing.T) {
 	// Selector that matches no node → OPE001 (error-severity diagnostic)
 	mock := &mockMoveIO{
-		binderBytes:  moveBinder(),
-		projectBytes: []byte(`{"version":"1","files":[]}`),
+		binderBytes: moveBinder(),
 	}
 	c := NewMoveCmd(mock)
 	out := new(bytes.Buffer)
 	errOut := new(bytes.Buffer)
 	c.SetOut(out)
 	c.SetErr(errOut)
-	c.SetArgs([]string{"--json", "--project", "p.json", "--source", "nonexistent.md", "--dest", "chapter-one.md", "--yes", "_binder.md"})
+	c.SetArgs([]string{"--json", "--source", "nonexistent.md", "--dest", "chapter-one.md", "--yes", "_binder.md"})
 
 	err := c.Execute()
 	if err == nil {
@@ -248,13 +238,13 @@ func TestNewMoveCmd_ExitsNonZeroOnOpErrors(t *testing.T) {
 func TestNewMoveCmd_MissingYesFlagReturnsError(t *testing.T) {
 	// Omitting --yes → ops.Move returns OPE009 (missing confirmation)
 	mock := &mockMoveIO{
-		binderBytes:  moveBinder(),
-		projectBytes: []byte(`{"version":"1","files":["chapter-one.md","chapter-two.md"]}`),
+		binderBytes: moveBinder(),
+		project:     &binder.Project{Files: []string{"chapter-one.md", "chapter-two.md"}, BinderDir: "."},
 	}
 	c := NewMoveCmd(mock)
 	out := new(bytes.Buffer)
 	c.SetOut(out)
-	c.SetArgs([]string{"--json", "--project", "p.json", "--source", "chapter-two.md", "--dest", "chapter-one.md", "_binder.md"})
+	c.SetArgs([]string{"--json", "--source", "chapter-two.md", "--dest", "chapter-one.md", "_binder.md"})
 
 	if err := c.Execute(); err == nil {
 		t.Error("expected error when --yes flag is missing (OPE009)")
@@ -267,12 +257,11 @@ func TestNewMoveCmd_MissingYesFlagReturnsError(t *testing.T) {
 
 func TestNewMoveCmd_EncodeError(t *testing.T) {
 	mock := &mockMoveIO{
-		binderBytes:  moveBinder(),
-		projectBytes: []byte(`{"version":"1","files":[]}`),
+		binderBytes: moveBinder(),
 	}
 	c := NewMoveCmd(mock)
 	c.SetOut(&errWriter{err: errors.New("write error")})
-	c.SetArgs([]string{"--json", "--project", "p.json", "--source", "nonexistent.md", "--dest", "chapter-one.md", "--yes", "_binder.md"})
+	c.SetArgs([]string{"--json", "--source", "nonexistent.md", "--dest", "chapter-one.md", "--yes", "_binder.md"})
 
 	if err := c.Execute(); err == nil {
 		t.Error("expected error when JSON encoding fails")
@@ -282,12 +271,12 @@ func TestNewMoveCmd_EncodeError(t *testing.T) {
 func TestNewMoveCmd_AtFlag(t *testing.T) {
 	// --at 0 moves the source as the first child of dest.
 	mock := &mockMoveIO{
-		binderBytes:  moveBinder(),
-		projectBytes: []byte(`{"version":"1","files":["chapter-one.md","chapter-two.md"]}`),
+		binderBytes: moveBinder(),
+		project:     &binder.Project{Files: []string{"chapter-one.md", "chapter-two.md"}, BinderDir: "."},
 	}
 	c := NewMoveCmd(mock)
 	c.SetOut(new(bytes.Buffer))
-	c.SetArgs([]string{"--project", "p.json", "--source", "chapter-two.md", "--dest", ".", "--at", "0", "--yes", "_binder.md"})
+	c.SetArgs([]string{"--source", "chapter-two.md", "--dest", ".", "--at", "0", "--yes", "_binder.md"})
 
 	if err := c.Execute(); err != nil {
 		t.Fatalf("unexpected error with --at flag: %v", err)

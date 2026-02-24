@@ -638,8 +638,7 @@ func TestParse_RefDefs_PopulatedInResult(t *testing.T) {
 // TestParse_Wikilinks tests Obsidian-style wikilink extraction and title derivation (FR-007, FR-016).
 func TestParse_Wikilinks(t *testing.T) {
 	project := &binder.Project{
-		Version: "1",
-		Files:   []string{"chapter.md", "part.md", "subfolder/deep.md"},
+		Files: []string{"chapter.md", "part.md", "subfolder/deep.md"},
 	}
 	tests := []struct {
 		name       string
@@ -896,8 +895,7 @@ func TestParse_PercentEncoded_DecodedTargetStoredInNode(t *testing.T) {
 // [[chapter]] must find "sub/chapter.md" when that is the only project file (FR-007).
 func TestParse_WikilinkBasenameMatch_ResolvesSubdirFile(t *testing.T) {
 	project := &binder.Project{
-		Version: "1",
-		Files:   []string{"sub/chapter.md"},
+		Files: []string{"sub/chapter.md"},
 	}
 	src := []byte("<!-- prosemark-binder:v1 -->\n- [[chapter]]\n")
 
@@ -924,8 +922,7 @@ func TestParse_WikilinkProximityTiebreak_ShallowestWins(t *testing.T) {
 	// Both files match stem "chapter" by basename; "sub/chapter.md" (depth 1) is shallower
 	// than "deep/sub/chapter.md" (depth 2).
 	project := &binder.Project{
-		Version: "1",
-		Files:   []string{"deep/sub/chapter.md", "sub/chapter.md"},
+		Files: []string{"deep/sub/chapter.md", "sub/chapter.md"},
 	}
 	src := []byte("<!-- prosemark-binder:v1 -->\n- [[chapter]]\n")
 
@@ -951,8 +948,7 @@ func TestParse_WikilinkProximityTiebreak_ShallowestWins(t *testing.T) {
 func TestParse_AmbiguousWikilink_EmitsBNDE003(t *testing.T) {
 	// a/deep.md and b/deep.md are both at depth 1 — proximity tiebreak cannot resolve.
 	project := &binder.Project{
-		Version: "1",
-		Files:   []string{"a/deep.md", "b/deep.md"},
+		Files: []string{"a/deep.md", "b/deep.md"},
 	}
 	src := []byte("<!-- prosemark-binder:v1 -->\n- [[deep]]\n")
 
@@ -974,14 +970,44 @@ func TestParse_AmbiguousWikilink_EmitsBNDE003(t *testing.T) {
 	}
 }
 
+// TestParse_AmbiguousWikilink_NoBinder_ExactPlusBasename_EmitsBNDE003 tests that when
+// an exact-path match coexists with a basename match and no binderDir context is
+// available (BinderDir == ""), the wikilink is treated as ambiguous (BNDE003).
+// This covers the early-exit ambiguity check in resolveWikilink for callers that
+// pass a Project without a BinderDir (e.g., direct API usage without ScanProjectImpl).
+func TestParse_AmbiguousWikilink_NoBinder_ExactPlusBasename_EmitsBNDE003(t *testing.T) {
+	// "deep.md" at root (exact match) and "sub/deep.md" (basename match), no binderDir.
+	project := &binder.Project{
+		Files:     []string{"deep.md", "sub/deep.md"},
+		BinderDir: "", // no binder dir context → ambiguity check fires
+	}
+	src := []byte("<!-- prosemark-binder:v1 -->\n- [[deep]]\n")
+
+	_, diags, err := binder.Parse(context.Background(), src, project)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	found := false
+	for _, d := range diags {
+		if d.Code == binder.CodeAmbiguousWikilink {
+			found = true
+			if d.Severity != "error" {
+				t.Errorf("BNDE003 severity = %q, want %q", d.Severity, "error")
+			}
+		}
+	}
+	if !found {
+		t.Error("expected BNDE003 for exact+basename wikilink with no binderDir, got none")
+	}
+}
+
 // TestParse_WikilinkCaseInsensitiveMatch_EmitsBNDW009 tests that a wikilink stem
 // matching a project file only via case-insensitive comparison emits BNDW009 and still
 // resolves the node to the actual filename (spec §US-1 sc7, FR-002).
 func TestParse_WikilinkCaseInsensitiveMatch_EmitsBNDW009(t *testing.T) {
 	// project has "chapter.md"; wikilink uses [[Chapter]] (case mismatch)
 	project := &binder.Project{
-		Version: "1",
-		Files:   []string{"chapter.md"},
+		Files: []string{"chapter.md"},
 	}
 	src := []byte("<!-- prosemark-binder:v1 -->\n- [[Chapter]]\n")
 
@@ -1070,8 +1096,7 @@ func TestParse_DuplicateFileRef_EmitsBNDW003(t *testing.T) {
 // project.Files emits BNDW004 when project context is provided (FR-002).
 func TestParse_MissingTargetFile_EmitsBNDW004(t *testing.T) {
 	project := &binder.Project{
-		Version: "1",
-		Files:   []string{"other.md"},
+		Files: []string{"other.md"},
 	}
 	// chapter.md is not listed in project.Files.
 	src := []byte("<!-- prosemark-binder:v1 -->\n- [Chapter](chapter.md)\n")

@@ -115,11 +115,7 @@ func TestParseResultType(t *testing.T) {
 // TestProjectType verifies Project struct fields.
 func TestProjectType(t *testing.T) {
 	p := binder.Project{
-		Version: "1",
-		Files:   []string{"docs/index.md", "docs/chapter.md"},
-	}
-	if p.Version != "1" {
-		t.Errorf("Project.Version = %q, want %q", p.Version, "1")
+		Files: []string{"docs/index.md", "docs/chapter.md"},
 	}
 	if len(p.Files) != 2 {
 		t.Errorf("Project.Files len = %d, want 2", len(p.Files))

@@ -17,21 +17,20 @@ import (
 // MoveIO handles I/O for the move command.
 type MoveIO interface {
 	ReadBinder(ctx context.Context, path string) ([]byte, error)
-	ReadProject(ctx context.Context, path string) ([]byte, error)
+	ScanProject(ctx context.Context, binderPath string) (*binder.Project, error)
 	WriteBinderAtomic(ctx context.Context, path string, data []byte) error
 }
 
 // NewMoveCmd creates the move subcommand.
 func NewMoveCmd(io MoveIO) *cobra.Command {
 	var (
-		projectPath string
-		source      string
-		dest        string
-		first       bool
-		at          int
-		before      string
-		after       string
-		yes         bool
+		source string
+		dest   string
+		first  bool
+		at     int
+		before string
+		after  string
+		yes    bool
 	)
 
 	cmd := &cobra.Command{
@@ -52,13 +51,8 @@ func NewMoveCmd(io MoveIO) *cobra.Command {
 				return fmt.Errorf("reading binder: %w", err)
 			}
 
-			projectBytes, err := io.ReadProject(ctx, projectPath)
+			proj, err := io.ScanProject(ctx, binderPath)
 			if err != nil {
-				return emitOPE009AndError(cmd, binderBytes, err)
-			}
-
-			var proj binder.Project
-			if err = json.Unmarshal(projectBytes, &proj); err != nil {
 				return emitOPE009AndError(cmd, binderBytes, err)
 			}
 
@@ -79,7 +73,7 @@ func NewMoveCmd(io MoveIO) *cobra.Command {
 				params.At = &at
 			}
 
-			modifiedBytes, diags, _ := ops.Move(ctx, binderBytes, &proj, params)
+			modifiedBytes, diags, _ := ops.Move(ctx, binderBytes, proj, params)
 			if diags == nil {
 				diags = []binder.Diagnostic{}
 			}
@@ -112,7 +106,6 @@ func NewMoveCmd(io MoveIO) *cobra.Command {
 	}
 
 	cmd.Flags().Bool("json", false, "Output result as JSON")
-	cmd.Flags().StringVar(&projectPath, "project", "", "Path to project.json")
 	cmd.Flags().StringVar(&source, "source", "", "Source selector")
 	cmd.Flags().StringVar(&dest, "dest", "", "Destination parent selector")
 	cmd.Flags().BoolVar(&first, "first", false, "Insert as first child")
@@ -136,9 +129,9 @@ func (w *fileMoveIO) ReadBinder(_ context.Context, path string) ([]byte, error) 
 	return os.ReadFile(path)
 }
 
-// ReadProject reads the project file at path.
-func (w *fileMoveIO) ReadProject(_ context.Context, path string) ([]byte, error) {
-	return os.ReadFile(path)
+// ScanProject scans the project directory for .md files.
+func (w *fileMoveIO) ScanProject(ctx context.Context, binderPath string) (*binder.Project, error) {
+	return ScanProjectImpl(ctx, binderPath)
 }
 
 // WriteBinderAtomic writes data to path atomically via a temp file.

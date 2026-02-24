@@ -17,7 +17,7 @@ import (
 // DeleteIO handles I/O for the delete command.
 type DeleteIO interface {
 	ReadBinder(ctx context.Context, path string) ([]byte, error)
-	ReadProject(ctx context.Context, path string) ([]byte, error)
+	ScanProject(ctx context.Context, binderPath string) (*binder.Project, error)
 	WriteBinderAtomic(ctx context.Context, path string, data []byte) error
 }
 
@@ -31,9 +31,8 @@ type deleteOutput struct {
 // NewDeleteCmd creates the delete subcommand.
 func NewDeleteCmd(io DeleteIO) *cobra.Command {
 	var (
-		projectPath string
-		selector    string
-		yes         bool
+		selector string
+		yes      bool
 	)
 
 	cmd := &cobra.Command{
@@ -54,13 +53,8 @@ func NewDeleteCmd(io DeleteIO) *cobra.Command {
 				return fmt.Errorf("reading binder: %w", err)
 			}
 
-			projectBytes, err := io.ReadProject(ctx, projectPath)
+			proj, err := io.ScanProject(ctx, binderPath)
 			if err != nil {
-				return emitOPE009AndError(cmd, binderBytes, err)
-			}
-
-			var proj binder.Project
-			if err = json.Unmarshal(projectBytes, &proj); err != nil {
 				return emitOPE009AndError(cmd, binderBytes, err)
 			}
 
@@ -69,7 +63,7 @@ func NewDeleteCmd(io DeleteIO) *cobra.Command {
 				Yes:      yes,
 			}
 
-			modifiedBytes, diags, _ := ops.Delete(ctx, binderBytes, &proj, params) //nolint:errcheck
+			modifiedBytes, diags, _ := ops.Delete(ctx, binderBytes, proj, params) //nolint:errcheck
 			if diags == nil {
 				diags = []binder.Diagnostic{}
 			}
@@ -102,7 +96,6 @@ func NewDeleteCmd(io DeleteIO) *cobra.Command {
 	}
 
 	cmd.Flags().Bool("json", false, "Output result as JSON")
-	cmd.Flags().StringVar(&projectPath, "project", "", "Path to project.json")
 	cmd.Flags().StringVar(&selector, "selector", "", "Selector for node to delete")
 	cmd.Flags().BoolVar(&yes, "yes", false, "Required confirmation flag")
 
@@ -121,9 +114,9 @@ func (w *fileDeleteIO) ReadBinder(_ context.Context, path string) ([]byte, error
 	return os.ReadFile(path)
 }
 
-// ReadProject reads the project file at path.
-func (w *fileDeleteIO) ReadProject(_ context.Context, path string) ([]byte, error) {
-	return os.ReadFile(path)
+// ScanProject scans the project directory for .md files.
+func (w *fileDeleteIO) ScanProject(ctx context.Context, binderPath string) (*binder.Project, error) {
+	return ScanProjectImpl(ctx, binderPath)
 }
 
 // WriteBinderAtomic writes data to path atomically via a temp file.

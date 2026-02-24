@@ -17,7 +17,7 @@ import (
 // AddChildIO handles I/O for the add-child command.
 type AddChildIO interface {
 	ReadBinder(ctx context.Context, path string) ([]byte, error)
-	ReadProject(ctx context.Context, path string) ([]byte, error)
+	ScanProject(ctx context.Context, binderPath string) (*binder.Project, error)
 	WriteBinderAtomic(ctx context.Context, path string, data []byte) error
 }
 
@@ -31,15 +31,14 @@ type addChildOutput struct {
 // NewAddChildCmd creates the add-child subcommand.
 func NewAddChildCmd(io AddChildIO) *cobra.Command {
 	var (
-		projectPath string
-		parent      string
-		target      string
-		title       string
-		first       bool
-		at          int
-		before      string
-		after       string
-		force       bool
+		parent string
+		target string
+		title  string
+		first  bool
+		at     int
+		before string
+		after  string
+		force  bool
 	)
 
 	cmd := &cobra.Command{
@@ -60,13 +59,8 @@ func NewAddChildCmd(io AddChildIO) *cobra.Command {
 				return fmt.Errorf("reading binder: %w", err)
 			}
 
-			projectBytes, err := io.ReadProject(ctx, projectPath)
+			proj, err := io.ScanProject(ctx, binderPath)
 			if err != nil {
-				return emitOPE009AndError(cmd, binderBytes, err)
-			}
-
-			var proj binder.Project
-			if err = json.Unmarshal(projectBytes, &proj); err != nil {
 				return emitOPE009AndError(cmd, binderBytes, err)
 			}
 
@@ -88,7 +82,7 @@ func NewAddChildCmd(io AddChildIO) *cobra.Command {
 				params.At = &at
 			}
 
-			modifiedBytes, diags, _ := ops.AddChild(ctx, binderBytes, &proj, params) //nolint:errcheck
+			modifiedBytes, diags, _ := ops.AddChild(ctx, binderBytes, proj, params) //nolint:errcheck
 			if diags == nil {
 				diags = []binder.Diagnostic{}
 			}
@@ -121,7 +115,6 @@ func NewAddChildCmd(io AddChildIO) *cobra.Command {
 	}
 
 	cmd.Flags().Bool("json", false, "Output result as JSON")
-	cmd.Flags().StringVar(&projectPath, "project", "", "Path to project.json")
 	cmd.Flags().StringVar(&parent, "parent", "", "Parent selector")
 	cmd.Flags().StringVar(&target, "target", "", "Target path for new child")
 	cmd.Flags().StringVar(&title, "title", "", "Display title (empty = derive from stem)")
@@ -146,9 +139,9 @@ func (w *fileAddChildIO) ReadBinder(_ context.Context, path string) ([]byte, err
 	return os.ReadFile(path)
 }
 
-// ReadProject reads the project file at path.
-func (w *fileAddChildIO) ReadProject(_ context.Context, path string) ([]byte, error) {
-	return os.ReadFile(path)
+// ScanProject scans the project directory for .md files.
+func (w *fileAddChildIO) ScanProject(ctx context.Context, binderPath string) (*binder.Project, error) {
+	return ScanProjectImpl(ctx, binderPath)
 }
 
 // WriteBinderAtomic writes data to path atomically via a temp file.

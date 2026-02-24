@@ -10,7 +10,7 @@ import (
 
 // TestSerialize_RoundTrip verifies that Serialize(Parse(src)) == src for a variety of inputs.
 func TestSerialize_RoundTrip(t *testing.T) {
-	project := &binder.Project{Version: "1", Files: []string{}}
+	project := &binder.Project{Files: []string{}}
 
 	tests := []struct {
 		name string
@@ -64,7 +64,7 @@ func TestSerialize_RoundTrip(t *testing.T) {
 
 // TestSerialize_EmptyInput verifies that an empty (zero-byte) input survives the round-trip.
 func TestSerialize_EmptyInput(t *testing.T) {
-	project := &binder.Project{Version: "1", Files: []string{}}
+	project := &binder.Project{Files: []string{}}
 	src := []byte{}
 
 	result, _, err := binder.Parse(context.Background(), src, project)
@@ -82,7 +82,7 @@ func TestSerialize_EmptyInput(t *testing.T) {
 // TestSerialize_BOM verifies that a file with a UTF-8 BOM survives the round-trip byte-for-byte.
 func TestSerialize_BOM(t *testing.T) {
 	const bom = "\xEF\xBB\xBF"
-	project := &binder.Project{Version: "1", Files: []string{}}
+	project := &binder.Project{Files: []string{}}
 
 	tests := []struct {
 		name string
@@ -121,7 +121,7 @@ func TestSerialize_BOM(t *testing.T) {
 // TestSerialize_UntouchedLinesAreByteIdentical verifies that lines not modified by any
 // operation are reproduced exactly, including all whitespace and punctuation.
 func TestSerialize_UntouchedLinesAreByteIdentical(t *testing.T) {
-	project := &binder.Project{Version: "1", Files: []string{}}
+	project := &binder.Project{Files: []string{}}
 
 	// Deliberately unusual whitespace and characters that must pass through unchanged.
 	src := []byte(
@@ -147,7 +147,7 @@ func TestSerialize_UntouchedLinesAreByteIdentical(t *testing.T) {
 
 // TestSerialize_ReturnType verifies that Serialize returns []byte (compilation check).
 func TestSerialize_ReturnType(t *testing.T) {
-	project := &binder.Project{Version: "1", Files: []string{}}
+	project := &binder.Project{Files: []string{}}
 	src := []byte("<!-- prosemark-binder:v1 -->\n")
 
 	result, _, err := binder.Parse(context.Background(), src, project)

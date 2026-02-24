@@ -1,10 +1,7 @@
 {
   "version": "1",
-  "operation": "add-child",
+  "operation": "delete",
   "params": {
-    "parentSelector": ".",
-    "target": "new.md",
-    "title": "New",
-    "position": "last"
+    "selector": "ch.md"
   }
 }

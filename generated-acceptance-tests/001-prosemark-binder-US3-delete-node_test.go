@@ -17,11 +17,12 @@ func Test_Deleting_a_leaf_chapter_removes_its_entry_from_the_binder(t *testing.T
 		"<!-- prosemark-binder:v1 -->\n\n"+
 			"- [Ch One](ch1.md)\n"+
 			"- [Ch Two](ch2.md)\n")
-	projectPath := writeProjectJSON(t, dir, "ch1.md", "ch2.md")
+	writeFile(t, dir, "ch1.md", "")
+	writeFile(t, dir, "ch2.md", "")
 	binderPath := dir + "/_binder.md"
 
 	// WHEN the author deletes that chapter.
-	result := runDelete(t, binderPath, projectPath, "ch1.md", true)
+	result := runDelete(t, binderPath, "ch1.md", true)
 
 	// THEN the chapter entry is removed from the binder.
 	if !result.OK {
@@ -49,11 +50,13 @@ func Test_Deleting_a_chapter_also_removes_all_of_its_nested_sub_chapters(t *test
 			"- [Parent](parent.md)\n"+
 			"  - [Child](child.md)\n"+
 			"- [Sibling](sibling.md)\n")
-	projectPath := writeProjectJSON(t, dir, "parent.md", "child.md", "sibling.md")
+	writeFile(t, dir, "parent.md", "")
+	writeFile(t, dir, "child.md", "")
+	writeFile(t, dir, "sibling.md", "")
 	binderPath := dir + "/_binder.md"
 
 	// WHEN the author deletes the parent chapter.
-	result := runDelete(t, binderPath, projectPath, "parent.md", true)
+	result := runDelete(t, binderPath, "parent.md", true)
 
 	// THEN the parent chapter and all its sub-chapters are removed.
 	if !result.OK {
@@ -81,11 +84,13 @@ func Test_Deleting_the_only_entry_inside_a_nested_section_prunes_the_now_empty_s
 			"- [Chapter One](ch1.md)\n"+
 			"  - [Section A](sec-a.md)\n"+
 			"- [Chapter Two](ch2.md)\n")
-	projectPath := writeProjectJSON(t, dir, "ch1.md", "sec-a.md", "ch2.md")
+	writeFile(t, dir, "ch1.md", "")
+	writeFile(t, dir, "sec-a.md", "")
+	writeFile(t, dir, "ch2.md", "")
 	binderPath := dir + "/_binder.md"
 
 	// WHEN the author deletes that sub-chapter.
-	result := runDelete(t, binderPath, projectPath, "sec-a.md", true)
+	result := runDelete(t, binderPath, "sec-a.md", true)
 
 	// THEN the now-empty nested section is also removed.
 	if !result.OK {
@@ -115,11 +120,13 @@ func Test_Consecutive_blank_lines_created_by_a_deletion_are_collapsed_into_one(t
 			"- [Chapter One](ch1.md)\n\n"+
 			"- [Chapter Two](ch2.md)\n\n"+
 			"- [Chapter Three](ch3.md)\n")
-	projectPath := writeProjectJSON(t, dir, "ch1.md", "ch2.md", "ch3.md")
+	writeFile(t, dir, "ch1.md", "")
+	writeFile(t, dir, "ch2.md", "")
+	writeFile(t, dir, "ch3.md", "")
 	binderPath := dir + "/_binder.md"
 
 	// WHEN the author deletes that chapter.
-	result := runDelete(t, binderPath, projectPath, "ch2.md", true)
+	result := runDelete(t, binderPath, "ch2.md", true)
 
 	// THEN the two consecutive blank lines are collapsed into one.
 	if !result.OK {
@@ -142,11 +149,11 @@ func Test_Deleting_a_chapter_with_non_structural_text_removes_that_text_too_with
 	writeFile(t, dir, "_binder.md",
 		"<!-- prosemark-binder:v1 -->\n\n"+
 			"- [Chapter One](ch1.md) \u2190 work in progress\n")
-	projectPath := writeProjectJSON(t, dir, "ch1.md")
+	writeFile(t, dir, "ch1.md", "")
 	binderPath := dir + "/_binder.md"
 
 	// WHEN the author deletes that chapter.
-	result := runDelete(t, binderPath, projectPath, "ch1.md", true)
+	result := runDelete(t, binderPath, "ch1.md", true)
 
 	// THEN the entry and its additional text are both removed.
 	if !result.OK {
@@ -172,12 +179,12 @@ func Test_Attempting_to_delete_a_non_existent_chapter_returns_an_error_without_m
 	dir := t.TempDir()
 	writeFile(t, dir, "_binder.md",
 		"<!-- prosemark-binder:v1 -->\n\n- [Chapter One](ch1.md)\n")
-	projectPath := writeProjectJSON(t, dir, "ch1.md")
+	writeFile(t, dir, "ch1.md", "")
 	binderPath := dir + "/_binder.md"
 	before := readFile(t, binderPath)
 
 	// WHEN the author tries to delete using that selector.
-	result := runDelete(t, binderPath, projectPath, "nonexistent.md", true)
+	result := runDelete(t, binderPath, "nonexistent.md", true)
 
 	// THEN a "not found" error is returned.
 	if result.OK {
@@ -203,11 +210,12 @@ func Test_Deleting_a_chapter_that_uses_footnote_style_links_preserves_the_link_d
 			"- [Chapter One](ch1.md)\n"+
 			"- [Chapter Two][ch2]\n\n"+
 			"[ch2]: ch2.md\n")
-	projectPath := writeProjectJSON(t, dir, "ch1.md", "ch2.md")
+	writeFile(t, dir, "ch1.md", "")
+	writeFile(t, dir, "ch2.md", "")
 	binderPath := dir + "/_binder.md"
 
 	// WHEN the author deletes that chapter.
-	result := runDelete(t, binderPath, projectPath, "ch2.md", true)
+	result := runDelete(t, binderPath, "ch2.md", true)
 
 	// THEN the chapter entry is removed.
 	if !result.OK {
@@ -230,11 +238,11 @@ func Test_Deleting_the_last_top_level_chapter_removes_any_trailing_blank_lines_f
 	dir := t.TempDir()
 	writeFile(t, dir, "_binder.md",
 		"<!-- prosemark-binder:v1 -->\n\n- [Chapter One](ch1.md)\n")
-	projectPath := writeProjectJSON(t, dir, "ch1.md")
+	writeFile(t, dir, "ch1.md", "")
 	binderPath := dir + "/_binder.md"
 
 	// WHEN the author deletes that chapter.
-	result := runDelete(t, binderPath, projectPath, "ch1.md", true)
+	result := runDelete(t, binderPath, "ch1.md", true)
 
 	// THEN any blank lines remaining at the end of the file are removed.
 	if !result.OK {

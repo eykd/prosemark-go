@@ -18,11 +18,11 @@ type runResult struct {
 	OK     bool // true if exit code 0
 }
 
-// runParse invokes "pmk parse --project <projectPath> <binderPath>" via `go run .`
+// runParse invokes "pmk parse <binderPath>" via `go run .`
 // executed from the project root (one directory above this test package).
-func runParse(t *testing.T, binderPath, projectPath string) runResult {
+func runParse(t *testing.T, binderPath string) runResult {
 	t.Helper()
-	cmd := exec.Command("go", "run", ".", "parse", "--project", projectPath, binderPath)
+	cmd := exec.Command("go", "run", ".", "parse", binderPath)
 	cmd.Dir = ".."
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -49,24 +49,11 @@ func writeFile(t *testing.T, dir, name, content string) string {
 	return path
 }
 
-// writeProjectJSON creates a project.json in dir with the given relative file paths.
-func writeProjectJSON(t *testing.T, dir string, files ...string) string {
-	t.Helper()
-	list := ""
-	for i, f := range files {
-		if i > 0 {
-			list += ","
-		}
-		list += `"` + f + `"`
-	}
-	return writeFile(t, dir, "project.json", `{"version":"1","files":[`+list+`]}`)
-}
-
-// runAddChild invokes "pmk add-child <binderPath> --project <projectPath>"
+// runAddChild invokes "pmk add-child <binderPath>"
 // with any extra flag strings appended.
-func runAddChild(t *testing.T, binderPath, projectPath string, extraArgs ...string) runResult {
+func runAddChild(t *testing.T, binderPath string, extraArgs ...string) runResult {
 	t.Helper()
-	args := []string{"run", ".", "add-child", "--project", projectPath, binderPath}
+	args := []string{"run", ".", "add-child", binderPath}
 	args = append(args, extraArgs...)
 	cmd := exec.Command("go", args...)
 	cmd.Dir = ".."
@@ -81,11 +68,11 @@ func runAddChild(t *testing.T, binderPath, projectPath string, extraArgs ...stri
 	}
 }
 
-// runDelete invokes "pmk delete <binderPath> --project <projectPath> --selector <sel>"
+// runDelete invokes "pmk delete <binderPath> --selector <sel>"
 // and optionally "--yes" if yes is true.
-func runDelete(t *testing.T, binderPath, projectPath, selector string, yes bool) runResult {
+func runDelete(t *testing.T, binderPath, selector string, yes bool) runResult {
 	t.Helper()
-	args := []string{"run", ".", "delete", "--project", projectPath, "--selector", selector}
+	args := []string{"run", ".", "delete", "--selector", selector}
 	if yes {
 		args = append(args, "--yes")
 	}
@@ -103,11 +90,11 @@ func runDelete(t *testing.T, binderPath, projectPath, selector string, yes bool)
 	}
 }
 
-// runMove invokes "pmk move <binderPath> --project <projectPath> --source <source> --dest <dest>"
+// runMove invokes "pmk move <binderPath> --source <source> --dest <dest>"
 // with any extra flag strings appended.
-func runMove(t *testing.T, binderPath, projectPath, source, dest string, extraArgs ...string) runResult {
+func runMove(t *testing.T, binderPath, source, dest string, extraArgs ...string) runResult {
 	t.Helper()
-	args := []string{"run", ".", "move", "--project", projectPath, "--source", source, "--dest", dest, binderPath}
+	args := []string{"run", ".", "move", "--source", source, "--dest", dest, binderPath}
 	args = append(args, extraArgs...)
 	cmd := exec.Command("go", args...)
 	cmd.Dir = ".."

@@ -5,22 +5,27 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+
+	"github.com/eykd/prosemark-go/internal/binder"
 )
 
 // mockParseReader is a test double for ParseReader.
 type mockParseReader struct {
-	binderBytes  []byte
-	projectBytes []byte
-	binderErr    error
-	projectErr   error
+	binderBytes []byte
+	project     *binder.Project
+	binderErr   error
+	projectErr  error
 }
 
 func (m *mockParseReader) ReadBinder(_ context.Context, _ string) ([]byte, error) {
 	return m.binderBytes, m.binderErr
 }
 
-func (m *mockParseReader) ReadProject(_ context.Context, _ string) ([]byte, error) {
-	return m.projectBytes, m.projectErr
+func (m *mockParseReader) ScanProject(_ context.Context, _ string) (*binder.Project, error) {
+	if m.project != nil {
+		return m.project, m.projectErr
+	}
+	return &binder.Project{Files: []string{}, BinderDir: "."}, m.projectErr
 }
 
 func TestNewParseCmd_RejectsNon_binderMdFilename(t *testing.T) {
@@ -38,15 +43,15 @@ func TestNewParseCmd_RejectsNon_binderMdFilename(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			reader := &mockParseReader{
-				binderBytes:  []byte("<!-- prosemark-binder:v1 -->\n"),
-				projectBytes: []byte(`{"version":"1","files":[]}`),
+				binderBytes: []byte("<!-- prosemark-binder:v1 -->\n"),
+				project:     &binder.Project{Files: []string{}, BinderDir: "."},
 			}
 			c := NewParseCmd(reader)
 			out := new(bytes.Buffer)
 			errOut := new(bytes.Buffer)
 			c.SetOut(out)
 			c.SetErr(errOut)
-			c.SetArgs([]string{"--json", "--project", "project.json", tt.binderPath})
+			c.SetArgs([]string{"--json", tt.binderPath})
 
 			err := c.Execute()
 			if (err != nil) != tt.wantErr {
@@ -62,13 +67,13 @@ func TestNewParseCmd_RejectsNon_binderMdFilename(t *testing.T) {
 
 func TestNewParseCmd_OutputsJSONOnSuccess(t *testing.T) {
 	reader := &mockParseReader{
-		binderBytes:  []byte("<!-- prosemark-binder:v1 -->\n- [Chapter One](ch1.md)\n"),
-		projectBytes: []byte(`{"version":"1","files":["ch1.md"]}`),
+		binderBytes: []byte("<!-- prosemark-binder:v1 -->\n- [Chapter One](ch1.md)\n"),
+		project:     &binder.Project{Files: []string{"ch1.md"}, BinderDir: "."},
 	}
 	c := NewParseCmd(reader)
 	out := new(bytes.Buffer)
 	c.SetOut(out)
-	c.SetArgs([]string{"--json", "--project", "project.json", "_binder.md"})
+	c.SetArgs([]string{"--json", "_binder.md"})
 
 	err := c.Execute()
 	if err != nil {
@@ -93,13 +98,13 @@ func TestNewParseCmd_OutputsJSONOnSuccess(t *testing.T) {
 func TestNewParseCmd_ExitsZeroOnWarningsOnly(t *testing.T) {
 	// Binder without pragma → BNDW001 (warning severity only) → exit 0
 	reader := &mockParseReader{
-		binderBytes:  []byte("- [Chapter One](ch1.md)\n"),
-		projectBytes: []byte(`{"version":"1","files":["ch1.md"]}`),
+		binderBytes: []byte("- [Chapter One](ch1.md)\n"),
+		project:     &binder.Project{Files: []string{"ch1.md"}, BinderDir: "."},
 	}
 	c := NewParseCmd(reader)
 	out := new(bytes.Buffer)
 	c.SetOut(out)
-	c.SetArgs([]string{"--json", "--project", "project.json", "_binder.md"})
+	c.SetArgs([]string{"--json", "_binder.md"})
 
 	err := c.Execute()
 	if err != nil {
@@ -110,15 +115,14 @@ func TestNewParseCmd_ExitsZeroOnWarningsOnly(t *testing.T) {
 func TestNewParseCmd_ExitsNonZeroOnBNDErrors(t *testing.T) {
 	// Path escaping root → BNDE002 (error severity) → exit non-zero
 	reader := &mockParseReader{
-		binderBytes:  []byte("<!-- prosemark-binder:v1 -->\n- [Escape](../secret.md)\n"),
-		projectBytes: []byte(`{"version":"1","files":[]}`),
+		binderBytes: []byte("<!-- prosemark-binder:v1 -->\n- [Escape](../secret.md)\n"),
 	}
 	c := NewParseCmd(reader)
 	out := new(bytes.Buffer)
 	errOut := new(bytes.Buffer)
 	c.SetOut(out)
 	c.SetErr(errOut)
-	c.SetArgs([]string{"--json", "--project", "project.json", "_binder.md"})
+	c.SetArgs([]string{"--json", "_binder.md"})
 
 	err := c.Execute()
 	if err == nil {
@@ -142,8 +146,5 @@ func TestNewParseCmd_HasRequiredFlags(t *testing.T) {
 	c := NewParseCmd(nil)
 	if c.Flags().Lookup("json") == nil {
 		t.Error("expected --json flag on parse command")
-	}
-	if c.Flags().Lookup("project") == nil {
-		t.Error("expected --project flag on parse command")
 	}
 }

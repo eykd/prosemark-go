@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -94,7 +95,7 @@ func TestConformance_ParseFixtures(t *testing.T) {
 func runParseFixture(t *testing.T, fixturePath string) {
 	t.Helper()
 
-	skipIfMissingFiles(t, fixturePath, []string{"binder.md", "project.json", "expected-parse.json", "expected-diagnostics.json"})
+	skipIfMissingFiles(t, fixturePath, []string{"binder.md", "expected-parse.json", "expected-diagnostics.json"})
 
 	// Set up temp working directory with _binder.md.
 	tmpDir, err := os.MkdirTemp("", "pmk-parse-*")
@@ -107,14 +108,11 @@ func runParseFixture(t *testing.T, fixturePath string) {
 	if err := copyFile(filepath.Join(fixturePath, "binder.md"), binderPath); err != nil {
 		t.Fatalf("copyFile binder.md: %v", err)
 	}
-	projectPath := filepath.Join(tmpDir, "project.json")
-	if err := copyFile(filepath.Join(fixturePath, "project.json"), projectPath); err != nil {
-		t.Fatalf("copyFile project.json: %v", err)
-	}
+	copyFixtureStubs(t, fixturePath, tmpDir, "binder.md")
 
 	// Invoke pmk parse --json. Non-zero exit is acceptable for error fixtures;
 	// stdout still contains JSON diagnostics per the runner contract.
-	cmd := exec.Command(pmkBinary, "parse", "--json", binderPath, "--project", projectPath)
+	cmd := exec.Command(pmkBinary, "parse", "--json", binderPath)
 	stdout, runErr := cmd.Output()
 	var exitErr *exec.ExitError
 	if runErr != nil && !errors.As(runErr, &exitErr) {
@@ -205,7 +203,7 @@ func walkOpsFixtures(t *testing.T, fn func(t *testing.T, fixturePath string)) {
 func runOpsFixture(t *testing.T, fixturePath string) {
 	t.Helper()
 
-	skipIfMissingFiles(t, fixturePath, []string{"input-binder.md", "project.json", "expected-diagnostics.json"})
+	skipIfMissingFiles(t, fixturePath, []string{"input-binder.md", "expected-diagnostics.json"})
 
 	inputBinderBytes, err := os.ReadFile(filepath.Join(fixturePath, "input-binder.md"))
 	if err != nil {
@@ -223,15 +221,12 @@ func runOpsFixture(t *testing.T, fixturePath string) {
 	if err := os.WriteFile(binderPath, inputBinderBytes, 0600); err != nil {
 		t.Fatalf("write _binder.md: %v", err)
 	}
-	projectPath := filepath.Join(tmpDir, "project.json")
-	if err := copyFile(filepath.Join(fixturePath, "project.json"), projectPath); err != nil {
-		t.Fatalf("copyFile project.json: %v", err)
-	}
+	copyFixtureStubs(t, fixturePath, tmpDir, "input-binder.md", "expected-binder.md")
 
 	// Dispatch to mutation or stability runner.
 	opJSONPath := filepath.Join(fixturePath, "op.json")
 	if _, err := os.Stat(opJSONPath); os.IsNotExist(err) {
-		runStabilityFixture(t, fixturePath, binderPath, projectPath, inputBinderBytes)
+		runStabilityFixture(t, fixturePath, binderPath, inputBinderBytes)
 		return
 	}
 
@@ -250,7 +245,7 @@ func runOpsFixture(t *testing.T, fixturePath string) {
 		t.Fatalf("buildOpArgs: %v", err)
 	}
 
-	cmdArgs := append([]string{spec.Operation, "--json", binderPath, "--project", projectPath}, opArgs...)
+	cmdArgs := append([]string{spec.Operation, "--json", binderPath}, opArgs...)
 	cmd := exec.Command(pmkBinary, cmdArgs...)
 	stdout, runErr := cmd.Output()
 	var exitErr *exec.ExitError
@@ -326,7 +321,7 @@ func runOpsFixture(t *testing.T, fixturePath string) {
 // It verifies that expected-binder.md is byte-for-byte identical to
 // input-binder.md (the fixture proves the serializer produces the same bytes),
 // and checks that pmk parse --json does not modify the binder file.
-func runStabilityFixture(t *testing.T, fixturePath, binderPath, projectPath string, inputBinderBytes []byte) {
+func runStabilityFixture(t *testing.T, fixturePath, binderPath string, inputBinderBytes []byte) {
 	t.Helper()
 
 	// Byte-identity check: expected-binder.md must equal input-binder.md.
@@ -343,7 +338,7 @@ func runStabilityFixture(t *testing.T, fixturePath, binderPath, projectPath stri
 
 	// Invoke pmk parse --json to verify diagnostics and that parse does not
 	// mutate the binder file.
-	cmd := exec.Command(pmkBinary, "parse", "--json", binderPath, "--project", projectPath)
+	cmd := exec.Command(pmkBinary, "parse", "--json", binderPath)
 	stdout, runErr := cmd.Output()
 	var exitErr *exec.ExitError
 	if runErr != nil && !errors.As(runErr, &exitErr) {
@@ -705,6 +700,45 @@ func copyFile(src, dst string) error {
 	return os.WriteFile(dst, data, 0600)
 }
 
+// copyFixtureStubs walks fixtureDir recursively and creates zero-byte stub
+// files in tmpDir for every .md file found, preserving relative paths, except
+// those whose base name appears in skip. This populates the temp working
+// directory with stub files that ScanProjectImpl will discover when resolving
+// wikilinks.
+func copyFixtureStubs(t *testing.T, fixtureDir, tmpDir string, skip ...string) {
+	t.Helper()
+	skipSet := make(map[string]bool, len(skip))
+	for _, s := range skip {
+		skipSet[s] = true
+	}
+	err := filepath.WalkDir(fixtureDir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		if !strings.HasSuffix(path, ".md") {
+			return nil
+		}
+		rel, relErr := filepath.Rel(fixtureDir, path)
+		if relErr != nil {
+			return relErr
+		}
+		if skipSet[filepath.Base(rel)] {
+			return nil
+		}
+		dst := filepath.Join(tmpDir, rel)
+		if mkErr := os.MkdirAll(filepath.Dir(dst), 0o755); mkErr != nil {
+			return mkErr
+		}
+		return os.WriteFile(dst, nil, 0600)
+	})
+	if err != nil {
+		t.Fatalf("copyFixtureStubs WalkDir %s: %v", fixtureDir, err)
+	}
+}
+
 // ---------------------------------------------------------------------------
 // Justfile integration checks (Phase G / runner-contract §6)
 // ---------------------------------------------------------------------------
@@ -819,7 +853,7 @@ func validateChangedField(t *testing.T, fixturePath string) {
 		return
 	}
 
-	skipIfMissingFiles(t, fixturePath, []string{"input-binder.md", "project.json", "expected-diagnostics.json"})
+	skipIfMissingFiles(t, fixturePath, []string{"input-binder.md", "expected-diagnostics.json"})
 
 	inputBinderBytes, err := os.ReadFile(filepath.Join(fixturePath, "input-binder.md"))
 	if err != nil {
@@ -836,10 +870,7 @@ func validateChangedField(t *testing.T, fixturePath string) {
 	if err := os.WriteFile(binderPath, inputBinderBytes, 0600); err != nil {
 		t.Fatalf("write _binder.md: %v", err)
 	}
-	projectPath := filepath.Join(tmpDir, "project.json")
-	if err := copyFile(filepath.Join(fixturePath, "project.json"), projectPath); err != nil {
-		t.Fatalf("copyFile project.json: %v", err)
-	}
+	copyFixtureStubs(t, fixturePath, tmpDir, "input-binder.md", "expected-binder.md")
 
 	opRaw, err := os.ReadFile(opJSONPath)
 	if err != nil {
@@ -855,7 +886,7 @@ func validateChangedField(t *testing.T, fixturePath string) {
 		t.Fatalf("buildOpArgs: %v", err)
 	}
 
-	cmdArgs := append([]string{spec.Operation, "--json", binderPath, "--project", projectPath}, opArgs...)
+	cmdArgs := append([]string{spec.Operation, "--json", binderPath}, opArgs...)
 	cmd := exec.Command(pmkBinary, cmdArgs...)
 	stdout, runErr := cmd.Output()
 	var exitErr *exec.ExitError

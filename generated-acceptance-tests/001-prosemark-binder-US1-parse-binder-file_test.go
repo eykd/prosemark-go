@@ -15,10 +15,10 @@ func Test_Binder_with_one_top_level_chapter_link_is_parsed_into_a_tree(t *testin
 	dir := t.TempDir()
 	writeFile(t, dir, "_binder.md",
 		"<!-- prosemark-binder:v1 -->\n- [Chapter One](chapter-one.md)\n")
-	projectPath := writeProjectJSON(t, dir, "chapter-one.md")
+	writeFile(t, dir, "chapter-one.md", "")
 
 	// WHEN the author requests the parsed outline.
-	result := runParse(t, dir+"/_binder.md", projectPath)
+	result := runParse(t, dir+"/_binder.md")
 
 	// THEN the outline contains a single chapter node.
 	if !result.OK {
@@ -43,10 +43,10 @@ func Test_Binder_using_wiki_style_links_is_parsed_correctly(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, "_binder.md",
 		"<!-- prosemark-binder:v1 -->\n- [[chapter-two]]\n")
-	projectPath := writeProjectJSON(t, dir, "chapter-two.md")
+	writeFile(t, dir, "chapter-two.md", "")
 
 	// WHEN the author requests the parsed outline.
-	result := runParse(t, dir+"/_binder.md", projectPath)
+	result := runParse(t, dir+"/_binder.md")
 
 	// THEN the chapter node title is the name of the file without extension.
 	if !result.OK {
@@ -68,10 +68,10 @@ func Test_Binder_using_footnote_style_links_is_parsed_correctly(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, "_binder.md",
 		"<!-- prosemark-binder:v1 -->\n- [My Chapter][ch]\n\n[ch]: chapter-three.md\n")
-	projectPath := writeProjectJSON(t, dir, "chapter-three.md")
+	writeFile(t, dir, "chapter-three.md", "")
 
 	// WHEN the author requests the parsed outline.
-	result := runParse(t, dir+"/_binder.md", projectPath)
+	result := runParse(t, dir+"/_binder.md")
 
 	// THEN the chapter node has the correct title and file path from the link definition.
 	if !result.OK {
@@ -92,10 +92,10 @@ func Test_Binder_without_a_version_marker_produces_a_warning(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, "_binder.md",
 		"- [Chapter One](chapter-one.md)\n")
-	projectPath := writeProjectJSON(t, dir, "chapter-one.md")
+	writeFile(t, dir, "chapter-one.md", "")
 
 	// WHEN the author requests the parsed outline.
-	result := runParse(t, dir+"/_binder.md", projectPath)
+	result := runParse(t, dir+"/_binder.md")
 
 	// THEN parsing succeeds.
 	if !result.OK {
@@ -115,10 +115,9 @@ func Test_Binder_with_illegal_characters_in_a_file_path_produces_an_error(t *tes
 	dir := t.TempDir()
 	writeFile(t, dir, "_binder.md",
 		"<!-- prosemark-binder:v1 -->\n- [Chapter](chapter%3Efile.md)\n")
-	projectPath := writeProjectJSON(t, dir)
 
 	// WHEN the author requests the parsed outline.
-	result := runParse(t, dir+"/_binder.md", projectPath)
+	result := runParse(t, dir+"/_binder.md")
 
 	// THEN an "illegal path characters" error is included in the result.
 	if result.OK {
@@ -136,10 +135,9 @@ func Test_Binder_with_a_path_that_escapes_the_project_root_produces_an_error(t *
 	dir := t.TempDir()
 	writeFile(t, dir, "_binder.md",
 		"<!-- prosemark-binder:v1 -->\n- [Chapter](../outside.md)\n")
-	projectPath := writeProjectJSON(t, dir)
 
 	// WHEN the author requests the parsed outline.
-	result := runParse(t, dir+"/_binder.md", projectPath)
+	result := runParse(t, dir+"/_binder.md")
 
 	// THEN a "path escapes project root" error is included in the result.
 	if result.OK {
@@ -159,11 +157,11 @@ func Test_Binder_with_a_path_matching_a_file_only_by_different_letter_case_produ
 	dir := t.TempDir()
 	writeFile(t, dir, "_binder.md",
 		"<!-- prosemark-binder:v1 -->\n- [[Chapter-Two]]\n")
-	// project.json lists the file in lowercase; wikilink stem is in mixed case.
-	projectPath := writeProjectJSON(t, dir, "chapter-two.md")
+	// file in lowercase; wikilink stem is in mixed case.
+	writeFile(t, dir, "chapter-two.md", "")
 
 	// WHEN the author requests the parsed outline.
-	result := runParse(t, dir+"/_binder.md", projectPath)
+	result := runParse(t, dir+"/_binder.md")
 
 	// THEN a "case-insensitive match only" warning is included in the result.
 	if !result.OK {
@@ -182,10 +180,11 @@ func Test_Binder_with_a_wiki_style_link_matching_files_in_two_equally_distant_fo
 	writeFile(t, dir, "_binder.md",
 		"<!-- prosemark-binder:v1 -->\n- [[ambiguous]]\n")
 	// Two files with the same stem at equal depth (one slash each).
-	projectPath := writeProjectJSON(t, dir, "a/ambiguous.md", "b/ambiguous.md")
+	writeFile(t, dir, "a/ambiguous.md", "")
+	writeFile(t, dir, "b/ambiguous.md", "")
 
 	// WHEN the author requests the parsed outline.
-	result := runParse(t, dir+"/_binder.md", projectPath)
+	result := runParse(t, dir+"/_binder.md")
 
 	// THEN an "ambiguous link" error is included in the result.
 	if result.OK {
@@ -207,10 +206,10 @@ func Test_Links_inside_code_blocks_are_excluded_from_the_outline(t *testing.T) {
 			fence+"\n"+
 			"- [Chapter One](chapter-one.md)\n"+
 			fence+"\n")
-	projectPath := writeProjectJSON(t, dir, "chapter-one.md")
+	writeFile(t, dir, "chapter-one.md", "")
 
 	// WHEN the author requests the parsed outline.
-	result := runParse(t, dir+"/_binder.md", projectPath)
+	result := runParse(t, dir+"/_binder.md")
 
 	if !result.OK {
 		t.Fatalf("expected exit 0 (BNDW005 is a warning), got error\nstdout: %s\nstderr: %s", result.Stdout, result.Stderr)
@@ -233,10 +232,10 @@ func Test_Binder_files_with_Windows_style_line_endings_are_parsed_correctly(t *t
 	// Write a binder file with CRLF line endings throughout.
 	crlfContent := "<!-- prosemark-binder:v1 -->\r\n- [Chapter One](chapter-one.md)\r\n"
 	writeFile(t, dir, "_binder.md", crlfContent)
-	projectPath := writeProjectJSON(t, dir, "chapter-one.md")
+	writeFile(t, dir, "chapter-one.md", "")
 
 	// WHEN the author requests the parsed outline.
-	result := runParse(t, dir+"/_binder.md", projectPath)
+	result := runParse(t, dir+"/_binder.md")
 
 	// THEN the outline is extracted correctly.
 	if !result.OK {

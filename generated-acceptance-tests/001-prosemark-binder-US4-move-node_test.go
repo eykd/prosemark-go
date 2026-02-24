@@ -18,11 +18,13 @@ func Test_Moving_a_chapter_to_a_different_position_reorders_the_binder(t *testin
 			"- [Chapter One](ch1.md)\n"+
 			"- [Chapter Two](ch2.md)\n"+
 			"- [Chapter Three](ch3.md)\n")
-	projectPath := writeProjectJSON(t, dir, "ch1.md", "ch2.md", "ch3.md")
+	writeFile(t, dir, "ch1.md", "")
+	writeFile(t, dir, "ch2.md", "")
+	writeFile(t, dir, "ch3.md", "")
 	binderPath := dir + "/_binder.md"
 
 	// WHEN the author moves one chapter to the other's position.
-	result := runMove(t, binderPath, projectPath, "ch3.md", ".", "--first", "--yes")
+	result := runMove(t, binderPath, "ch3.md", ".", "--first", "--yes")
 
 	// THEN the chapters appear in the new order.
 	if !result.OK {
@@ -50,11 +52,14 @@ func Test_Moving_a_chapter_moves_its_entire_sub_chapter_tree_with_it(t *testing.
 			"  - [Chapter One](ch1.md)\n"+
 			"    - [Section A](sec-a.md)\n"+
 			"- [Part Two](part2.md)\n")
-	projectPath := writeProjectJSON(t, dir, "part1.md", "ch1.md", "sec-a.md", "part2.md")
+	writeFile(t, dir, "part1.md", "")
+	writeFile(t, dir, "ch1.md", "")
+	writeFile(t, dir, "sec-a.md", "")
+	writeFile(t, dir, "part2.md", "")
 	binderPath := dir + "/_binder.md"
 
 	// WHEN the author moves that chapter to a different location.
-	result := runMove(t, binderPath, projectPath, "ch1.md", "part2.md", "--yes")
+	result := runMove(t, binderPath, "ch1.md", "part2.md", "--yes")
 
 	// THEN the chapter and all its sub-chapters appear together at the destination.
 	if !result.OK {
@@ -85,12 +90,13 @@ func Test_Moving_a_chapter_into_one_of_its_own_descendants_is_rejected(t *testin
 		"<!-- prosemark-binder:v1 -->\n\n"+
 			"- [Chapter A](ch-a.md)\n"+
 			"  - [Chapter B](ch-b.md)\n")
-	projectPath := writeProjectJSON(t, dir, "ch-a.md", "ch-b.md")
+	writeFile(t, dir, "ch-a.md", "")
+	writeFile(t, dir, "ch-b.md", "")
 	binderPath := dir + "/_binder.md"
 	before := readFile(t, binderPath)
 
 	// WHEN the author tries to move "A" to be under "B".
-	result := runMove(t, binderPath, projectPath, "ch-a.md", "ch-b.md", "--yes")
+	result := runMove(t, binderPath, "ch-a.md", "ch-b.md", "--yes")
 
 	// THEN a "circular move" error is returned.
 	if result.OK {
@@ -117,11 +123,13 @@ func Test_Moving_a_chapter_that_uses_footnote_style_links_preserves_its_link_for
 			"  - [Chapter][ch-ref]\n"+
 			"- [Other](other.md)\n\n"+
 			"[ch-ref]: chapter.md\n")
-	projectPath := writeProjectJSON(t, dir, "part.md", "chapter.md", "other.md")
+	writeFile(t, dir, "part.md", "")
+	writeFile(t, dir, "chapter.md", "")
+	writeFile(t, dir, "other.md", "")
 	binderPath := dir + "/_binder.md"
 
 	// WHEN the author moves that chapter to a different location.
-	result := runMove(t, binderPath, projectPath, "chapter.md", ".", "--yes")
+	result := runMove(t, binderPath, "chapter.md", ".", "--yes")
 
 	// THEN the moved chapter still uses its footnote-style link at the new location.
 	if !result.OK {
@@ -146,11 +154,13 @@ func Test_Moving_a_chapter_with_a_tooltip_preserves_the_tooltip_text(t *testing.
 			"- [Part One](part1.md)\n"+
 			"  - [Chapter One](ch1.md \"Introduction chapter\")\n"+
 			"- [Part Two](part2.md)\n")
-	projectPath := writeProjectJSON(t, dir, "part1.md", "ch1.md", "part2.md")
+	writeFile(t, dir, "part1.md", "")
+	writeFile(t, dir, "ch1.md", "")
+	writeFile(t, dir, "part2.md", "")
 	binderPath := dir + "/_binder.md"
 
 	// WHEN the author moves that chapter to a different location.
-	result := runMove(t, binderPath, projectPath, "ch1.md", "part2.md", "--yes")
+	result := runMove(t, binderPath, "ch1.md", "part2.md", "--yes")
 
 	// THEN the moved chapter's link still has the tooltip text at the new location.
 	if !result.OK {
@@ -182,11 +192,14 @@ func Test_Moved_chapter_uses_the_indentation_style_of_its_new_sibling_group(t *t
 			"  - [Chapter One](ch1.md)\n"+
 			"- [Part Two](part2.md)\n"+
 			"\t- [Chapter Two](ch2.md)\n")
-	projectPath := writeProjectJSON(t, dir, "part1.md", "ch1.md", "part2.md", "ch2.md")
+	writeFile(t, dir, "part1.md", "")
+	writeFile(t, dir, "ch1.md", "")
+	writeFile(t, dir, "part2.md", "")
+	writeFile(t, dir, "ch2.md", "")
 	binderPath := dir + "/_binder.md"
 
 	// WHEN the author moves a chapter to the destination section.
-	result := runMove(t, binderPath, projectPath, "ch1.md", "part2.md", "--yes")
+	result := runMove(t, binderPath, "ch1.md", "part2.md", "--yes")
 
 	// THEN the moved chapter uses the destination section's indentation style.
 	if !result.OK {
@@ -208,11 +221,13 @@ func Test_Moving_a_chapter_with_non_structural_text_destroys_that_text_with_a_wa
 			"- [Part One](part1.md)\n"+
 			"  - [ ] [Chapter One](ch1.md)\n"+
 			"- [Part Two](part2.md)\n")
-	projectPath := writeProjectJSON(t, dir, "part1.md", "ch1.md", "part2.md")
+	writeFile(t, dir, "part1.md", "")
+	writeFile(t, dir, "ch1.md", "")
+	writeFile(t, dir, "part2.md", "")
 	binderPath := dir + "/_binder.md"
 
 	// WHEN the author moves that chapter.
-	result := runMove(t, binderPath, projectPath, "ch1.md", "part2.md", "--yes")
+	result := runMove(t, binderPath, "ch1.md", "part2.md", "--yes")
 
 	// THEN the chapter appears at the destination without the additional text.
 	if !result.OK {

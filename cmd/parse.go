@@ -12,10 +12,10 @@ import (
 	"github.com/eykd/prosemark-go/internal/binder"
 )
 
-// ParseReader reads binder and project files for the parse command.
+// ParseReader reads the binder file and scans the project directory for the parse command.
 type ParseReader interface {
 	ReadBinder(ctx context.Context, path string) ([]byte, error)
-	ReadProject(ctx context.Context, path string) ([]byte, error)
+	ScanProject(ctx context.Context, binderPath string) (*binder.Project, error)
 }
 
 // parseOutput is the JSON output schema for the parse command.
@@ -27,7 +27,6 @@ type parseOutput struct {
 
 // NewParseCmd creates the parse subcommand.
 func NewParseCmd(reader ParseReader) *cobra.Command {
-	var projectPath string
 	cmd := &cobra.Command{
 		Use:          "parse <binder-path>",
 		Short:        "Parse a binder file and output JSON",
@@ -46,18 +45,13 @@ func NewParseCmd(reader ParseReader) *cobra.Command {
 				return fmt.Errorf("reading binder: %w", err)
 			}
 
-			projectBytes, err := reader.ReadProject(ctx, projectPath)
+			proj, err := reader.ScanProject(ctx, binderPath)
 			if err != nil {
-				return fmt.Errorf("reading project: %w", err)
-			}
-
-			var proj binder.Project
-			if err = json.Unmarshal(projectBytes, &proj); err != nil {
-				return fmt.Errorf("parsing project JSON: %w", err)
+				return fmt.Errorf("scanning project: %w", err)
 			}
 
 			// binder.Parse accumulates errors into diagnostics; the error return is always nil.
-			result, diags, _ := binder.Parse(ctx, binderBytes, &proj) //nolint:errcheck
+			result, diags, _ := binder.Parse(ctx, binderBytes, proj) //nolint:errcheck
 			if diags == nil {
 				diags = []binder.Diagnostic{}
 			}
@@ -81,7 +75,6 @@ func NewParseCmd(reader ParseReader) *cobra.Command {
 	}
 
 	cmd.Flags().Bool("json", false, "Output parse result as JSON")
-	cmd.Flags().StringVar(&projectPath, "project", "", "Path to project.json")
 	return cmd
 }
 
@@ -96,6 +89,7 @@ func (r *fileParseReader) ReadBinder(_ context.Context, path string) ([]byte, er
 	return os.ReadFile(path)
 }
 
-func (r *fileParseReader) ReadProject(_ context.Context, path string) ([]byte, error) {
-	return os.ReadFile(path)
+// ScanProject scans the project directory for .md files.
+func (r *fileParseReader) ScanProject(ctx context.Context, binderPath string) (*binder.Project, error) {
+	return ScanProjectImpl(ctx, binderPath)
 }

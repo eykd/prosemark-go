@@ -21,7 +21,7 @@ func TestNewParseCmd_ReadBinderError(t *testing.T) {
 	c := NewParseCmd(reader)
 	out := new(bytes.Buffer)
 	c.SetOut(out)
-	c.SetArgs([]string{"--json", "--project", "project.json", "_binder.md"})
+	c.SetArgs([]string{"--json", "_binder.md"})
 
 	err := c.Execute()
 	if err == nil {
@@ -32,7 +32,7 @@ func TestNewParseCmd_ReadBinderError(t *testing.T) {
 	}
 }
 
-func TestNewParseCmd_ReadProjectError(t *testing.T) {
+func TestNewParseCmd_ScanProjectError(t *testing.T) {
 	reader := &mockParseReader{
 		binderBytes: []byte("<!-- prosemark-binder:v1 -->\n"),
 		projectErr:  errors.New("disk error"),
@@ -40,38 +40,21 @@ func TestNewParseCmd_ReadProjectError(t *testing.T) {
 	c := NewParseCmd(reader)
 	out := new(bytes.Buffer)
 	c.SetOut(out)
-	c.SetArgs([]string{"--json", "--project", "project.json", "_binder.md"})
+	c.SetArgs([]string{"--json", "_binder.md"})
 
 	err := c.Execute()
 	if err == nil {
-		t.Error("expected error when ReadProject fails")
-	}
-}
-
-func TestNewParseCmd_InvalidProjectJSON(t *testing.T) {
-	reader := &mockParseReader{
-		binderBytes:  []byte("<!-- prosemark-binder:v1 -->\n"),
-		projectBytes: []byte("not valid json"),
-	}
-	c := NewParseCmd(reader)
-	out := new(bytes.Buffer)
-	c.SetOut(out)
-	c.SetArgs([]string{"--json", "--project", "project.json", "_binder.md"})
-
-	err := c.Execute()
-	if err == nil {
-		t.Error("expected error when project JSON is invalid")
+		t.Error("expected error when ScanProject fails")
 	}
 }
 
 func TestNewParseCmd_EncodeError(t *testing.T) {
 	reader := &mockParseReader{
-		binderBytes:  []byte("<!-- prosemark-binder:v1 -->\n"),
-		projectBytes: []byte(`{"version":"1","files":[]}`),
+		binderBytes: []byte("<!-- prosemark-binder:v1 -->\n"),
 	}
 	c := NewParseCmd(reader)
 	c.SetOut(&errWriter{err: errors.New("write error")})
-	c.SetArgs([]string{"--json", "--project", "project.json", "_binder.md"})
+	c.SetArgs([]string{"--json", "_binder.md"})
 
 	err := c.Execute()
 	if err == nil {
@@ -103,20 +86,25 @@ func TestFileParseReader_ReadBinder(t *testing.T) {
 	}
 }
 
-func TestFileParseReader_ReadProject(t *testing.T) {
+func TestFileParseReader_ScanProject(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "project.json")
-	content := []byte(`{"version":"1","files":[]}`)
-	if err := os.WriteFile(path, content, 0600); err != nil {
+	binderPath := filepath.Join(dir, "_binder.md")
+	if err := os.WriteFile(binderPath, []byte("<!-- prosemark-binder:v1 -->\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "ch1.md"), nil, 0600); err != nil {
 		t.Fatal(err)
 	}
 
 	r := newDefaultParseReader()
-	got, err := r.ReadProject(context.Background(), path)
+	proj, err := r.ScanProject(context.Background(), binderPath)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !bytes.Equal(got, content) {
-		t.Errorf("got %q, want %q", got, content)
+	if proj == nil {
+		t.Fatal("expected non-nil project")
+	}
+	if len(proj.Files) != 1 || proj.Files[0] != "ch1.md" {
+		t.Errorf("project.Files = %v, want [ch1.md]", proj.Files)
 	}
 }

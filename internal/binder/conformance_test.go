@@ -5,9 +5,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/eykd/prosemark-go/internal/binder"
@@ -63,18 +65,10 @@ func runParseFixture(t *testing.T, fixturePath string) {
 		t.Fatalf("read binder.md: %v", err)
 	}
 
-	projectBytes, err := os.ReadFile(filepath.Join(fixturePath, "project.json"))
-	if err != nil {
-		t.Fatalf("read project.json: %v", err)
-	}
-
-	var proj binder.Project
-	if err := json.Unmarshal(projectBytes, &proj); err != nil {
-		t.Fatalf("parse project.json: %v", err)
-	}
+	proj := scanFixtureProject(t, fixturePath, "binder.md")
 
 	// Run the parser.
-	result, diags, parseErr := binder.Parse(context.Background(), binderBytes, &proj)
+	result, diags, parseErr := binder.Parse(context.Background(), binderBytes, proj)
 	if parseErr != nil {
 		t.Fatalf("Parse() returned unexpected error: %v", parseErr)
 	}
@@ -139,17 +133,9 @@ func TestConformance_ParseStability(t *testing.T) {
 				t.Fatalf("read binder.md: %v", err)
 			}
 
-			projectBytes, err := os.ReadFile(filepath.Join(fixturePath, "project.json"))
-			if err != nil {
-				t.Fatalf("read project.json: %v", err)
-			}
+			proj := scanFixtureProject(t, fixturePath, "binder.md")
 
-			var proj binder.Project
-			if err := json.Unmarshal(projectBytes, &proj); err != nil {
-				t.Fatalf("parse project.json: %v", err)
-			}
-
-			result, _, parseErr := binder.Parse(context.Background(), binderBytes, &proj)
+			result, _, parseErr := binder.Parse(context.Background(), binderBytes, proj)
 			if parseErr != nil {
 				t.Fatalf("Parse() returned unexpected error: %v", parseErr)
 			}
@@ -164,6 +150,48 @@ func TestConformance_ParseStability(t *testing.T) {
 			}
 		})
 	}
+}
+
+// --- Project scanning helper ---
+
+// scanFixtureProject scans fixtureDir recursively for .md files, excluding
+// those whose base names are listed in skip, and returns a *binder.Project
+// with BinderDir set to ".". This mirrors what ScanProjectImpl does at
+// runtime, allowing unit-level conformance tests to run without project.json.
+func scanFixtureProject(t *testing.T, fixtureDir string, skip ...string) *binder.Project {
+	t.Helper()
+	skipSet := make(map[string]bool, len(skip))
+	for _, s := range skip {
+		skipSet[s] = true
+	}
+	var files []string
+	err := filepath.WalkDir(fixtureDir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		if !strings.HasSuffix(path, ".md") {
+			return nil
+		}
+		rel, relErr := filepath.Rel(fixtureDir, path)
+		if relErr != nil {
+			return relErr
+		}
+		if skipSet[filepath.Base(rel)] {
+			return nil
+		}
+		files = append(files, filepath.ToSlash(rel))
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("scanFixtureProject WalkDir %s: %v", fixtureDir, err)
+	}
+	if files == nil {
+		files = []string{}
+	}
+	return &binder.Project{Files: files, BinderDir: "."}
 }
 
 // --- JSON comparison helpers ---

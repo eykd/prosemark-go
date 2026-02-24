@@ -63,9 +63,8 @@ type ParseResult struct {
 	PragmaLine int               `json:"-"` // 1-based line of pragma (0 if absent)
 }
 
-// Project is the external project file map, loaded from project.json.
+// Project holds the set of .md files in the project, populated by filesystem scanning.
 type Project struct {
-	Version   string   `json:"version"`   // "1"
 	Files     []string `json:"files"`     // relative paths to .md files in the project
 	BinderDir string   `json:"binderDir"` // directory containing the binder file (enables proximity tiebreak)
 }

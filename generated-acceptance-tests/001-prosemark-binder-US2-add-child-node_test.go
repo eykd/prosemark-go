@@ -15,11 +15,12 @@ func Test_New_chapter_is_appended_after_all_existing_chapters_by_default(t *test
 	dir := t.TempDir()
 	writeFile(t, dir, "_binder.md",
 		"<!-- prosemark-binder:v1 -->\n\n- [Chapter One](ch1.md)\n")
-	projectPath := writeProjectJSON(t, dir, "ch1.md", "ch2.md")
+	writeFile(t, dir, "ch1.md", "")
+	writeFile(t, dir, "ch2.md", "")
 	binderPath := dir + "/_binder.md"
 
 	// WHEN the author adds a new chapter at the top level using default placement.
-	result := runAddChild(t, binderPath, projectPath, "--parent", ".", "--target", "ch2.md", "--title", "Ch Two")
+	result := runAddChild(t, binderPath, "--parent", ".", "--target", "ch2.md", "--title", "Ch Two")
 
 	// THEN the new chapter appears after the existing chapter.
 	if !result.OK {
@@ -49,11 +50,14 @@ func Test_New_chapter_is_inserted_before_all_existing_chapters_when_first_positi
 			"- [Ch One](ch1.md)\n"+
 			"- [Ch Two](ch2.md)\n"+
 			"- [Ch Three](ch3.md)\n")
-	projectPath := writeProjectJSON(t, dir, "ch1.md", "ch2.md", "ch3.md", "new.md")
+	writeFile(t, dir, "ch1.md", "")
+	writeFile(t, dir, "ch2.md", "")
+	writeFile(t, dir, "ch3.md", "")
+	writeFile(t, dir, "new.md", "")
 	binderPath := dir + "/_binder.md"
 
 	// WHEN the author adds a new chapter at the first position.
-	result := runAddChild(t, binderPath, projectPath, "--parent", ".", "--target", "new.md", "--first")
+	result := runAddChild(t, binderPath, "--parent", ".", "--target", "new.md", "--first")
 
 	// THEN the new chapter appears before all existing chapters.
 	if !result.OK {
@@ -80,11 +84,14 @@ func Test_New_chapter_is_inserted_at_a_specific_numbered_position(t *testing.T) 
 			"- [Ch One](ch1.md)\n"+
 			"- [Ch Two](ch2.md)\n"+
 			"- [Ch Three](ch3.md)\n")
-	projectPath := writeProjectJSON(t, dir, "ch1.md", "ch2.md", "ch3.md", "new.md")
+	writeFile(t, dir, "ch1.md", "")
+	writeFile(t, dir, "ch2.md", "")
+	writeFile(t, dir, "ch3.md", "")
+	writeFile(t, dir, "new.md", "")
 	binderPath := dir + "/_binder.md"
 
 	// WHEN the author adds a new chapter at position one, counting from zero.
-	result := runAddChild(t, binderPath, projectPath, "--parent", ".", "--target", "new.md", "--at", "1")
+	result := runAddChild(t, binderPath, "--parent", ".", "--target", "new.md", "--at", "1")
 
 	// THEN the new chapter appears at position one in the list.
 	if !result.OK {
@@ -113,11 +120,14 @@ func Test_New_chapter_is_inserted_before_a_named_sibling(t *testing.T) {
 			"- [A](a.md)\n"+
 			"- [B](b.md)\n"+
 			"- [C](c.md)\n")
-	projectPath := writeProjectJSON(t, dir, "a.md", "b.md", "c.md", "new.md")
+	writeFile(t, dir, "a.md", "")
+	writeFile(t, dir, "b.md", "")
+	writeFile(t, dir, "c.md", "")
+	writeFile(t, dir, "new.md", "")
 	binderPath := dir + "/_binder.md"
 
 	// WHEN the author adds a new chapter before "B".
-	result := runAddChild(t, binderPath, projectPath, "--parent", ".", "--target", "new.md", "--before", "b.md")
+	result := runAddChild(t, binderPath, "--parent", ".", "--target", "new.md", "--before", "b.md")
 
 	// THEN the new chapter appears between "A" and "B".
 	if !result.OK {
@@ -142,12 +152,12 @@ func Test_Adding_a_chapter_that_already_exists_in_the_same_parent_is_skipped_wit
 	dir := t.TempDir()
 	writeFile(t, dir, "_binder.md",
 		"<!-- prosemark-binder:v1 -->\n\n- [Chapter One](ch1.md)\n")
-	projectPath := writeProjectJSON(t, dir, "ch1.md")
+	writeFile(t, dir, "ch1.md", "")
 	binderPath := dir + "/_binder.md"
 	before := readFile(t, binderPath)
 
 	// WHEN the author adds the chapter again without the force option.
-	result := runAddChild(t, binderPath, projectPath, "--parent", ".", "--target", "ch1.md")
+	result := runAddChild(t, binderPath, "--parent", ".", "--target", "ch1.md")
 
 	// THEN the binder is unchanged.
 	if !result.OK {
@@ -173,11 +183,11 @@ func Test_Adding_a_duplicate_chapter_with_the_force_option_inserts_a_second_copy
 	dir := t.TempDir()
 	writeFile(t, dir, "_binder.md",
 		"<!-- prosemark-binder:v1 -->\n\n- [Chapter One](ch1.md)\n")
-	projectPath := writeProjectJSON(t, dir, "ch1.md")
+	writeFile(t, dir, "ch1.md", "")
 	binderPath := dir + "/_binder.md"
 
 	// WHEN the author adds the chapter again with the force option.
-	result := runAddChild(t, binderPath, projectPath, "--parent", ".", "--target", "ch1.md", "--force")
+	result := runAddChild(t, binderPath, "--parent", ".", "--target", "ch1.md", "--force")
 
 	// THEN the binder now contains two entries for that chapter file.
 	if !result.OK {
@@ -200,11 +210,13 @@ func Test_New_chapter_inherits_the_numbered_list_style_of_its_siblings(t *testin
 	dir := t.TempDir()
 	writeFile(t, dir, "_binder.md",
 		"<!-- prosemark-binder:v1 -->\n\n1. [Chapter One](ch1.md)\n2. [Chapter Two](ch2.md)\n")
-	projectPath := writeProjectJSON(t, dir, "ch1.md", "ch2.md", "ch3.md")
+	writeFile(t, dir, "ch1.md", "")
+	writeFile(t, dir, "ch2.md", "")
+	writeFile(t, dir, "ch3.md", "")
 	binderPath := dir + "/_binder.md"
 
 	// WHEN the author adds a new chapter.
-	result := runAddChild(t, binderPath, projectPath, "--parent", ".", "--target", "ch3.md", "--title", "Chapter Three")
+	result := runAddChild(t, binderPath, "--parent", ".", "--target", "ch3.md", "--title", "Chapter Three")
 
 	// THEN the new chapter uses the next sequential number with the same period marker style.
 	if !result.OK {
@@ -226,11 +238,13 @@ func Test_New_chapter_inherits_the_tab_indentation_of_its_siblings(t *testing.T)
 	dir := t.TempDir()
 	writeFile(t, dir, "_binder.md",
 		"<!-- prosemark-binder:v1 -->\n\n- [Part](part.md)\n\t- [Chapter One](ch1.md)\n")
-	projectPath := writeProjectJSON(t, dir, "part.md", "ch1.md", "ch2.md")
+	writeFile(t, dir, "part.md", "")
+	writeFile(t, dir, "ch1.md", "")
+	writeFile(t, dir, "ch2.md", "")
 	binderPath := dir + "/_binder.md"
 
 	// WHEN the author adds a new nested chapter.
-	result := runAddChild(t, binderPath, projectPath, "--parent", "part.md", "--target", "ch2.md", "--title", "Chapter Two")
+	result := runAddChild(t, binderPath, "--parent", "part.md", "--target", "ch2.md", "--title", "Chapter Two")
 
 	// THEN the new chapter is indented with tabs to match its siblings.
 	if !result.OK {
@@ -249,11 +263,12 @@ func Test_A_chapter_title_containing_square_bracket_characters_is_stored_with_th
 	dir := t.TempDir()
 	writeFile(t, dir, "_binder.md",
 		"<!-- prosemark-binder:v1 -->\n\n- [Chapter One](ch1.md)\n")
-	projectPath := writeProjectJSON(t, dir, "ch1.md", "ch.md")
+	writeFile(t, dir, "ch1.md", "")
+	writeFile(t, dir, "ch.md", "")
 	binderPath := dir + "/_binder.md"
 
 	// WHEN the chapter is added to the binder.
-	result := runAddChild(t, binderPath, projectPath, "--parent", ".", "--target", "ch.md", "--title", "A [note]")
+	result := runAddChild(t, binderPath, "--parent", ".", "--target", "ch.md", "--title", "A [note]")
 
 	// THEN the stored title has those square bracket characters properly escaped.
 	if !result.OK {
@@ -276,12 +291,13 @@ func Test_Attempting_to_add_a_chapter_to_a_non_existent_parent_returns_an_error(
 	dir := t.TempDir()
 	writeFile(t, dir, "_binder.md",
 		"<!-- prosemark-binder:v1 -->\n\n- [Chapter One](ch1.md)\n")
-	projectPath := writeProjectJSON(t, dir, "ch1.md", "n.md")
+	writeFile(t, dir, "ch1.md", "")
+	writeFile(t, dir, "n.md", "")
 	binderPath := dir + "/_binder.md"
 	before := readFile(t, binderPath)
 
 	// WHEN the author tries to add a chapter under that selector as parent.
-	result := runAddChild(t, binderPath, projectPath, "--parent", "missing.md", "--target", "n.md")
+	result := runAddChild(t, binderPath, "--parent", "missing.md", "--target", "n.md")
 
 	// THEN a "not found" error is returned.
 	if result.OK {
