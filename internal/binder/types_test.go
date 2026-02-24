@@ -127,11 +127,11 @@ func TestOpSpecType(t *testing.T) {
 	raw := json.RawMessage(`{"parentSelector":".","target":"docs/new.md"}`)
 	op := binder.OpSpec{
 		Version:   "1",
-		Operation: "add-child",
+		Operation: "add",
 		Params:    raw,
 	}
-	if op.Operation != "add-child" {
-		t.Errorf("OpSpec.Operation = %q, want %q", op.Operation, "add-child")
+	if op.Operation != "add" {
+		t.Errorf("OpSpec.Operation = %q, want %q", op.Operation, "add")
 	}
 }
 

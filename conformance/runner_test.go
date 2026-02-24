@@ -405,10 +405,10 @@ type moveParamsJSON struct {
 // buildOpArgs converts an opSpec into CLI flag strings for the named operation.
 func buildOpArgs(spec opSpec) ([]string, error) {
 	switch spec.Operation {
-	case "add-child":
+	case "add":
 		var p addChildParamsJSON
 		if err := json.Unmarshal(spec.Params, &p); err != nil {
-			return nil, fmt.Errorf("parse add-child params: %w", err)
+			return nil, fmt.Errorf("parse add params: %w", err)
 		}
 		return buildAddChildArgs(p), nil
 	case "delete":

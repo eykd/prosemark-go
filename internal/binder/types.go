@@ -72,7 +72,7 @@ type Project struct {
 // OpSpec is the parsed operation specification from op.json.
 type OpSpec struct {
 	Version   string          `json:"version"`   // "1"
-	Operation string          `json:"operation"` // "add-child" | "delete" | "move"
+	Operation string          `json:"operation"` // "add" | "delete" | "move"
 	Params    json.RawMessage `json:"params"`    // decoded to specific *Params below
 }
 

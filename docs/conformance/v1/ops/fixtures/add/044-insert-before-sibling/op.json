@@ -4,8 +4,8 @@
   "params": {
     "parentSelector": ".",
     "target": "new.md",
-    "title": "New",
-    "position": "at",
-    "positionIndex": 99
+    "title": "New Chapter",
+    "position": "before",
+    "positionSelector": "ch3.md"
   }
 }

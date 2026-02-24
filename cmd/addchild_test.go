@@ -51,7 +51,7 @@ func TestNewAddChildCmd_HasRequiredFlags(t *testing.T) {
 		name := name
 		t.Run(name, func(t *testing.T) {
 			if c.Flags().Lookup(name) == nil {
-				t.Errorf("expected --%s flag on add-child command", name)
+				t.Errorf("expected --%s flag on add command", name)
 			}
 		})
 	}
@@ -406,12 +406,12 @@ func TestNewRootCmd_RegistersAddChildSubcommand(t *testing.T) {
 	root := NewRootCmd()
 	var found bool
 	for _, sub := range root.Commands() {
-		if sub.Name() == "add-child" {
+		if sub.Name() == "add" {
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Error("expected \"add-child\" subcommand registered on root command")
+		t.Error("expected \"add\" subcommand registered on root command")
 	}
 }

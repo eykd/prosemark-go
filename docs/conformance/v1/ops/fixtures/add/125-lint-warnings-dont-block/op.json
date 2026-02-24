@@ -3,8 +3,8 @@
   "operation": "add",
   "params": {
     "parentSelector": ".",
-    "target": "ch.md",
-    "title": "Chapter",
+    "target": "ch2.md",
+    "title": "Chapter Two",
     "position": "last"
   }
 }

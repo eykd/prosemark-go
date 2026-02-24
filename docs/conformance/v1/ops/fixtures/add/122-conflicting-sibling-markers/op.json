@@ -1,0 +1,11 @@
+{
+  "version": "1",
+  "operation": "add",
+  "params": {
+    "parentSelector": "part",
+    "target": "new.md",
+    "title": "New Chapter",
+    "position": "before",
+    "positionSelector": "ch2.md"
+  }
+}

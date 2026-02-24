@@ -6,10 +6,10 @@
   "additionalProperties": false,
   "properties": {
     "version":   { "const": "1" },
-    "operation": { "enum": ["add-child", "delete", "move"] },
+    "operation": { "enum": ["add", "delete", "move"] },
     "params":    { "type": "object" }
   },
-  "if":   { "properties": { "operation": { "const": "add-child" } }, "required": ["operation"] },
+  "if":   { "properties": { "operation": { "const": "add" } }, "required": ["operation"] },
   "then": { "properties": { "params": { "$ref": "#/$defs/AddChildParams" } } },
   "else": {
     "if":   { "properties": { "operation": { "const": "delete" } }, "required": ["operation"] },

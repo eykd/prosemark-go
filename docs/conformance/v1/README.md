@@ -112,7 +112,7 @@ Fixtures 001–040 are the original parse-domain block; 041–070 are the origin
 
 | Range | Operation |
 |-------|-----------|
-| 041–050 | add-child |
+| 041–050 | add |
 | 051–055 | delete |
 | 056–060 | move |
 | 061 | move / cycle-detection |
@@ -120,40 +120,40 @@ Fixtures 001–040 are the original parse-domain block; 041–070 are the origin
 | 068–069 | stability (round-trip) |
 | 072 | delete / multi-match warning |
 | 073 | move / multi-match warning |
-| 074 | add-child / ordered-list serialization |
-| 075 | add-child / selector index disambiguation |
+| 074 | add / ordered-list serialization |
+| 075 | add / selector index disambiguation |
 | 087–088 | ops-error / OPE009 I/O and parse failure |
-| 089 | add-child / percent-encoded target |
-| 090 | add-child / CRLF line ending preservation |
+| 089  | add / percent-encoded target |
+| 090  | add / CRLF line ending preservation |
 | 091 | delete / mixed CRLF line endings |
-| 092–093 | add-child / ordered list marker inheritance |
-| 094 | add-child / tab indentation matching |
+| 092–093  | add / ordered list marker inheritance |
+| 094  | add / tab indentation matching |
 | 095 | move / reference-link syntax preservation |
 | 096 | delete / fragment disambiguation |
-| 097 | add-child / multi-segment indexed selector |
+| 097  | add / multi-segment indexed selector |
 | 098–099 | delete / prune cascade and whitespace cleanup |
 | 100 | delete / blank-line reduction before deletion |
-| 101 | add-child / isolated parent default serialization |
+| 101  | add / isolated parent default serialization |
 | 102 | delete / duplicate node single occurrence |
 | 103 | move / deep cycle detection |
 | 104 | delete / GFM checkbox content destruction |
-| 105 | add-child / title bracket escaping |
-| 107 | ops-error / OPE006 for add-child (parent selector targets node in code fence) |
+| 105  | add / title bracket escaping |
+| 107 | ops-error / OPE006 for add (parent selector targets node in code fence) |
 | 108 | delete / delete last top-level node (empty structural tree) |
-| 113 | add-child / `--at N` where N equals child count (boundary: valid, appends last) |
-| 114 | add-child / non-sequential ordered-list ordinals (max+1 rule) |
-| 121 | add-child / relative-path selector (`subfolder/chapter-03` targets exact directory) |
-| 122 | add-child / conflicting sibling markers: previous sibling ordered, next unordered → ordered wins |
-| 123 | add-child / indentation inherited from next sibling when `--first` with no previous sibling |
-| 124 | add-child / paren-style ordered marker (`1)`) inherited from next sibling when `--first` |
-| 125 | add-child / lint warnings in binder do not block operations (BNDW001 emitted, op proceeds) |
-| 126 | add-child / idempotent: existing middle child not reordered; OPW002 emitted |
+| 113  | add / `--at N` where N equals child count (boundary: valid, appends last) |
+| 114  | add / non-sequential ordered-list ordinals (max+1 rule) |
+| 121  | add / relative-path selector (`subfolder/chapter-03` targets exact directory) |
+| 122  | add / conflicting sibling markers: previous sibling ordered, next unordered → ordered wins |
+| 123  | add / indentation inherited from next sibling when `--first` with no previous sibling |
+| 124  | add / paren-style ordered marker (`1)`) inherited from next sibling when `--first` |
+| 125  | add / lint warnings in binder do not block operations (BNDW001 emitted, op proceeds) |
+| 126  | add / idempotent: existing middle child not reordered; OPW002 emitted |
 | 127 | delete / reference link definition preserved after deleting node that referenced it |
 | 128 | delete / fragment-aware index scope: `ch[1]` deletes second occurrence across fragment variants |
 | 129 | move / non-structural content (checkbox) destroyed during move emits OPW003 |
 | 130 | move / subtree markers preserved: only moved node's own marker updated; children retain ordinals |
 | 131 | move / tooltip in source link preserved verbatim after move |
-| 132 | ops-error / OPE004 for non-`.md` target in add-child |
+| 132 | ops-error / OPE004 for non-`.md` target in add |
 | 133 | ops-error / OPE001 when root selector `.` used as delete source |
 | 134 | ops-error / OPE001 when root selector `.` used as move source |
 | 135 | ops-error / OPE006 for move when source node is inside a code fence |

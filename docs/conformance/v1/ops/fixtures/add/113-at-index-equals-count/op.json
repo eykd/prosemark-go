@@ -3,9 +3,9 @@
   "operation": "add",
   "params": {
     "parentSelector": ".",
-    "target": "new.md",
-    "title": "New",
+    "target": "ch4.md",
+    "title": "Chapter Four",
     "position": "at",
-    "positionIndex": 99
+    "positionIndex": 3
   }
 }

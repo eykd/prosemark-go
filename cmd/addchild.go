@@ -14,14 +14,14 @@ import (
 	"github.com/eykd/prosemark-go/internal/binder/ops"
 )
 
-// AddChildIO handles I/O for the add-child command.
+// AddChildIO handles I/O for the add command.
 type AddChildIO interface {
 	ReadBinder(ctx context.Context, path string) ([]byte, error)
 	ScanProject(ctx context.Context, binderPath string) (*binder.Project, error)
 	WriteBinderAtomic(ctx context.Context, path string, data []byte) error
 }
 
-// NewAddChildCmd creates the add-child subcommand.
+// NewAddChildCmd creates the add subcommand.
 func NewAddChildCmd(io AddChildIO) *cobra.Command {
 	return newAddChildCmdWithGetCWD(io, os.Getwd)
 }
@@ -40,7 +40,7 @@ func newAddChildCmdWithGetCWD(io AddChildIO, getwd func() (string, error)) *cobr
 	)
 
 	cmd := &cobra.Command{
-		Use:          "add-child",
+		Use:          "add",
 		Short:        "Add a child node to a binder",
 		Args:         cobra.NoArgs,
 		SilenceUsage: true,
@@ -106,7 +106,7 @@ func newAddChildCmdWithGetCWD(io AddChildIO, getwd func() (string, error)) *cobr
 			}
 
 			if hasError {
-				return fmt.Errorf("add-child has errors")
+				return fmt.Errorf("add has errors")
 			}
 
 			if changed {

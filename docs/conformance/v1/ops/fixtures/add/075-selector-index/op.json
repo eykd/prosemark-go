@@ -2,9 +2,9 @@
   "version": "1",
   "operation": "add",
   "params": {
-    "parentSelector": ".",
-    "target": "ch.md",
-    "title": "Chapter",
+    "parentSelector": "ch[1]",
+    "target": "sec.md",
+    "title": "Section",
     "position": "last"
   }
 }

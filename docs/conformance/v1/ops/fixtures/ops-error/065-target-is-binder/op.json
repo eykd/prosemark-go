@@ -1,6 +1,6 @@
 {
   "version": "1",
-  "operation": "add-child",
+  "operation": "add",
   "params": {
     "parentSelector": ".",
     "target": "_binder.md",

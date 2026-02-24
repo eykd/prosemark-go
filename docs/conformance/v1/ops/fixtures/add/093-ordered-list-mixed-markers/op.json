@@ -1,0 +1,11 @@
+{
+  "version": "1",
+  "operation": "add",
+  "params": {
+    "parentSelector": "part",
+    "target": "ch-mid.md",
+    "title": "Chapter Mid",
+    "position": "at",
+    "positionIndex": 1
+  }
+}

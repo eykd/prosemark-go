@@ -116,7 +116,7 @@ Index qualifiers (`[N]`) count across all fragment variants: `chapter[0]` means 
 ### 4.1 Synopsis
 
 ```
-add-child <parent-selector> <target> --title <title> [position flags] [--force]
+add <parent-selector> <target> --title <title> [position flags] [--force]
 ```
 
 ### 4.2 Parameters

@@ -4,7 +4,7 @@
   "params": {
     "parentSelector": ".",
     "target": "ch.md",
-    "title": "Chapter",
+    "title": "A [note]",
     "position": "last"
   }
 }

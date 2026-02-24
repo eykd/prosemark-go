@@ -1,6 +1,6 @@
 {
   "version": "1",
-  "operation": "add-child",
+  "operation": "add",
   "params": {
     "parentSelector": "ch1.md",
     "target": "sec-a.md",

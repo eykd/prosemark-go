@@ -49,11 +49,11 @@ func writeFile(t *testing.T, dir, name, content string) string {
 	return path
 }
 
-// runAddChild invokes "pmk add-child <binderPath>"
+// runAddChild invokes "pmk add <binderPath>"
 // with any extra flag strings appended.
 func runAddChild(t *testing.T, binderPath string, extraArgs ...string) runResult {
 	t.Helper()
-	args := []string{"run", ".", "add-child", binderPath}
+	args := []string{"run", ".", "add", binderPath}
 	args = append(args, extraArgs...)
 	cmd := exec.Command("go", args...)
 	cmd.Dir = ".."
