@@ -2,6 +2,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 
 	"github.com/spf13/cobra"
@@ -29,10 +30,18 @@ func rootRunE(_ *cobra.Command, _ []string) error {
 	return nil
 }
 
-// emitOPE009AndError writes an OPE009 error diagnostic to stderr and returns
-// a non-nil error so the caller exits with non-zero code.
-func emitOPE009AndError(cmd *cobra.Command, _ []byte, origErr error) error {
-	fmt.Fprintf(cmd.ErrOrStderr(), "error: I/O or parse failure: %v (OPE009)\n", origErr)
+// emitOPE009AndError writes an OPE009 error diagnostic and returns a non-nil
+// error so the caller exits with non-zero code. When jsonMode is true the
+// diagnostic is written as a binder.OpResult JSON object to stdout; otherwise
+// it is written as a human-readable message to stderr.
+func emitOPE009AndError(cmd *cobra.Command, jsonMode bool, origErr error) error {
+	if jsonMode {
+		diags := []binder.Diagnostic{{Severity: "error", Code: binder.CodeIOOrParseFailure, Message: origErr.Error()}}
+		out := binder.OpResult{Version: "1", Changed: false, Diagnostics: diags}
+		_ = json.NewEncoder(cmd.OutOrStdout()).Encode(out)
+	} else {
+		fmt.Fprintf(cmd.ErrOrStderr(), "error: I/O or parse failure: %v (OPE009)\n", origErr)
+	}
 	return fmt.Errorf("operation failed: %w", origErr)
 }
 

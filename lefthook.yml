@@ -24,7 +24,7 @@ pre-commit:
       glob: "*.go"
       run: |
         PACKAGES=$(go list ./... | grep -v '^github.com/eykd/prosemark-go$' | grep -v '/cmd/pipeline$' | grep -v '/generated-acceptance-tests$')
-        go test -coverprofile=/tmp/coverage.out $PACKAGES
+        go test -coverprofile=/tmp/coverage.out $PACKAGES || exit 1
         # Check that all non-Impl functions are at 100%
         UNCOVERED=$(go tool cover -func=/tmp/coverage.out | grep -v "Impl" | grep -v "^.*main.go:" | grep -v "100.0%" | grep -v "^total:" || true)
         if [ -n "$UNCOVERED" ]; then

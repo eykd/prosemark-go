@@ -80,6 +80,8 @@ func NewParseCmd(reader ParseReader) *cobra.Command {
 		},
 	}
 
+	cmd.Flags().Bool("json", false, "Output result as JSON (always enabled for parse)")
+
 	return cmd
 }
 

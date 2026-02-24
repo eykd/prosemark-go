@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -45,7 +46,7 @@ func acBinder() []byte {
 
 func TestNewAddChildCmd_HasRequiredFlags(t *testing.T) {
 	c := NewAddChildCmd(nil)
-	required := []string{"parent", "target", "title", "first", "at", "before", "after", "force"}
+	required := []string{"parent", "target", "title", "first", "at", "before", "after", "force", "json"}
 	for _, name := range required {
 		name := name
 		t.Run(name, func(t *testing.T) {
@@ -328,6 +329,69 @@ func TestNewAddChildCmd_AtFlag(t *testing.T) {
 
 	if err := c.Execute(); err != nil {
 		t.Fatalf("unexpected error with --at flag: %v", err)
+	}
+}
+
+func TestNewAddChildCmd_OutputsOpResultJSONOnSuccess(t *testing.T) {
+	mock := &mockAddChildIO{
+		binderBytes: acBinder(),
+		project:     &binder.Project{Files: []string{"chapter-two.md"}, BinderDir: "."},
+	}
+	c := NewAddChildCmd(mock)
+	out := new(bytes.Buffer)
+	c.SetOut(out)
+	c.SetArgs([]string{"--parent", ".", "--target", "chapter-two.md", "--json", "_binder.md"})
+
+	if err := c.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var result binder.OpResult
+	if err := json.Unmarshal(out.Bytes(), &result); err != nil {
+		t.Fatalf("output is not valid JSON: %v\noutput: %s", err, out.String())
+	}
+	if result.Version != "1" {
+		t.Errorf("version = %q, want \"1\"", result.Version)
+	}
+	if !result.Changed {
+		t.Error("expected Changed=true when child is added")
+	}
+}
+
+func TestNewAddChildCmd_JSONEncodeError(t *testing.T) {
+	mock := &mockAddChildIO{
+		binderBytes: acBinder(),
+		project:     &binder.Project{Files: []string{"chapter-two.md"}, BinderDir: "."},
+	}
+	c := NewAddChildCmd(mock)
+	c.SetOut(&errWriter{err: errors.New("write error")})
+	c.SetArgs([]string{"--parent", ".", "--target", "chapter-two.md", "--json", "_binder.md"})
+
+	if err := c.Execute(); err == nil {
+		t.Error("expected error when JSON encoding fails")
+	}
+}
+
+func TestNewAddChildCmd_ScanProjectErrorWithJSON(t *testing.T) {
+	mock := &mockAddChildIO{
+		binderBytes: acBinder(),
+		projectErr:  errors.New("disk error"),
+	}
+	c := NewAddChildCmd(mock)
+	out := new(bytes.Buffer)
+	c.SetOut(out)
+	c.SetArgs([]string{"--parent", ".", "--target", "chapter-two.md", "--json", "_binder.md"})
+
+	if err := c.Execute(); err == nil {
+		t.Error("expected error when ScanProject fails")
+	}
+
+	var result binder.OpResult
+	if err := json.Unmarshal(out.Bytes(), &result); err != nil {
+		t.Fatalf("expected OPE009 JSON on stdout, got: %s", out.String())
+	}
+	if len(result.Diagnostics) == 0 || result.Diagnostics[0].Code != binder.CodeIOOrParseFailure {
+		t.Errorf("expected OPE009 diagnostic, got: %v", result.Diagnostics)
 	}
 }
 

@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -23,14 +24,15 @@ type AddChildIO interface {
 // NewAddChildCmd creates the add-child subcommand.
 func NewAddChildCmd(io AddChildIO) *cobra.Command {
 	var (
-		parent string
-		target string
-		title  string
-		first  bool
-		at     int
-		before string
-		after  string
-		force  bool
+		parent   string
+		target   string
+		title    string
+		first    bool
+		at       int
+		before   string
+		after    string
+		force    bool
+		jsonMode bool
 	)
 
 	cmd := &cobra.Command{
@@ -53,7 +55,7 @@ func NewAddChildCmd(io AddChildIO) *cobra.Command {
 
 			proj, err := io.ScanProject(ctx, binderPath)
 			if err != nil {
-				return emitOPE009AndError(cmd, binderBytes, err)
+				return emitOPE009AndError(cmd, jsonMode, err)
 			}
 
 			position := "last"
@@ -81,12 +83,25 @@ func NewAddChildCmd(io AddChildIO) *cobra.Command {
 
 			changed := !bytes.Equal(binderBytes, modifiedBytes)
 
-			printDiagnostics(cmd, diags)
-
+			hasError := false
 			for _, d := range diags {
 				if d.Severity == "error" {
-					return fmt.Errorf("add-child has errors")
+					hasError = true
+					break
 				}
+			}
+
+			if jsonMode {
+				out := binder.OpResult{Version: "1", Changed: changed, Diagnostics: diags}
+				if err := json.NewEncoder(cmd.OutOrStdout()).Encode(out); err != nil {
+					return fmt.Errorf("encoding output: %w", err)
+				}
+			} else {
+				printDiagnostics(cmd, diags)
+			}
+
+			if hasError {
+				return fmt.Errorf("add-child has errors")
 			}
 
 			if changed {
@@ -95,13 +110,15 @@ func NewAddChildCmd(io AddChildIO) *cobra.Command {
 				}
 			}
 
-			if changed {
-				if _, err := fmt.Fprintln(cmd.OutOrStdout(), "Added "+target+" to "+binderPath); err != nil {
-					return fmt.Errorf("writing output: %w", err)
-				}
-			} else {
-				if _, err := fmt.Fprintln(cmd.OutOrStdout(), target+" already in "+binderPath+" (skipped)"); err != nil {
-					return fmt.Errorf("writing output: %w", err)
+			if !jsonMode {
+				if changed {
+					if _, err := fmt.Fprintln(cmd.OutOrStdout(), "Added "+target+" to "+binderPath); err != nil {
+						return fmt.Errorf("writing output: %w", err)
+					}
+				} else {
+					if _, err := fmt.Fprintln(cmd.OutOrStdout(), target+" already in "+binderPath+" (skipped)"); err != nil {
+						return fmt.Errorf("writing output: %w", err)
+					}
 				}
 			}
 
@@ -117,6 +134,7 @@ func NewAddChildCmd(io AddChildIO) *cobra.Command {
 	cmd.Flags().StringVar(&before, "before", "", "Insert before selector")
 	cmd.Flags().StringVar(&after, "after", "", "Insert after selector")
 	cmd.Flags().BoolVar(&force, "force", false, "Allow duplicate target")
+	cmd.Flags().BoolVar(&jsonMode, "json", false, "Output result as JSON")
 
 	return cmd
 }

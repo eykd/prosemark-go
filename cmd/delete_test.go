@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -45,7 +46,7 @@ func delBinder() []byte {
 
 func TestNewDeleteCmd_HasRequiredFlags(t *testing.T) {
 	c := NewDeleteCmd(nil)
-	required := []string{"selector", "yes"}
+	required := []string{"selector", "yes", "json"}
 	for _, name := range required {
 		name := name
 		t.Run(name, func(t *testing.T) {
@@ -239,6 +240,69 @@ func TestNewDeleteCmd_WriteSuccessMessageError(t *testing.T) {
 
 	if err := c.Execute(); err == nil {
 		t.Error("expected error when writing success message fails")
+	}
+}
+
+func TestNewDeleteCmd_OutputsOpResultJSONOnSuccess(t *testing.T) {
+	mock := &mockDeleteIO{
+		binderBytes: delBinder(),
+		project:     &binder.Project{Files: []string{"chapter-one.md"}, BinderDir: "."},
+	}
+	c := NewDeleteCmd(mock)
+	out := new(bytes.Buffer)
+	c.SetOut(out)
+	c.SetArgs([]string{"--selector", "chapter-one.md", "--yes", "--json", "_binder.md"})
+
+	if err := c.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var result binder.OpResult
+	if err := json.Unmarshal(out.Bytes(), &result); err != nil {
+		t.Fatalf("output is not valid JSON: %v\noutput: %s", err, out.String())
+	}
+	if result.Version != "1" {
+		t.Errorf("version = %q, want \"1\"", result.Version)
+	}
+	if !result.Changed {
+		t.Error("expected Changed=true when node is deleted")
+	}
+}
+
+func TestNewDeleteCmd_JSONEncodeError(t *testing.T) {
+	mock := &mockDeleteIO{
+		binderBytes: delBinder(),
+		project:     &binder.Project{Files: []string{"chapter-one.md"}, BinderDir: "."},
+	}
+	c := NewDeleteCmd(mock)
+	c.SetOut(&errWriter{err: errors.New("write error")})
+	c.SetArgs([]string{"--selector", "chapter-one.md", "--yes", "--json", "_binder.md"})
+
+	if err := c.Execute(); err == nil {
+		t.Error("expected error when JSON encoding fails")
+	}
+}
+
+func TestNewDeleteCmd_ScanProjectErrorWithJSON(t *testing.T) {
+	mock := &mockDeleteIO{
+		binderBytes: delBinder(),
+		projectErr:  errors.New("disk error"),
+	}
+	c := NewDeleteCmd(mock)
+	out := new(bytes.Buffer)
+	c.SetOut(out)
+	c.SetArgs([]string{"--selector", "chapter-one.md", "--yes", "--json", "_binder.md"})
+
+	if err := c.Execute(); err == nil {
+		t.Error("expected error when ScanProject fails")
+	}
+
+	var result binder.OpResult
+	if err := json.Unmarshal(out.Bytes(), &result); err != nil {
+		t.Fatalf("expected OPE009 JSON on stdout, got: %s", out.String())
+	}
+	if len(result.Diagnostics) == 0 || result.Diagnostics[0].Code != binder.CodeIOOrParseFailure {
+		t.Errorf("expected OPE009 diagnostic, got: %v", result.Diagnostics)
 	}
 }
 

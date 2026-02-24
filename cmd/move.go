@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -23,13 +24,14 @@ type MoveIO interface {
 // NewMoveCmd creates the move subcommand.
 func NewMoveCmd(io MoveIO) *cobra.Command {
 	var (
-		source string
-		dest   string
-		first  bool
-		at     int
-		before string
-		after  string
-		yes    bool
+		source   string
+		dest     string
+		first    bool
+		at       int
+		before   string
+		after    string
+		yes      bool
+		jsonMode bool
 	)
 
 	cmd := &cobra.Command{
@@ -52,7 +54,7 @@ func NewMoveCmd(io MoveIO) *cobra.Command {
 
 			proj, err := io.ScanProject(ctx, binderPath)
 			if err != nil {
-				return emitOPE009AndError(cmd, binderBytes, err)
+				return emitOPE009AndError(cmd, jsonMode, err)
 			}
 
 			position := "last"
@@ -79,12 +81,25 @@ func NewMoveCmd(io MoveIO) *cobra.Command {
 
 			changed := !bytes.Equal(binderBytes, modifiedBytes)
 
-			printDiagnostics(cmd, diags)
-
+			hasError := false
 			for _, d := range diags {
 				if d.Severity == "error" {
-					return fmt.Errorf("move has errors")
+					hasError = true
+					break
 				}
+			}
+
+			if jsonMode {
+				out := binder.OpResult{Version: "1", Changed: changed, Diagnostics: diags}
+				if err := json.NewEncoder(cmd.OutOrStdout()).Encode(out); err != nil {
+					return fmt.Errorf("encoding output: %w", err)
+				}
+			} else {
+				printDiagnostics(cmd, diags)
+			}
+
+			if hasError {
+				return fmt.Errorf("move has errors")
 			}
 
 			if changed {
@@ -93,8 +108,10 @@ func NewMoveCmd(io MoveIO) *cobra.Command {
 				}
 			}
 
-			if _, err := fmt.Fprintln(cmd.OutOrStdout(), "Moved "+source+" in "+binderPath); err != nil {
-				return fmt.Errorf("writing output: %w", err)
+			if !jsonMode {
+				if _, err := fmt.Fprintln(cmd.OutOrStdout(), "Moved "+source+" in "+binderPath); err != nil {
+					return fmt.Errorf("writing output: %w", err)
+				}
 			}
 
 			return nil
@@ -108,6 +125,7 @@ func NewMoveCmd(io MoveIO) *cobra.Command {
 	cmd.Flags().StringVar(&before, "before", "", "Insert before selector")
 	cmd.Flags().StringVar(&after, "after", "", "Insert after selector")
 	cmd.Flags().BoolVar(&yes, "yes", false, "Required confirmation flag")
+	cmd.Flags().BoolVar(&jsonMode, "json", false, "Output result as JSON")
 
 	return cmd
 }

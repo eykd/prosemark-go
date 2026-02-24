@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -25,6 +26,7 @@ func NewDeleteCmd(io DeleteIO) *cobra.Command {
 	var (
 		selector string
 		yes      bool
+		jsonMode bool
 	)
 
 	cmd := &cobra.Command{
@@ -47,7 +49,7 @@ func NewDeleteCmd(io DeleteIO) *cobra.Command {
 
 			proj, err := io.ScanProject(ctx, binderPath)
 			if err != nil {
-				return emitOPE009AndError(cmd, binderBytes, err)
+				return emitOPE009AndError(cmd, jsonMode, err)
 			}
 
 			params := binder.DeleteParams{
@@ -62,12 +64,25 @@ func NewDeleteCmd(io DeleteIO) *cobra.Command {
 
 			changed := !bytes.Equal(binderBytes, modifiedBytes)
 
-			printDiagnostics(cmd, diags)
-
+			hasError := false
 			for _, d := range diags {
 				if d.Severity == "error" {
-					return fmt.Errorf("delete has errors")
+					hasError = true
+					break
 				}
+			}
+
+			if jsonMode {
+				out := binder.OpResult{Version: "1", Changed: changed, Diagnostics: diags}
+				if err := json.NewEncoder(cmd.OutOrStdout()).Encode(out); err != nil {
+					return fmt.Errorf("encoding output: %w", err)
+				}
+			} else {
+				printDiagnostics(cmd, diags)
+			}
+
+			if hasError {
+				return fmt.Errorf("delete has errors")
 			}
 
 			if changed {
@@ -76,8 +91,10 @@ func NewDeleteCmd(io DeleteIO) *cobra.Command {
 				}
 			}
 
-			if _, err := fmt.Fprintln(cmd.OutOrStdout(), "Deleted "+selector+" from "+binderPath); err != nil {
-				return fmt.Errorf("writing output: %w", err)
+			if !jsonMode {
+				if _, err := fmt.Fprintln(cmd.OutOrStdout(), "Deleted "+selector+" from "+binderPath); err != nil {
+					return fmt.Errorf("writing output: %w", err)
+				}
 			}
 
 			return nil
@@ -86,6 +103,7 @@ func NewDeleteCmd(io DeleteIO) *cobra.Command {
 
 	cmd.Flags().StringVar(&selector, "selector", "", "Selector for node to delete")
 	cmd.Flags().BoolVar(&yes, "yes", false, "Required confirmation flag")
+	cmd.Flags().BoolVar(&jsonMode, "json", false, "Output result as JSON")
 
 	return cmd
 }

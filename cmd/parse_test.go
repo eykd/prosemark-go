@@ -142,6 +142,24 @@ func TestNewParseCmd_ExitsNonZeroOnBNDErrors(t *testing.T) {
 	}
 }
 
+func TestNewParseCmd_AcceptsJSONFlag(t *testing.T) {
+	reader := &mockParseReader{
+		binderBytes: []byte("<!-- prosemark-binder:v1 -->\n"),
+		project:     &binder.Project{Files: []string{}, BinderDir: "."},
+	}
+	c := NewParseCmd(reader)
+	out := new(bytes.Buffer)
+	c.SetOut(out)
+	c.SetArgs([]string{"--json", "_binder.md"})
+
+	if err := c.Execute(); err != nil {
+		t.Fatalf("expected --json flag to be accepted without error: %v", err)
+	}
+	if out.Len() == 0 {
+		t.Error("expected JSON output even with --json flag")
+	}
+}
+
 func TestNewParseCmd_ReturnsOPE009OnInvalidUTF8(t *testing.T) {
 	reader := &mockParseReader{
 		binderBytes: []byte("<!-- prosemark-binder:v1 -->\n\xff\xfe"),

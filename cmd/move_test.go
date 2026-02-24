@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -45,7 +46,7 @@ func moveBinder() []byte {
 
 func TestNewMoveCmd_HasRequiredFlags(t *testing.T) {
 	c := NewMoveCmd(nil)
-	required := []string{"source", "dest", "first", "at", "before", "after", "yes"}
+	required := []string{"source", "dest", "first", "at", "before", "after", "yes", "json"}
 	for _, name := range required {
 		name := name
 		t.Run(name, func(t *testing.T) {
@@ -268,6 +269,66 @@ func TestNewMoveCmd_AtFlag(t *testing.T) {
 
 	if err := c.Execute(); err != nil {
 		t.Fatalf("unexpected error with --at flag: %v", err)
+	}
+}
+
+func TestNewMoveCmd_OutputsOpResultJSONOnSuccess(t *testing.T) {
+	mock := &mockMoveIO{
+		binderBytes: moveBinder(),
+		project:     &binder.Project{Files: []string{"chapter-one.md", "chapter-two.md"}, BinderDir: "."},
+	}
+	c := NewMoveCmd(mock)
+	out := new(bytes.Buffer)
+	c.SetOut(out)
+	c.SetArgs([]string{"--source", "chapter-two.md", "--dest", "chapter-one.md", "--yes", "--json", "_binder.md"})
+
+	if err := c.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var result binder.OpResult
+	if err := json.Unmarshal(out.Bytes(), &result); err != nil {
+		t.Fatalf("output is not valid JSON: %v\noutput: %s", err, out.String())
+	}
+	if result.Version != "1" {
+		t.Errorf("version = %q, want \"1\"", result.Version)
+	}
+}
+
+func TestNewMoveCmd_JSONEncodeError(t *testing.T) {
+	mock := &mockMoveIO{
+		binderBytes: moveBinder(),
+		project:     &binder.Project{Files: []string{"chapter-one.md", "chapter-two.md"}, BinderDir: "."},
+	}
+	c := NewMoveCmd(mock)
+	c.SetOut(&errWriter{err: errors.New("write error")})
+	c.SetArgs([]string{"--source", "chapter-two.md", "--dest", "chapter-one.md", "--yes", "--json", "_binder.md"})
+
+	if err := c.Execute(); err == nil {
+		t.Error("expected error when JSON encoding fails")
+	}
+}
+
+func TestNewMoveCmd_ScanProjectErrorWithJSON(t *testing.T) {
+	mock := &mockMoveIO{
+		binderBytes: moveBinder(),
+		projectErr:  errors.New("disk error"),
+	}
+	c := NewMoveCmd(mock)
+	out := new(bytes.Buffer)
+	c.SetOut(out)
+	c.SetArgs([]string{"--source", "chapter-two.md", "--dest", "chapter-one.md", "--yes", "--json", "_binder.md"})
+
+	if err := c.Execute(); err == nil {
+		t.Error("expected error when ScanProject fails")
+	}
+
+	var result binder.OpResult
+	if err := json.Unmarshal(out.Bytes(), &result); err != nil {
+		t.Fatalf("expected OPE009 JSON on stdout, got: %s", out.String())
+	}
+	if len(result.Diagnostics) == 0 || result.Diagnostics[0].Code != binder.CodeIOOrParseFailure {
+		t.Errorf("expected OPE009 diagnostic, got: %v", result.Diagnostics)
 	}
 }
 
