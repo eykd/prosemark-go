@@ -94,8 +94,7 @@ func AddChild(ctx context.Context, src []byte, project *binder.Project, params b
 
 		// Build the new list-item line.
 		indentStr, marker := inferMarkerAndIndent(parent, insertIdx)
-		encodedTarget := percentEncodeTarget(decodedTarget)
-		newLine := indentStr + marker + " [" + title + "](" + encodedTarget + ")"
+		newLine := indentStr + marker + " [" + title + "](" + decodedTarget + ")"
 
 		// Find the 0-based position in result.Lines at which to insert.
 		lineIdx := insertionLineIdx(parent, insertIdx, result)
@@ -207,22 +206,6 @@ func addChildEvalParentSelector(selector string, root *binder.Node, lines []stri
 		}}
 	}
 	return matches, nil
-}
-
-// percentEncodeTarget encodes characters in a target path that would break
-// the inline-link URL syntax (space, double-quote, and the URL-reserved
-// characters that the parser's regex forbids).
-func percentEncodeTarget(target string) string {
-	var b strings.Builder
-	for _, c := range target {
-		switch {
-		case c == ' ':
-			b.WriteString("%20")
-		default:
-			b.WriteRune(c)
-		}
-	}
-	return b.String()
 }
 
 // percentDecodeOpTarget URL-decodes a target path for storage in the binder.

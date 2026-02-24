@@ -589,10 +589,10 @@ func TestAddChild_ErrorCodesAbortMutation(t *testing.T) {
 // Percent-encoding round-trip (spaces in filenames)
 // ──────────────────────────────────────────────────────────────────────────────
 
-// TestAddChild_SpaceInTarget_WritesPercentEncoded verifies that a target with a
-// literal space is written as %20 in the binder and the node is recoverable
+// TestAddChild_SpaceInTarget_RoundTrips verifies that a target with a literal
+// space is stored with the raw space in the binder and the node is recoverable
 // after a round-trip parse.
-func TestAddChild_SpaceInTarget_WritesPercentEncoded(t *testing.T) {
+func TestAddChild_SpaceInTarget_RoundTrips(t *testing.T) {
 	src := binderSrc()
 	params := binder.AddChildParams{
 		ParentSelector: ".",
@@ -609,13 +609,9 @@ func TestAddChild_SpaceInTarget_WritesPercentEncoded(t *testing.T) {
 	if hasDiagCode(diags, "error") {
 		t.Errorf("unexpected error diagnostic: %v", diags)
 	}
-	// Encoded form must appear in the binder.
-	if !bytes.Contains(out, []byte("my%20chapter.md")) {
-		t.Errorf("expected encoded target 'my%%20chapter.md' in output:\n%s", out)
-	}
-	// Literal space must NOT appear in the link URL.
-	if bytes.Contains(out, []byte("(my chapter.md)")) {
-		t.Errorf("literal space should not appear in link URL:\n%s", out)
+	// Raw-space form must appear in the binder.
+	if !bytes.Contains(out, []byte("(my chapter.md)")) {
+		t.Errorf("expected raw-space target '(my chapter.md)' in output:\n%s", out)
 	}
 	// Round-trip: parse the written binder and verify the node is visible.
 	result, parseDiags, parseErr := binder.Parse(context.Background(), out, nil)
@@ -634,7 +630,8 @@ func TestAddChild_SpaceInTarget_WritesPercentEncoded(t *testing.T) {
 }
 
 // TestAddChild_PreEncodedSpaceTarget_RoundTrips verifies that a pre-encoded
-// target (%20) produces the same final binder state as a literal-space target.
+// target (%20) is decoded and stored as raw-space, producing the same final
+// binder state as a literal-space target.
 func TestAddChild_PreEncodedSpaceTarget_RoundTrips(t *testing.T) {
 	src := binderSrc()
 	params := binder.AddChildParams{
@@ -652,8 +649,9 @@ func TestAddChild_PreEncodedSpaceTarget_RoundTrips(t *testing.T) {
 	if hasDiagCode(diags, "error") {
 		t.Errorf("unexpected error diagnostic: %v", diags)
 	}
-	if !bytes.Contains(out, []byte("my%20chapter.md")) {
-		t.Errorf("expected encoded target 'my%%20chapter.md' in output:\n%s", out)
+	// Raw-space form must appear in the binder (percent-encoding is decoded at input boundary).
+	if !bytes.Contains(out, []byte("(my chapter.md)")) {
+		t.Errorf("expected raw-space target '(my chapter.md)' in output:\n%s", out)
 	}
 	// Round-trip parse must recover the decoded target.
 	result, _, _ := binder.Parse(context.Background(), out, nil)
