@@ -349,6 +349,13 @@ func parseLink(content string, refDefs map[string]RefDef, wikiIndex map[string][
 	} else if m := wikilinkRE.FindStringSubmatch(content); m != nil {
 		rawStem := m[1]
 		alias := m[2]
+		// If no pipe alias, check for trailing text after ]] (e.g. [[file.md]] Title).
+		if alias == "" {
+			trailing := strings.TrimSpace(content[len(m[0]):])
+			if trailing != "" {
+				alias = trailing
+			}
+		}
 		target, title, diags = resolveWikilink(rawStem, alias, wikiIndex, binderDir, lineNum, column)
 	} else if m := fullRefLinkRE.FindStringSubmatch(content); m != nil {
 		if rd, exists := refDefs[strings.ToLower(m[2])]; exists {

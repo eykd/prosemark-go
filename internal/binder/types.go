@@ -151,6 +151,7 @@ const (
 	CodeSiblingNotFound   = "OPE007"
 	CodeIndexOutOfBounds  = "OPE008"
 	CodeIOOrParseFailure  = "OPE009"
+	CodeConflictingFlags  = "OPE010"
 )
 
 // Operation warnings (exit 0; mutation proceeds).
@@ -159,4 +160,5 @@ const (
 	CodeDuplicateSkipped       = "OPW002"
 	CodeNonStructuralDestroyed = "OPW003"
 	CodeEmptySublistPruned     = "OPW004"
+	CodeCascadeDelete          = "OPW005"
 )

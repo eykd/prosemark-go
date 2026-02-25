@@ -78,6 +78,17 @@ func Delete(ctx context.Context, src []byte, project *binder.Project, params bin
 		}
 	}
 
+	// Emit OPW005 if any node has children (cascade delete).
+	for _, node := range nodes {
+		if len(node.Children) > 0 {
+			allDiags = append(allDiags, binder.Diagnostic{
+				Severity: "warning",
+				Code:     binder.CodeCascadeDelete,
+				Message:  fmt.Sprintf("deleting %q also removed its %d descendant(s)", node.Target, countDescendants(node)),
+			})
+		}
+	}
+
 	// Sort nodes by Line descending so deletions are applied bottom-to-top,
 	// keeping earlier line numbers valid across iterations.
 	sort.Slice(nodes, func(i, j int) bool {
@@ -258,6 +269,16 @@ func deleteCollapseBlankLines(lines, lineEnds []string) ([]string, []string) {
 		prevBlank = isBlank
 	}
 	return newLines, newEnds
+}
+
+// countDescendants returns the total number of descendants (children + their children, etc.)
+// in the subtree rooted at n.
+func countDescendants(n *binder.Node) int {
+	count := 0
+	for _, child := range n.Children {
+		count += 1 + countDescendants(child)
+	}
+	return count
 }
 
 // deleteStripTrailingBlanks removes blank lines from the end of lines/lineEnds.

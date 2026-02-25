@@ -62,8 +62,11 @@ func TestNewParseCmd_EncodeError(t *testing.T) {
 	}
 }
 
-func TestRootRunE_ReturnsNil(t *testing.T) {
-	if err := rootRunE(nil, nil); err != nil {
+func TestRootRunE_ShowsHelp(t *testing.T) {
+	root := NewRootCmd()
+	root.SetOut(new(bytes.Buffer))
+	root.SetErr(new(bytes.Buffer))
+	if err := rootRunE(root, nil); err != nil {
 		t.Errorf("rootRunE() = %v, want nil", err)
 	}
 }

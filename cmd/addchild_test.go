@@ -402,6 +402,43 @@ func TestNewAddChildCmd_ScanProjectErrorWithJSON(t *testing.T) {
 	}
 }
 
+func TestNewAddChildCmd_ConflictingPositionFlags(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{
+			name: "first and at conflict",
+			args: []string{"--parent", ".", "--target", "ch.md", "--first", "--at", "1", "--project", "."},
+		},
+		{
+			name: "first and before conflict",
+			args: []string{"--parent", ".", "--target", "ch.md", "--first", "--before", "x.md", "--project", "."},
+		},
+		{
+			name: "before and after conflict",
+			args: []string{"--parent", ".", "--target", "ch.md", "--before", "x.md", "--after", "y.md", "--project", "."},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock := &mockAddChildIO{
+				binderBytes: acBinder(),
+				project:     &binder.Project{Files: []string{"ch.md"}, BinderDir: "."},
+			}
+			c := NewAddChildCmd(mock)
+			c.SetOut(new(bytes.Buffer))
+			c.SetErr(new(bytes.Buffer))
+			c.SetArgs(tt.args)
+
+			if err := c.Execute(); err == nil {
+				t.Errorf("expected error for conflicting position flags (%s)", tt.name)
+			}
+		})
+	}
+}
+
 func TestNewRootCmd_RegistersAddChildSubcommand(t *testing.T) {
 	root := NewRootCmd()
 	var found bool

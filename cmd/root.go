@@ -27,8 +27,8 @@ func NewRootCmd() *cobra.Command {
 	return root
 }
 
-func rootRunE(_ *cobra.Command, _ []string) error {
-	return nil
+func rootRunE(cmd *cobra.Command, _ []string) error {
+	return cmd.Help()
 }
 
 // resolveBinderPath derives the binder path from a project directory.

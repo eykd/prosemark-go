@@ -1,8 +1,10 @@
 package cmd
 
 import (
+	"bytes"
 	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -51,6 +53,21 @@ func TestResolveBinderPath_UsesCWDWhenProjectEmpty(t *testing.T) {
 	want := filepath.Join("/cwd", "_binder.md")
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestRootCmd_NoArgs_ShowsHelp(t *testing.T) {
+	root := NewRootCmd()
+	out := new(bytes.Buffer)
+	root.SetOut(out)
+	root.SetErr(new(bytes.Buffer))
+	root.SetArgs([]string{})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(out.String(), "pmk") {
+		t.Errorf("expected help output to contain \"pmk\", got: %s", out.String())
 	}
 }
 

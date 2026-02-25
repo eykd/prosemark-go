@@ -99,6 +99,29 @@ func TestDelete_NodeWithChildren_RemovesEntireSubtree(t *testing.T) {
 	}
 }
 
+// TestDelete_NodeWithChildren_EmitsCascadeDeleteWarning verifies that deleting
+// a node that has children emits an OPW005 (cascade delete) warning.
+func TestDelete_NodeWithChildren_EmitsCascadeDeleteWarning(t *testing.T) {
+	src := []byte("<!-- prosemark-binder:v1 -->\n\n" +
+		"- [Part One](part-one.md)\n" +
+		"  - [Chapter One](chapter-one.md)\n" +
+		"  - [Chapter Two](chapter-two.md)\n" +
+		"- [Part Two](part-two.md)\n")
+	params := binder.DeleteParams{
+		Selector: "part-one",
+		Yes:      true,
+	}
+
+	_, diags, err := Delete(context.Background(), src, nil, params)
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !hasDiagCode(diags, binder.CodeCascadeDelete) {
+		t.Errorf("expected OPW005 (cascade delete warning), got: %v", diags)
+	}
+}
+
 // ──────────────────────────────────────────────────────────────────────────────
 // Cleanup: consecutive blank line collapse
 // ──────────────────────────────────────────────────────────────────────────────

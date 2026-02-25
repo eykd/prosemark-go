@@ -688,6 +688,24 @@ func TestParse_Wikilinks(t *testing.T) {
 			wantTarget: "subfolder/deep.md",
 			wantTitle:  "deep",
 		},
+		{
+			name:       "wikilink with trailing text uses trailing text as title",
+			src:        "<!-- prosemark-binder:v1 -->\n- [[chapter]] Opening Scene\n",
+			wantTarget: "chapter.md",
+			wantTitle:  "Opening Scene",
+		},
+		{
+			name:       "wikilink with no trailing text uses stem as title",
+			src:        "<!-- prosemark-binder:v1 -->\n- [[chapter]]\n",
+			wantTarget: "chapter.md",
+			wantTitle:  "chapter",
+		},
+		{
+			name:       "wikilink pipe alias wins over trailing text",
+			src:        "<!-- prosemark-binder:v1 -->\n- [[chapter|Alias]] Extra Text\n",
+			wantTarget: "chapter.md",
+			wantTitle:  "Alias",
+		},
 	}
 
 	for _, tt := range tests {
