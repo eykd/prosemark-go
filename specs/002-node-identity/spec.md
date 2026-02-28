@@ -56,6 +56,7 @@ An author adds a new chapter to their project. Running `pmk add --new --title "C
 6. **Given** `pmk add --new` and the filesystem write of `{uuid}.md` succeeds but the binder write fails, **When** the operation rolls back, **Then** the created UUID file is deleted and the binder is unchanged.
 7. **Given** `pmk add --new --target 0192f0c1-0000-7000-8000-000000000000.md`, **When** the command runs, **Then** the explicitly provided UUID is validated against the UUID pattern and used as the node identity.
 8. **Given** `pmk add --new --target not-a-uuid.md`, **When** the command runs, **Then** the command fails with an error indicating the target must be a valid UUID filename.
+9. **Given** `pmk add --new --title "Chapter Two" --edit` and `$EDITOR` is not set, **When** the command runs, **Then** the node file and binder entry are created successfully, after which the command exits with an error indicating `$EDITOR` is not set. The node persists in a valid state.
 
 ---
 
@@ -75,6 +76,7 @@ An author wants to write or revise a chapter. Running `pmk edit {uuid} --part dr
 4. **Given** a UUID not present in the binder, **When** `pmk edit {uuid} --part draft`, **Then** the command fails with a "node not in binder" error.
 5. **Given** a UUID in the binder but with a missing `{uuid}.md` file, **When** `pmk edit {uuid} --part draft`, **Then** the command fails with a "node file missing" error.
 6. **Given** `pmk edit {uuid}` with no `--part` flag, **When** the command runs, **Then** `--part draft` is used as the default.
+7. **Given** `pmk edit {uuid}` and `$EDITOR` is not set, **When** the command runs, **Then** the command fails with an error indicating `$EDITOR` is not set. No file is created or modified.
 
 ---
 
@@ -90,24 +92,26 @@ An author wants to verify their project is internally consistent — all binder 
 
 1. **Given** a clean project where all binder references exist and all frontmatter is valid, **When** `pmk doctor`, **Then** the command exits 0 with no errors or warnings.
 2. **Given** a binder link to `{uuid}.md` where that file does not exist on disk, **When** `pmk doctor`, **Then** AUD001 is reported and the command exits 1.
-3. **Given** a `{uuid}.md` file in the project directory not referenced in the binder, **When** `pmk doctor`, **Then** AUD002 is reported. AUD002 applies only to files matching the UUID filename pattern — non-UUID `.md` files are ignored.
+3. **Given** a `{uuid}.md` file in the project directory not referenced in the binder, **When** `pmk doctor`, **Then** AUD002 is reported as a warning (exit code unaffected). AUD002 applies only to files matching the UUID filename pattern — non-UUID `.md` files are ignored.
 4. **Given** a binder with the same `{uuid}.md` linked twice, **When** `pmk doctor`, **Then** AUD003 is reported and the command exits 1.
 5. **Given** a `{uuid}.md` file whose frontmatter `id` field does not match the filename stem, **When** `pmk doctor`, **Then** AUD004 is reported and the command exits 1.
-6. **Given** a `{uuid}.md` file missing the required `created` or `id` field in frontmatter, **When** `pmk doctor`, **Then** AUD005 is reported and the command exits 1.
+6. **Given** a `{uuid}.md` file missing the required `created`, `id`, or `updated` field in frontmatter, **When** `pmk doctor`, **Then** AUD005 is reported and the command exits 1.
 7. **Given** a `{uuid}.md` file whose body content after the closing frontmatter delimiter is empty or whitespace-only, **When** `pmk doctor`, **Then** AUD006 is reported as a warning (the chapter exists but has no prose yet).
 8. **Given** a project with errors and `pmk doctor --json`, **When** the command runs, **Then** the output is a JSON array of diagnostic objects with `code`, `message`, and `path` fields.
 9. **Given** a project with only AUD006 placeholder warnings (no errors), **When** `pmk doctor`, **Then** the command exits 0 (warnings do not affect exit code).
+12. **Given** a project with only AUD002 orphan warnings (no errors), **When** `pmk doctor`, **Then** the command exits 0 (orphan warnings do not affect exit code).
 10. **Given** a binder with a non-UUID filename link (e.g. `chapter-one.md`), **When** `pmk doctor`, **Then** a warning is emitted about the non-UUID filename but the command does not error.
+11. **Given** a `{uuid}.md` file whose YAML frontmatter is syntactically invalid (e.g. unclosed quotes, invalid indentation) and cannot be parsed, **When** `pmk doctor`, **Then** AUD007 is reported and the command exits 1.
 
 ---
 
 ### Edge Cases
 
-- What happens when `pmk add --new --edit` is invoked but `$EDITOR` is not set?
+- **Resolved**: `pmk add --new --edit` with `$EDITOR` unset — node and binder are created successfully, then the command exits with an error. The node persists in valid state. (See US2 Scenario 9.)
 - What happens when the UUID file write succeeds but the process is killed before the binder write completes?
-- What happens when frontmatter YAML is syntactically malformed (not just missing fields)?
-- Does `pmk doctor` scan only the immediate project root for orphan files, or also subdirectories?
-- What happens when `pmk edit` is invoked but `$EDITOR` is not set?
+- **Resolved**: Syntactically malformed YAML frontmatter triggers AUD007 (distinct from AUD005 for field-level issues). (See US4 Scenario 11, FR-019c.)
+- Does `pmk doctor` scan only the immediate project root for orphan files, or also subdirectories? — **Resolved in Assumptions**: immediate project root only.
+- **Resolved**: `pmk edit` with `$EDITOR` unset — command fails immediately with error; no files created or modified. (See US3 Scenario 7.)
 
 ## Requirements _(mandatory)_
 
@@ -115,9 +119,10 @@ An author wants to verify their project is internally consistent — all binder 
 
 - **FR-001**: System MUST generate UUIDv7 identifiers for new nodes, formatted as canonical lowercase hex with hyphens.
 - **FR-002**: System MUST create node draft files named `{uuid}.md` where the UUID matches the `id` field in the file's YAML frontmatter.
-- **FR-003**: System MUST enforce that every node file begins with YAML frontmatter containing at minimum `id` and `created` fields.
+- **FR-003**: System MUST enforce that every node file begins with YAML frontmatter containing at minimum `id`, `created`, and `updated` fields.
 - **FR-004**: The `id` field in frontmatter MUST equal the filename stem (without `.md` extension).
 - **FR-005**: The `created` timestamp MUST be set at file creation time and MUST NOT change on subsequent edits.
+- **FR-005b**: The `updated` timestamp MUST be set to the same value as `created` at node creation time. It is always present from the moment the file is created.
 - **FR-006**: The `updated` timestamp MUST be refreshed to the current UTC time whenever an edit operation closes.
 - **FR-007**: `pmk init` MUST create `_binder.md` with the managed binder block if not already present.
 - **FR-008**: `pmk init` MUST create `.prosemark.yml` with default project configuration.
@@ -125,15 +130,17 @@ An author wants to verify their project is internally consistent — all binder 
 - **FR-010**: `pmk add --new` MUST atomically create the node file and update the binder, rolling back the file creation if the binder write fails.
 - **FR-011**: `pmk add --new` MUST accept optional `--title` and `--synopsis` flags that populate the corresponding frontmatter fields.
 - **FR-012**: `pmk add --new --edit` MUST open the node file in `$EDITOR` immediately after creation.
-- **FR-013**: `pmk edit <id> --part <draft|notes|synopsis>` MUST open the appropriate file in `$EDITOR`.
+- **FR-013**: `pmk edit <id> --part <draft|notes>` MUST open the appropriate file in `$EDITOR`. The `--part synopsis` variant is out of scope for this feature.
+- **FR-013b**: If `$EDITOR` is not set when any editor-opening operation is attempted (including `pmk add --new --edit` and `pmk edit`), the command MUST exit with a clear error indicating `$EDITOR` is unset. For `pmk add --new --edit`, file and binder writes that completed before the editor step are retained; the node remains in valid state.
 - **FR-014**: `pmk edit` MUST validate that the given ID exists in the binder before opening any file.
 - **FR-015**: `pmk edit --part notes` MUST create `{uuid}.notes.md` if it does not yet exist.
 - **FR-016**: `pmk doctor` MUST report AUD001 when a binder reference points to a missing file.
-- **FR-016b**: `pmk doctor` MUST report AUD002 when a UUID-pattern file (`{uuid}.md`) exists in the project root but is not referenced in the binder. Non-UUID `.md` files are not subject to this check.
+- **FR-016b**: `pmk doctor` MUST report AUD002 (warning) when a UUID-pattern file (`{uuid}.md`) exists in the project root but is not referenced in the binder. AUD002 does not affect the exit code. Non-UUID `.md` files are not subject to this check.
 - **FR-017**: `pmk doctor` MUST report AUD003 when the same file appears more than once in the binder.
 - **FR-018**: `pmk doctor` MUST report AUD004 when a node file's frontmatter `id` does not match its filename stem.
-- **FR-019**: `pmk doctor` MUST report AUD005 when required frontmatter fields (`id`, `created`) are absent or malformed.
+- **FR-019**: `pmk doctor` MUST report AUD005 when required frontmatter fields (`id`, `created`, `updated`) are absent or malformed.
 - **FR-019b**: `pmk doctor` MUST report AUD006 (warning) when a `{uuid}.md` file has valid frontmatter but empty or whitespace-only body content.
+- **FR-019c**: `pmk doctor` MUST report AUD007 when a `{uuid}.md` file's YAML frontmatter block is syntactically unparseable (distinct from AUD005 which covers parseable but invalid field values).
 - **FR-020**: `pmk doctor` MUST exit with code 1 when any error-level diagnostic is present, and code 0 when only warnings (or nothing) are present.
 - **FR-021**: `pmk doctor --json` MUST output a JSON array of diagnostic objects.
 - **FR-022**: Non-UUID filenames linked in the binder MUST generate a warning but MUST NOT cause an error — backward compatibility with Feature 001 binder-only projects is preserved.
@@ -143,7 +150,7 @@ An author wants to verify their project is internally consistent — all binder 
 - **NodeId**: A UUIDv7 value that permanently identifies a node. Immutable after creation. Encoded as canonical lowercase hex with hyphens (e.g. `0192f0c1-3e7a-7000-8000-5a4b3c2d1e0f`).
 - **Node**: A first-class writing entity with a stable identity, frontmatter metadata, and body content. Stored as `{uuid}.md`. May also have an associated notes file `{uuid}.notes.md`.
 - **Frontmatter**: YAML metadata block at the start of a node file. Contains `id`, `title` (optional), `synopsis` (optional), `created`, and `updated`.
-- **NodePart**: The aspect of a node being edited — `draft` (the main content file), `notes` (the notes companion file), or `synopsis` (the synopsis field within frontmatter).
+- **NodePart**: The aspect of a node being edited — `draft` (the main content file) or `notes` (the notes companion file). The `synopsis` variant is deferred to a future feature.
 - **NodeRepo**: The filesystem adapter responsible for creating, reading, and writing node files and their frontmatter.
 - **Binder**: The `_binder.md` file that registers the structural outline and links to node files. Managed by the existing Feature 001 binder engine.
 
@@ -153,7 +160,7 @@ An author wants to verify their project is internally consistent — all binder 
 
 - **SC-001**: Authors can initialize a new project and add their first chapter in under 60 seconds using only CLI commands.
 - **SC-002**: Every node file created by `pmk add --new` passes `pmk doctor` validation without manual intervention.
-- **SC-003**: `pmk doctor` detects 100% of the six defined violation types (AUD001–AUD006) when they are present in a project.
+- **SC-003**: `pmk doctor` detects 100% of the seven defined violation types (AUD001–AUD007) when they are present in a project.
 - **SC-004**: A binder write failure during `pmk add --new` leaves zero orphaned UUID files on disk.
 - **SC-005**: `pmk edit` opens the correct file within 1 second of invocation (editor launch latency excluded).
 - **SC-006**: Existing Feature 001 binder-only projects continue to work with `pmk parse`, `pmk add`, `pmk delete`, and `pmk move` without modification.
@@ -166,12 +173,27 @@ An author wants to verify their project is internally consistent — all binder 
 - `pmk add --new` does not create a notes file by default. Notes files are created on-demand by `pmk edit --part notes`.
 - All timestamps are stored and compared in UTC (ISO 8601 format with `Z` suffix).
 
+## Clarifications
+
+### Session 2026-02-28 (continued)
+
+- Q: When `pmk edit {uuid} --part synopsis` is invoked, what should happen? → A: `--part synopsis` is out of scope for this feature; removed from FR-013 and NodePart definition.
+- Q: When `$EDITOR` is not set and an editor-opening operation is attempted, what should happen? → A: For `pmk add --new --edit`, create the node and binder entry first, then fail with an error; the node persists. For `pmk edit`, fail with an error immediately. (FR-013b added.)
+- Q: When frontmatter YAML is syntactically unparseable (not just missing fields), which audit code applies? → A: AUD007 (new code, distinct from AUD005 for parseable-but-invalid fields). (FR-019c and US4 Scenario 11 added; SC-003 updated to 7 violation types.)
+- Q: Is AUD002 (orphaned UUID file) an error (exit 1) or a warning (exit 0)? → A: Warning (exit 0), same class as AUD006. (US4 Scenario 3 updated; US4 Scenario 12 added; FR-016b updated.)
+- Q: What is the initial value of `updated` when a node is first created? → A: Set to the same value as `created` at creation time; always present from the start. (FR-003, FR-005b added, FR-019, US4 Scenario 6 updated.)
+
 ## Interview
 
 ### Answer Log
 
 1. **AUD002 scope** (2026-02-28): AUD002 applies only to files matching the UUID filename pattern (`{uuid}.md`). Non-UUID `.md` files are ignored by doctor. *(Answer: A)*
 2. **AUD006 placeholder definition** (2026-02-28): A placeholder node is a `{uuid}.md` file whose body content after the closing frontmatter `---` delimiter is empty or whitespace-only. AUD006 is a warning (exit code unaffected). *(Answer: A)*
+3. **`--part synopsis` scope** (2026-02-28): `pmk edit --part synopsis` is out of scope for this feature. FR-013 updated to `draft|notes` only; NodePart `synopsis` variant deferred to future feature. *(Answer: C)*
+4. **`$EDITOR` not set behavior** (2026-02-28): For `pmk add --new --edit`: create node + binder, then fail with error on editor step; node persists in valid state. For `pmk edit`: fail immediately with error. FR-013b added; US2 Scenario 9 and US3 Scenario 7 added. *(Answer: B)*
+5. **Syntactically malformed YAML frontmatter** (2026-02-28): Introduce AUD007 for unparseable YAML (distinct from AUD005 for field-level validation failures). FR-019c and US4 Scenario 11 added; SC-003 updated to 7 violation types. *(Answer: B)*
+6. **AUD002 severity** (2026-02-28): AUD002 (orphaned UUID file) is a warning (exit 0), same class as AUD006. FR-016b and US4 Scenario 3 updated; US4 Scenario 12 added. *(Answer: B)*
+7. **`updated` initial value** (2026-02-28): `updated` is set to the same value as `created` at node creation time; always present in frontmatter. FR-003 updated to require `updated`; FR-005b added; FR-019 updated to include `updated` in AUD005 check; US4 Scenario 6 updated. *(Answer: A)*
 
 ### Open Questions
 

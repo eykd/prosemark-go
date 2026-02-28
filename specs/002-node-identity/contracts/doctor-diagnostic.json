@@ -1,0 +1,67 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "DoctorDiagnostic",
+  "description": "A single diagnostic object in the pmk doctor --json output array.",
+  "type": "object",
+  "required": ["code", "message", "path"],
+  "additionalProperties": false,
+  "properties": {
+    "code": {
+      "type": "string",
+      "description": "Audit diagnostic code.",
+      "enum": ["AUD001", "AUD002", "AUD003", "AUD004", "AUD005", "AUD006", "AUD007", "AUDW001"]
+    },
+    "message": {
+      "type": "string",
+      "description": "Human-readable description of the diagnostic.",
+      "minLength": 1
+    },
+    "path": {
+      "type": "string",
+      "description": "Path to the file or binder reference causing the diagnostic, relative to project root. Empty string if not applicable.",
+      "minLength": 0
+    }
+  },
+  "examples": [
+    {
+      "code": "AUD001",
+      "message": "referenced file does not exist: 0192f0c1-3e7a-7000-8000-5a4b3c2d1e0f.md",
+      "path": "0192f0c1-3e7a-7000-8000-5a4b3c2d1e0f.md"
+    },
+    {
+      "code": "AUD002",
+      "message": "orphaned UUID file not referenced in binder: 0192f0c1-3e7a-7000-8000-deadbeef1234.md",
+      "path": "0192f0c1-3e7a-7000-8000-deadbeef1234.md"
+    },
+    {
+      "code": "AUD003",
+      "message": "file appears more than once in binder: 0192f0c1-3e7a-7000-8000-5a4b3c2d1e0f.md",
+      "path": "0192f0c1-3e7a-7000-8000-5a4b3c2d1e0f.md"
+    },
+    {
+      "code": "AUD004",
+      "message": "frontmatter id does not match filename: id=wrong-uuid, file=0192f0c1-3e7a-7000-8000-5a4b3c2d1e0f.md",
+      "path": "0192f0c1-3e7a-7000-8000-5a4b3c2d1e0f.md"
+    },
+    {
+      "code": "AUD005",
+      "message": "required frontmatter field missing or empty: updated",
+      "path": "0192f0c1-3e7a-7000-8000-5a4b3c2d1e0f.md"
+    },
+    {
+      "code": "AUD006",
+      "message": "node file has no body content: 0192f0c1-3e7a-7000-8000-5a4b3c2d1e0f.md",
+      "path": "0192f0c1-3e7a-7000-8000-5a4b3c2d1e0f.md"
+    },
+    {
+      "code": "AUD007",
+      "message": "frontmatter YAML is syntactically invalid: yaml: line 2: could not find expected ':'",
+      "path": "0192f0c1-3e7a-7000-8000-5a4b3c2d1e0f.md"
+    },
+    {
+      "code": "AUDW001",
+      "message": "non-UUID filename linked in binder: chapter-one.md",
+      "path": "chapter-one.md"
+    }
+  ]
+}
