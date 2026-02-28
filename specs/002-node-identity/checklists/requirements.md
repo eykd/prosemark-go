@@ -13,7 +13,7 @@
 
 ## Requirement Completeness
 
-- [ ] No [NEEDS CLARIFICATION] markers remain — **2 open: AUD002 scope, AUD006 definition**
+- [x] No [NEEDS CLARIFICATION] markers remain — all clarifications resolved
 - [x] Requirements are testable and unambiguous
 - [x] Success criteria are measurable
 - [x] Success criteria are technology-agnostic (no implementation details)
@@ -31,8 +31,7 @@
 
 ## Notes
 
-- Two [NEEDS CLARIFICATION] markers remain:
-  1. AUD002: Orphan file check scope (UUID-pattern only vs all `.md` files)
-  2. AUD006: Definition of "placeholder node"
-- These require user clarification before `/sp:02-clarify` can close
-- All other items pass — spec is otherwise complete and ready for interview
+- All clarifications resolved (2026-02-28):
+  1. AUD002: UUID-pattern files only (option A)
+  2. AUD006: Empty body content after frontmatter (option A)
+- Spec is complete and ready for planning

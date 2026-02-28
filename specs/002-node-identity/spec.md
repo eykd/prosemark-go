@@ -90,11 +90,11 @@ An author wants to verify their project is internally consistent — all binder 
 
 1. **Given** a clean project where all binder references exist and all frontmatter is valid, **When** `pmk doctor`, **Then** the command exits 0 with no errors or warnings.
 2. **Given** a binder link to `{uuid}.md` where that file does not exist on disk, **When** `pmk doctor`, **Then** AUD001 is reported and the command exits 1.
-3. **Given** a `{uuid}.md` file in the project directory not referenced in the binder, **When** `pmk doctor`, **Then** AUD002 is reported. [NEEDS CLARIFICATION: Should AUD002 apply only to files matching the UUID filename pattern (e.g. `{uuid}.md`), or to all `.md` files in the project directory?]
+3. **Given** a `{uuid}.md` file in the project directory not referenced in the binder, **When** `pmk doctor`, **Then** AUD002 is reported. AUD002 applies only to files matching the UUID filename pattern — non-UUID `.md` files are ignored.
 4. **Given** a binder with the same `{uuid}.md` linked twice, **When** `pmk doctor`, **Then** AUD003 is reported and the command exits 1.
 5. **Given** a `{uuid}.md` file whose frontmatter `id` field does not match the filename stem, **When** `pmk doctor`, **Then** AUD004 is reported and the command exits 1.
 6. **Given** a `{uuid}.md` file missing the required `created` or `id` field in frontmatter, **When** `pmk doctor`, **Then** AUD005 is reported and the command exits 1.
-7. **Given** a binder node detected as a placeholder, **When** `pmk doctor`, **Then** AUD006 is reported. [NEEDS CLARIFICATION: What defines a "placeholder node" — is it a node file with empty body content after the frontmatter, a binder entry with special placeholder syntax, or something else?]
+7. **Given** a `{uuid}.md` file whose body content after the closing frontmatter delimiter is empty or whitespace-only, **When** `pmk doctor`, **Then** AUD006 is reported as a warning (the chapter exists but has no prose yet).
 8. **Given** a project with errors and `pmk doctor --json`, **When** the command runs, **Then** the output is a JSON array of diagnostic objects with `code`, `message`, and `path` fields.
 9. **Given** a project with only AUD006 placeholder warnings (no errors), **When** `pmk doctor`, **Then** the command exits 0 (warnings do not affect exit code).
 10. **Given** a binder with a non-UUID filename link (e.g. `chapter-one.md`), **When** `pmk doctor`, **Then** a warning is emitted about the non-UUID filename but the command does not error.
@@ -129,9 +129,11 @@ An author wants to verify their project is internally consistent — all binder 
 - **FR-014**: `pmk edit` MUST validate that the given ID exists in the binder before opening any file.
 - **FR-015**: `pmk edit --part notes` MUST create `{uuid}.notes.md` if it does not yet exist.
 - **FR-016**: `pmk doctor` MUST report AUD001 when a binder reference points to a missing file.
+- **FR-016b**: `pmk doctor` MUST report AUD002 when a UUID-pattern file (`{uuid}.md`) exists in the project root but is not referenced in the binder. Non-UUID `.md` files are not subject to this check.
 - **FR-017**: `pmk doctor` MUST report AUD003 when the same file appears more than once in the binder.
 - **FR-018**: `pmk doctor` MUST report AUD004 when a node file's frontmatter `id` does not match its filename stem.
 - **FR-019**: `pmk doctor` MUST report AUD005 when required frontmatter fields (`id`, `created`) are absent or malformed.
+- **FR-019b**: `pmk doctor` MUST report AUD006 (warning) when a `{uuid}.md` file has valid frontmatter but empty or whitespace-only body content.
 - **FR-020**: `pmk doctor` MUST exit with code 1 when any error-level diagnostic is present, and code 0 when only warnings (or nothing) are present.
 - **FR-021**: `pmk doctor --json` MUST output a JSON array of diagnostic objects.
 - **FR-022**: Non-UUID filenames linked in the binder MUST generate a warning but MUST NOT cause an error — backward compatibility with Feature 001 binder-only projects is preserved.
@@ -168,12 +170,9 @@ An author wants to verify their project is internally consistent — all binder 
 
 ### Answer Log
 
-_(empty)_
+1. **AUD002 scope** (2026-02-28): AUD002 applies only to files matching the UUID filename pattern (`{uuid}.md`). Non-UUID `.md` files are ignored by doctor. *(Answer: A)*
+2. **AUD006 placeholder definition** (2026-02-28): A placeholder node is a `{uuid}.md` file whose body content after the closing frontmatter `---` delimiter is empty or whitespace-only. AUD006 is a warning (exit code unaffected). *(Answer: A)*
 
 ### Open Questions
 
-1. **AUD002 scope**: Should the "orphan file not referenced in binder" check (AUD002) apply only to files matching the UUID filename pattern (e.g. `{uuid}.md`), or to all `.md` files in the project directory? The filesystem layout example includes a non-UUID file, suggesting the distinction matters.
-
-2. **AUD006 placeholder definition**: What constitutes a "placeholder node" for AUD006? Candidates: (a) a node file with empty body content after frontmatter, (b) a binder entry that uses special placeholder syntax from the Binder v1 spec, or (c) something else.
-
-**NEXT QUESTION:** #1
+_(none — interview complete)_
