@@ -63,7 +63,7 @@ func newInitCmdWithGetCWD(io InitIO, getwd func() (string, error)) *cobra.Comman
 			needsWarning = needsWarning || (force && configExists)
 
 			if !configExists || force {
-				const configContent = "# prosemark project configuration\n"
+				const configContent = "version: \"1\"\n"
 				if err := io.WriteFileAtomic(configPath, configContent); err != nil {
 					return fmt.Errorf(
 						"writing .prosemark.yml (partial init; re-run with --force to recover): %w", err)
