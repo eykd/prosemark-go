@@ -906,7 +906,6 @@ func TestIsUUIDFilename_RejectsNonV7UUID(t *testing.T) {
 
 // TestNewAddChildCmd_NewMode_NonV7UUIDTargetRejected verifies that a non-v7
 // UUID filename is rejected when supplied as --target with --new.
-// Currently FAILS because uuidFilenameRe accepts any well-formed UUID.
 func TestNewAddChildCmd_NewMode_NonV7UUIDTargetRejected(t *testing.T) {
 	// v4 UUID: third group starts with '4', not '7'
 	mock := &mockAddChildIOWithNew{
@@ -935,8 +934,7 @@ func TestNewAddChildCmd_NewMode_NonV7UUIDTargetRejected(t *testing.T) {
 
 // TestNewAddChildCmd_NewMode_SynopsisAbsentWhenNotProvided verifies that when
 // --synopsis is not supplied, the written node file frontmatter does NOT
-// include a 'synopsis:' key. Currently FAILS because buildNodeContent always
-// formats 'synopsis: ' even when the synopsis argument is empty.
+// include a 'synopsis:' key.
 func TestNewAddChildCmd_NewMode_SynopsisAbsentWhenNotProvided(t *testing.T) {
 	mock := &mockAddChildIOWithNew{
 		mockAddChildIO: mockAddChildIO{
@@ -1017,9 +1015,8 @@ func TestNewAddChildCmd_NewMode_EmptyTitleRejected(t *testing.T) {
 // opens the editor and it exits successfully (code 0), the 'updated' field in
 // the node file frontmatter is refreshed by a second atomic write.
 //
-// This test is RED: the current implementation does not perform the refresh, so
-// WriteNodeFileAtomic is called only once. When the GREEN implementation adds
-// the "read → update 'updated' → write-back" step, this test will pass.
+// The implementation reads the node file back after the editor exits, updates
+// the 'updated' timestamp, and writes it back atomically (second write).
 func TestNewAddChildCmd_NewMode_EditRefreshesUpdated(t *testing.T) {
 	mock := &mockAddChildIOWithNew{
 		mockAddChildIO: mockAddChildIO{

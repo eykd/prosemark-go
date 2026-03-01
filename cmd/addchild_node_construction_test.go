@@ -68,12 +68,8 @@ func (m *mockAddChildIOWithEditorBody) ReadNodeFile(path string) ([]byte, error)
 // no --title is provided in --new mode, the resulting node content does not
 // contain a "title:" field.
 //
-// node.SerializeFrontmatter omits optional fields (title, synopsis) when empty.
-// buildNodeContent (to be deleted) always emitted "title: \n" even when the
-// title was the empty string.
-//
-// node.SerializeFrontmatter omits the title field when empty, so no "title:"
-// line appears in the written content.
+// node.SerializeFrontmatter omits optional fields (title, synopsis) when empty,
+// so no "title:" line appears in the written content.
 func TestNewAddChildCmd_NewMode_EmptyTitleAbsentFromNodeContent(t *testing.T) {
 	mock := &mockAddChildIOWithNew{
 		mockAddChildIO: mockAddChildIO{

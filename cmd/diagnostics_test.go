@@ -9,9 +9,6 @@ import (
 
 // TestHasSeverityError verifies the single canonical severity predicate that
 // both hasDiagnosticError and hasErrorDiagnostic should delegate to.
-//
-// RED: hasSeverityError does not exist yet; this file will not compile until
-// cmd/diagnostics.go defines it.
 func TestHasSeverityError(t *testing.T) {
 	tests := []struct {
 		name string
