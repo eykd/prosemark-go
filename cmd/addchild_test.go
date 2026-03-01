@@ -991,8 +991,7 @@ func TestNewAddChildCmd_NewMode_RollbackAndDeleteBothFail(t *testing.T) {
 }
 
 // TestNewAddChildCmd_NewMode_EmptyTitleRejected verifies that --new without a
-// non-empty --title is rejected before any file I/O occurs. Currently FAILS
-// because validateNewModeInput permits an empty title string.
+// non-empty --title or --synopsis is rejected before any file I/O occurs.
 func TestNewAddChildCmd_NewMode_EmptyTitleRejected(t *testing.T) {
 	mock := &mockAddChildIOWithNew{
 		mockAddChildIO: mockAddChildIO{

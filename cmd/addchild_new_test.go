@@ -203,8 +203,8 @@ func TestNewAddChildCmd_NewMode_ExplicitValidTarget(t *testing.T) {
 	}
 }
 
-// TestNewAddChildCmd_NewMode_HasControlCharsInSynopsisEmpty covers the
-// hasControlChars false-return path (no control chars present).
+// TestNewAddChildCmd_NewMode_CleanSynopsisAllowed verifies that a synopsis
+// with no control characters is accepted by node.ValidateNewNodeInput.
 func TestNewAddChildCmd_NewMode_CleanSynopsisAllowed(t *testing.T) {
 	mock := &mockAddChildIOWithNew{
 		mockAddChildIO: mockAddChildIO{
