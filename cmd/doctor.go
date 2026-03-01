@@ -80,19 +80,7 @@ func newDoctorCmdWithGetCWD(io DoctorIO, getwd func() (string, error)) *cobra.Co
 			parseResult, _, _ := binder.Parse(cmd.Context(), binderBytes, nil)
 
 			// Build FileContents map: one entry per unique referenced filename.
-			fileContents := make(map[string][]byte)
-			var collectRefs func(nodes []*binder.Node)
-			collectRefs = func(nodes []*binder.Node) {
-				for _, n := range nodes {
-					if n.Target != "" {
-						if _, seen := fileContents[n.Target]; !seen {
-							fileContents[n.Target] = doctorReadFile(io, projectDir, n.Target)
-						}
-					}
-					collectRefs(n.Children)
-				}
-			}
-			collectRefs(parseResult.Root.Children)
+			fileContents := collectBinderRefs(parseResult.Root.Children, io, projectDir)
 
 			data := node.DoctorData{
 				BinderSrc:    binderBytes,
@@ -103,8 +91,7 @@ func newDoctorCmdWithGetCWD(io DoctorIO, getwd func() (string, error)) *cobra.Co
 			runDiags := node.RunDoctor(cmd.Context(), data)
 			diags := append(extraDiags, runDiags...)
 
-			// Emit diagnostics and detect any error-severity findings.
-			hasError := false
+			// Emit diagnostics.
 			if jsonMode {
 				jsonDiags := make([]DoctorDiagnosticJSON, len(diags))
 				for i, d := range diags {
@@ -112,9 +99,6 @@ func newDoctorCmdWithGetCWD(io DoctorIO, getwd func() (string, error)) *cobra.Co
 						Code:    string(d.Code),
 						Message: d.Message,
 						Path:    d.Path,
-					}
-					if d.Severity == node.SeverityError {
-						hasError = true
 					}
 				}
 				_ = json.NewEncoder(cmd.OutOrStdout()).Encode(jsonDiags)
@@ -125,15 +109,13 @@ func newDoctorCmdWithGetCWD(io DoctorIO, getwd func() (string, error)) *cobra.Co
 						string(d.Severity),
 						sanitizePath(d.Message),
 					)
-					if d.Severity == node.SeverityError {
-						hasError = true
-					}
 				}
 			}
 
-			if hasError {
+			if hasErrorDiagnostic(diags) {
 				return fmt.Errorf("project has integrity errors")
 			}
+
 			return nil
 		},
 	}
@@ -165,6 +147,35 @@ func scanEscapingBinderLinks(binderBytes []byte) []node.AuditDiagnostic {
 		}
 	}
 	return diags
+}
+
+// collectBinderRefs walks the binder node tree and returns a FileContents map
+// keyed by each unique referenced filename. Files are read via doctorReadFile.
+func collectBinderRefs(nodes []*binder.Node, io DoctorIO, projectDir string) map[string][]byte {
+	fileContents := make(map[string][]byte)
+	var walk func([]*binder.Node)
+	walk = func(ns []*binder.Node) {
+		for _, n := range ns {
+			if n.Target != "" {
+				if _, seen := fileContents[n.Target]; !seen {
+					fileContents[n.Target] = doctorReadFile(io, projectDir, n.Target)
+				}
+			}
+			walk(n.Children)
+		}
+	}
+	walk(nodes)
+	return fileContents
+}
+
+// hasErrorDiagnostic reports whether any diagnostic in the slice has error severity.
+func hasErrorDiagnostic(diags []node.AuditDiagnostic) bool {
+	for _, d := range diags {
+		if d.Severity == node.SeverityError {
+			return true
+		}
+	}
+	return false
 }
 
 // doctorReadFile reads a binder-referenced file for doctor analysis.
