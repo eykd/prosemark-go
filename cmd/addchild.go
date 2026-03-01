@@ -36,7 +36,8 @@ type newNodeIO interface {
 }
 
 // uuidFilenameRe matches a valid lowercase UUIDv7 filename (UUID.md).
-var uuidFilenameRe = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.md$`)
+// The third group must start with '7' to enforce the UUIDv7 version nibble.
+var uuidFilenameRe = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12}\.md$`)
 
 // updatedLineRe matches the YAML frontmatter "updated: ..." line.
 var updatedLineRe = regexp.MustCompile(`(?m)^updated:.*$`)
@@ -82,13 +83,23 @@ func hasControlChars(s string) bool {
 }
 
 // buildNodeContent returns YAML frontmatter content for a new node file.
+// The synopsis key is omitted entirely when synopsis is empty.
 func buildNodeContent(uuidStem, title, synopsis, timestamp string) []byte {
-	return []byte(fmt.Sprintf("---\nid: %s\ntitle: %s\nsynopsis: %s\ncreated: %s\nupdated: %s\n---\n",
-		uuidStem, title, synopsis, timestamp, timestamp))
+	var buf bytes.Buffer
+	buf.WriteString("---\n")
+	fmt.Fprintf(&buf, "id: %s\n", uuidStem)
+	fmt.Fprintf(&buf, "title: %s\n", title)
+	if synopsis != "" {
+		fmt.Fprintf(&buf, "synopsis: %s\n", synopsis)
+	}
+	fmt.Fprintf(&buf, "created: %s\n", timestamp)
+	fmt.Fprintf(&buf, "updated: %s\n", timestamp)
+	buf.WriteString("---\n")
+	return buf.Bytes()
 }
 
 // validateNewModeInput validates --target, --title, and --synopsis for --new mode.
-// target may be empty (will be generated); title and synopsis are always validated.
+// target may be empty (will be generated); title is required; synopsis is optional.
 func validateNewModeInput(target, title, synopsis string) error {
 	if target != "" {
 		if strings.ContainsRune(target, os.PathSeparator) {
@@ -97,6 +108,9 @@ func validateNewModeInput(target, title, synopsis string) error {
 		if !uuidFilenameRe.MatchString(target) {
 			return fmt.Errorf("target must be a valid UUID filename when --new is set")
 		}
+	}
+	if title == "" && synopsis == "" {
+		return fmt.Errorf("--title or --synopsis is required when --new is set")
 	}
 	if len(title) > 500 {
 		return fmt.Errorf("--title must be 500 characters or fewer")

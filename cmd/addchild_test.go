@@ -866,6 +866,150 @@ func TestNewAddChildCmd_NewMode_FrontmatterFields(t *testing.T) {
 	}
 }
 
+// ─── RED Cycle 4: Gaps identified in REVIEW ──────────────────────────────────
+
+// TestUUIDFilenameRe_RejectsNonV7UUID verifies that uuidFilenameRe accepts
+// only UUIDv7 filenames by requiring the third UUID group to begin with '7'.
+// Currently FAILS because the regex uses [0-9a-f]{4} for that group, which
+// accepts v1, v4, v6, and v8+ identifiers.
+func TestUUIDFilenameRe_RejectsNonV7UUID(t *testing.T) {
+	tests := []struct {
+		name      string
+		input     string
+		wantMatch bool
+	}{
+		{"v7 UUID accepted", "01234567-89ab-7def-0123-456789abcdef.md", true},
+		{"v7 UUID max third group", "ffffffff-ffff-7fff-ffff-ffffffffffff.md", true},
+		{"v4 UUID rejected", "550e8400-e29b-41d4-a716-446655440000.md", false},
+		{"v1 UUID rejected", "00000000-0000-1000-8000-000000000000.md", false},
+		{"v6 UUID rejected", "1ee4c0ff-c3ae-6000-8000-000000000000.md", false},
+		{"uppercase rejected", "01234567-89AB-7DEF-0123-456789ABCDEF.md", false},
+		{"no .md extension rejected", "01234567-89ab-7def-0123-456789abcdef", false},
+		{"not a uuid rejected", "not-a-uuid.md", false},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			got := uuidFilenameRe.MatchString(tt.input)
+			if got != tt.wantMatch {
+				t.Errorf("uuidFilenameRe.MatchString(%q) = %v, want %v",
+					tt.input, got, tt.wantMatch)
+			}
+		})
+	}
+}
+
+// TestNewAddChildCmd_NewMode_NonV7UUIDTargetRejected verifies that a non-v7
+// UUID filename is rejected when supplied as --target with --new.
+// Currently FAILS because uuidFilenameRe accepts any well-formed UUID.
+func TestNewAddChildCmd_NewMode_NonV7UUIDTargetRejected(t *testing.T) {
+	// v4 UUID: third group starts with '4', not '7'
+	mock := &mockAddChildIOWithNew{
+		mockAddChildIO: mockAddChildIO{
+			binderBytes: emptyBinder(),
+			project:     &binder.Project{Files: []string{}, BinderDir: "."},
+		},
+	}
+	c := NewAddChildCmd(mock)
+	c.SetOut(new(bytes.Buffer))
+	c.SetErr(new(bytes.Buffer))
+	c.SetArgs([]string{
+		"--new",
+		"--target", "550e8400-e29b-41d4-a716-446655440000.md",
+		"--title", "Bad Version UUID",
+		"--parent", ".", "--project", ".",
+	})
+
+	if err := c.Execute(); err == nil {
+		t.Error("expected error when --target is a non-v7 UUID")
+	}
+	if mock.nodeWrittenPath != "" {
+		t.Error("no node file must be written when target is a non-v7 UUID")
+	}
+}
+
+// TestNewAddChildCmd_NewMode_SynopsisAbsentWhenNotProvided verifies that when
+// --synopsis is not supplied, the written node file frontmatter does NOT
+// include a 'synopsis:' key. Currently FAILS because buildNodeContent always
+// formats 'synopsis: ' even when the synopsis argument is empty.
+func TestNewAddChildCmd_NewMode_SynopsisAbsentWhenNotProvided(t *testing.T) {
+	mock := &mockAddChildIOWithNew{
+		mockAddChildIO: mockAddChildIO{
+			binderBytes: emptyBinder(),
+			project:     &binder.Project{Files: []string{}, BinderDir: "."},
+		},
+	}
+	c := NewAddChildCmd(mock)
+	c.SetOut(new(bytes.Buffer))
+	c.SetArgs([]string{
+		"--new",
+		"--title", "No Synopsis Chapter",
+		"--parent", ".", "--project", ".",
+	})
+
+	if err := c.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	content := string(mock.nodeWrittenContent)
+	if strings.Contains(content, "synopsis:") {
+		t.Errorf("node file must NOT include 'synopsis:' when --synopsis is not provided\ncontent:\n%s",
+			content)
+	}
+}
+
+// TestNewAddChildCmd_NewMode_RollbackAndDeleteBothFail verifies that when
+// writing the binder fails AND the rollback DeleteFile also fails, the
+// returned error contains both failure messages. This covers the branch at
+// addchild.go:242-243 which currently has no test coverage.
+func TestNewAddChildCmd_NewMode_RollbackAndDeleteBothFail(t *testing.T) {
+	mock := &mockAddChildIOWithNew{
+		mockAddChildIO: mockAddChildIO{
+			binderBytes: emptyBinder(),
+			project:     &binder.Project{Files: []string{}, BinderDir: "."},
+			writeErr:    errors.New("binder disk full"),
+		},
+		deleteErr: errors.New("delete also failed"),
+	}
+	c := NewAddChildCmd(mock)
+	c.SetOut(new(bytes.Buffer))
+	c.SetErr(new(bytes.Buffer))
+	c.SetArgs([]string{"--new", "--title", "Double Failure Node", "--parent", ".", "--project", "."})
+
+	err := c.Execute()
+	if err == nil {
+		t.Fatal("expected error when both binder write and rollback delete fail")
+	}
+	if !strings.Contains(err.Error(), "rollback also failed") {
+		t.Errorf("error must mention 'rollback also failed', got: %v", err)
+	}
+}
+
+// TestNewAddChildCmd_NewMode_EmptyTitleRejected verifies that --new without a
+// non-empty --title is rejected before any file I/O occurs. Currently FAILS
+// because validateNewModeInput permits an empty title string.
+func TestNewAddChildCmd_NewMode_EmptyTitleRejected(t *testing.T) {
+	mock := &mockAddChildIOWithNew{
+		mockAddChildIO: mockAddChildIO{
+			binderBytes: emptyBinder(),
+			project:     &binder.Project{Files: []string{}, BinderDir: "."},
+		},
+	}
+	c := NewAddChildCmd(mock)
+	c.SetOut(new(bytes.Buffer))
+	c.SetErr(new(bytes.Buffer))
+	// --title is omitted (defaults to empty string)
+	c.SetArgs([]string{"--new", "--parent", ".", "--project", "."})
+
+	if err := c.Execute(); err == nil {
+		t.Error("expected error when --new is used without a non-empty --title")
+	}
+	if mock.nodeWrittenPath != "" {
+		t.Error("no node file must be written when title is empty")
+	}
+}
+
 // TestNewAddChildCmd_NewMode_EditRefreshesUpdated verifies that after --edit
 // opens the editor and it exits successfully (code 0), the 'updated' field in
 // the node file frontmatter is refreshed by a second atomic write.
