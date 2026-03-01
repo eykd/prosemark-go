@@ -363,6 +363,7 @@ GWT specs must capture the acceptance scenarios from `spec.md` (US1–US4) in do
 - **`--target` path injection**: `--target` must be validated as a bare filename only (no path separators, no `..` components). UUID pattern check alone is insufficient if the value contains `/`. Reject any `--target` value containing `filepath.Separator` or a `.` prefix before UUID validation.
 - **`--project` path canonicalization**: All `--project` values must be resolved via `filepath.Abs` + `filepath.Clean` before use. This prevents `../../etc/` traversal and ensures consistent behavior with symlinked project roots.
 - **YAML special characters in `--title` / `--synopsis`**: `gopkg.in/yaml.v3` handles marshaling safely, but the serialized output must be round-trip verified in unit tests with inputs containing `:`, `#`, `"`, `'`, `|`, `>`, and leading/trailing whitespace.
+- **Flag length limits for `--title` / `--synopsis`**: No length cap risks storing multi-kilobyte strings in YAML frontmatter (e.g., pasting chapter body into `--synopsis` by accident). Enforce: `--title` ≤ 500 characters, `--synopsis` ≤ 2000 characters. Return an error at flag-parse time with message `"--title exceeds maximum length of 500 characters"`. These limits are enforced in the cmd layer before any IO.
 
 ### Data Protection
 
@@ -376,6 +377,11 @@ GWT specs must capture the acceptance scenarios from `spec.md` (US1–US4) in do
 ---
 
 ## Edge Cases & Error Handling
+
+### Node File Pre-existence Check
+
+- **`pmk add --new --target` with existing file**: When `--target {uuid}.md` is explicitly provided, the `--new` flow must check for file existence BEFORE calling `WriteNodeFileAtomic`. If `{uuid}.md` already exists, error immediately with `"error: node file already exists: {uuid}.md"` (exit 1) and do not modify the binder. Without this check, `WriteNodeFileAtomic` (temp+rename) would silently overwrite an existing node, destroying author content. The existence check must be atomic-safe: use `os.OpenFile` with `O_CREATE|O_EXCL` flags to detect the race between check and write. When the UUID is auto-generated (no `--target`), this check is skipped — collision probability is negligible for UUIDv7.
+- **`pmk init` with empty or whitespace-only `_binder.md`**: The contracts.md states "`_binder.md` exists (any content) → Error". The `StatFile` existence check correctly catches this case — even a zero-byte file will cause `os.Stat` to succeed. The behavior is: if `_binder.md` exists at all (even empty), refuse without `--force`. This is correct and intentional — an empty file may be the result of a failed prior init. Document explicitly in `cmd/init.go` that the existence check does not inspect content.
 
 ### Atomic Write Robustness
 
@@ -392,10 +398,13 @@ GWT specs must capture the acceptance scenarios from `spec.md` (US1–US4) in do
 
 - **`$EDITOR` non-zero exit code**: If the editor exits with a non-zero code (e.g., user quit without saving in some editors, or editor crashed), the `updated` timestamp must **not** be refreshed. The contract should be: only refresh `updated` if `OpenEditor` returns `nil` (exit code 0). This preserves the "updated = last actual edit" invariant.
 - **`$EDITOR` contains arguments**: `$EDITOR` values like `"nano -R"` or `"code --wait"` must be shell-split before exec (split on whitespace; use first token as binary, remainder as prepended args). Use `strings.Fields($EDITOR)` to split, then append the file path. This is the POSIX-conventional behavior for `$EDITOR`.
-- **Editor fails to launch**: If `OpenEditor` returns an error (binary not found, not executable), for `pmk edit` the node file already exists unchanged — report the error to stderr, exit 1, but do not modify the file. For `pmk add --new --edit`, the node and binder are already committed in valid state; report the editor error but exit 0 (per contracts.md: "node and binder are retained in valid state; command exits with error" — clarify exit code here: exit 1 is more consistent).
+- **Editor fails to launch**: If `OpenEditor` returns an error (binary not found, not executable), for `pmk edit` the node file already exists unchanged — report the error to stderr, exit 1, but do not modify the file. For `pmk add --new --edit`, the node and binder are already committed in valid state; report the editor launch error to stderr and exit 1. (RESOLVED: exit 1 is correct because the command did not fully succeed — the author expected their editor to open. The node file is valid and reachable via `pmk edit`; the failure is in the tool's execution, not the file state. This resolves the ambiguity noted in contracts.md.)
+- **`pmk edit` `updated` write failure after editor exits**: If the editor exits successfully (exit 0) but `WriteNodeFileAtomic` fails while writing the refreshed `updated` timestamp, the node file on disk is unchanged from before the edit session (the editor's own saves are unaffected — the Go write is updating only the frontmatter timestamp). Report to stderr: `"warning: failed to update 'updated' timestamp: {err}"` and exit 1. The prose content is not lost (the editor already saved it). The stale `updated` timestamp is detectable by `pmk doctor` if needed.
 
 ### `pmk doctor` Resilience
 
+- **Uninitialized project (no `_binder.md`)**: If `ReadBinder` returns a file-not-found error, `pmk doctor` must not crash with a raw I/O error. Output to stderr: `"error: project not initialized — run 'pmk init' first"` and exit 1. This is a pre-scan failure, not an audit finding, and must be handled in the cmd handler before calling `RunDoctor`.
+- **Unreadable `_binder.md`**: If `ReadBinder` returns a permissions error (file exists but is not readable), output to stderr: `"error: cannot read binder: {err}"` and exit 1. Distinguish this from the not-found case so the user knows whether to init or fix permissions.
 - **Unreadable UUID file**: If `ReadNodeFile` returns a permission error, emit an AUD diagnostic rather than aborting the scan. Suggested: treat as AUD007 with message `"cannot read file: {err}"` so the file appears in the report without crashing the tool.
 - **YAML with deeply nested anchors (YAML bomb)**: `gopkg.in/yaml.v3` does not protect against deeply nested anchor chains by default. Since doctor reads all UUID files, a malformed or adversarially crafted file could cause excessive memory use. Mitigate by applying a file size limit before parsing: files larger than 1 MB should be rejected with AUD007 (`"frontmatter exceeds size limit"`). For a prose writing tool, 1 MB is a generous upper bound for frontmatter.
 - **Symlinks in project root**: `ListUUIDFiles` must document whether it follows symlinks. Recommended: do not follow symlinks (use `os.Lstat` to identify regular files only). Symlinked UUID files should be excluded from orphan checks and documented as out of scope.
