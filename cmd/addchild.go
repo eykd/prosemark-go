@@ -10,7 +10,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
@@ -265,13 +264,13 @@ func runNewMode(ctx context.Context, cmd *cobra.Command, io AddChildIO, binderPa
 	uuidStem := strings.TrimSuffix(params.Target, ".md")
 	binderDir := filepath.Dir(binderPath)
 	nodePath := filepath.Join(binderDir, params.Target)
-	timestamp := time.Now().UTC().Format(time.RFC3339)
+	now := node.NowUTC()
 	fm := node.Frontmatter{
 		ID:       uuidStem,
 		Title:    params.Title,
 		Synopsis: synopsis,
-		Created:  timestamp,
-		Updated:  timestamp,
+		Created:  now,
+		Updated:  now,
 	}
 	content := node.SerializeFrontmatter(fm)
 
@@ -323,7 +322,7 @@ func runNewMode(ctx context.Context, cmd *cobra.Command, io AddChildIO, binderPa
 		if parseErr != nil {
 			return fmt.Errorf("parsing node file after edit: %w", parseErr)
 		}
-		parsedFM.Updated = time.Now().UTC().Format(time.RFC3339)
+		parsedFM.Updated = node.NowUTC()
 		refreshed := append(node.SerializeFrontmatter(parsedFM), body...)
 		if writeErr := nodeIO.WriteNodeFileAtomic(nodePath, refreshed); writeErr != nil {
 			return fmt.Errorf("refreshing node file after edit: %w", writeErr)
