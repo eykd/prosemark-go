@@ -82,16 +82,14 @@ func newEditCmdWithGetCWD(io EditIO, getwd func() (string, error)) *cobra.Comman
 
 			if part == "notes" {
 				editPath = notesPath
-				_, readErr := io.ReadNodeFile(notesPath)
-				if readErr != nil {
-					if errors.Is(readErr, os.ErrNotExist) {
-						if createErr := io.CreateNotesFile(notesPath); createErr != nil {
-							return fmt.Errorf("creating notes file: %w", createErr)
-						}
-						notesCreated = true
-					} else {
+				if _, readErr := io.ReadNodeFile(notesPath); readErr != nil {
+					if !errors.Is(readErr, os.ErrNotExist) {
 						return fmt.Errorf("reading notes file: %w", readErr)
 					}
+					if createErr := io.CreateNotesFile(notesPath); createErr != nil {
+						return fmt.Errorf("creating notes file: %w", createErr)
+					}
+					notesCreated = true
 				}
 			} else {
 				editPath = draftPath
