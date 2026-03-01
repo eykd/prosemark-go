@@ -124,16 +124,6 @@ func newDoctorCmdWithGetCWD(io DoctorIO, getwd func() (string, error)) *cobra.Co
 	return cmd
 }
 
-// hasErrorDiagnostic reports whether any diagnostic in the slice has error severity.
-func hasErrorDiagnostic(diags []node.AuditDiagnostic) bool {
-	for _, d := range diags {
-		if d.Severity == node.SeverityError {
-			return true
-		}
-	}
-	return false
-}
-
 // doctorReadFile reads a binder-referenced file for doctor analysis.
 // Returns nil if the file does not exist or cannot be read.
 // Returns []byte{} (empty, non-nil) for files exceeding 1 MB, causing RunDoctor

@@ -49,16 +49,6 @@ func nodeIDv7Impl() (string, error) {
 	return id.String() + ".md", nil
 }
 
-// hasDiagnosticError reports whether any diagnostic in diags has error severity.
-func hasDiagnosticError(diags []binder.Diagnostic) bool {
-	for _, d := range diags {
-		if d.Severity == "error" {
-			return true
-		}
-	}
-	return false
-}
-
 // NewAddChildCmd creates the add subcommand.
 func NewAddChildCmd(io AddChildIO) *cobra.Command {
 	return newAddChildCmdWithGetCWD(io, os.Getwd)
