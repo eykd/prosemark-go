@@ -211,75 +211,14 @@ func newAddChildCmdWithGetCWD(io AddChildIO, getwd func() (string, error)) *cobr
 				if err := validateNewModeInput(target, title, synopsis); err != nil {
 					return err
 				}
-
-				// Generate UUID filename if not explicitly provided.
 				if target == "" {
 					id, genErr := nodeIDGenerator()
 					if genErr != nil {
 						return fmt.Errorf("generating node ID: %w", genErr)
 					}
-					target = id
-					params.Target = target
+					params.Target = id
 				}
-
-				// Require IO that supports node file creation.
-				nodeIO, ok := io.(newNodeIO)
-				if !ok {
-					return fmt.Errorf("IO does not support --new mode")
-				}
-
-				uuidStem := strings.TrimSuffix(target, ".md")
-				binderDir := filepath.Dir(binderPath)
-				nodePath := filepath.Join(binderDir, target)
-				timestamp := time.Now().UTC().Format(time.RFC3339)
-				content := buildNodeContent(uuidStem, title, synopsis, timestamp)
-
-				if err := nodeIO.WriteNodeFileAtomic(nodePath, content); err != nil {
-					return fmt.Errorf("creating node file: %w", err)
-				}
-
-				modifiedBytes, diags, _ := ops.AddChild(ctx, binderBytes, proj, params) //nolint:errcheck
-				if diags == nil {
-					diags = []binder.Diagnostic{}
-				}
-
-				printDiagnostics(cmd, diags)
-
-				if hasDiagnosticError(diags) {
-					rollbackErr := nodeIO.DeleteFile(nodePath)
-					return errors.Join(fmt.Errorf("add has errors"), rollbackErr)
-				}
-
-				changed := !bytes.Equal(binderBytes, modifiedBytes)
-				if changed {
-					if writeErr := io.WriteBinderAtomic(ctx, binderPath, modifiedBytes); writeErr != nil {
-						if rollbackErr := nodeIO.DeleteFile(nodePath); rollbackErr != nil {
-							return fmt.Errorf("writing binder: %w; rollback also failed: %v", writeErr, rollbackErr)
-						}
-						return fmt.Errorf("writing binder: %w", writeErr)
-					}
-				}
-
-				if _, err := fmt.Fprintln(cmd.OutOrStdout(), "Created "+sanitizePath(target)+" in "+sanitizePath(binderPath)); err != nil {
-					return fmt.Errorf("writing output: %w", err)
-				}
-
-				if editMode {
-					editor := os.Getenv("EDITOR")
-					if editor == "" {
-						return fmt.Errorf("$EDITOR is not set")
-					}
-					if err := nodeIO.OpenEditor(editor, nodePath); err != nil {
-						return fmt.Errorf("opening editor: %w", err)
-					}
-					// Refresh the 'updated' frontmatter field after the editor exits.
-					refreshed := refreshUpdated(content, time.Now().UTC().Format(time.RFC3339))
-					if writeErr := nodeIO.WriteNodeFileAtomic(nodePath, refreshed); writeErr != nil {
-						return fmt.Errorf("refreshing node file after edit: %w", writeErr)
-					}
-				}
-
-				return nil
+				return runNewMode(ctx, cmd, io, binderPath, binderBytes, proj, params, synopsis, editMode)
 			}
 
 			modifiedBytes, diags, _ := ops.AddChild(ctx, binderBytes, proj, params) //nolint:errcheck
@@ -339,6 +278,69 @@ func newAddChildCmdWithGetCWD(io AddChildIO, getwd func() (string, error)) *cobr
 	cmd.Flags().BoolVar(&editMode, "edit", false, "Open node file in $EDITOR after creation")
 
 	return cmd
+}
+
+// runNewMode handles the --new flag workflow: creates a UUID node file, updates
+// the binder, and optionally opens an editor to populate the file.
+// params.Target must already be set to a valid UUID filename before calling.
+func runNewMode(ctx context.Context, cmd *cobra.Command, io AddChildIO, binderPath string, binderBytes []byte, proj *binder.Project, params binder.AddChildParams, synopsis string, editMode bool) error {
+	nodeIO, ok := io.(newNodeIO)
+	if !ok {
+		return fmt.Errorf("IO does not support --new mode")
+	}
+
+	uuidStem := strings.TrimSuffix(params.Target, ".md")
+	binderDir := filepath.Dir(binderPath)
+	nodePath := filepath.Join(binderDir, params.Target)
+	timestamp := time.Now().UTC().Format(time.RFC3339)
+	content := buildNodeContent(uuidStem, params.Title, synopsis, timestamp)
+
+	if err := nodeIO.WriteNodeFileAtomic(nodePath, content); err != nil {
+		return fmt.Errorf("creating node file: %w", err)
+	}
+
+	modifiedBytes, diags, _ := ops.AddChild(ctx, binderBytes, proj, params) //nolint:errcheck
+	if diags == nil {
+		diags = []binder.Diagnostic{}
+	}
+
+	printDiagnostics(cmd, diags)
+
+	if hasDiagnosticError(diags) {
+		rollbackErr := nodeIO.DeleteFile(nodePath)
+		return errors.Join(fmt.Errorf("add has errors"), rollbackErr)
+	}
+
+	changed := !bytes.Equal(binderBytes, modifiedBytes)
+	if changed {
+		if writeErr := io.WriteBinderAtomic(ctx, binderPath, modifiedBytes); writeErr != nil {
+			if rollbackErr := nodeIO.DeleteFile(nodePath); rollbackErr != nil {
+				return fmt.Errorf("writing binder: %w; rollback also failed: %v", writeErr, rollbackErr)
+			}
+			return fmt.Errorf("writing binder: %w", writeErr)
+		}
+	}
+
+	if _, err := fmt.Fprintln(cmd.OutOrStdout(), "Created "+sanitizePath(params.Target)+" in "+sanitizePath(binderPath)); err != nil {
+		return fmt.Errorf("writing output: %w", err)
+	}
+
+	if editMode {
+		editor := os.Getenv("EDITOR")
+		if editor == "" {
+			return fmt.Errorf("$EDITOR is not set")
+		}
+		if err := nodeIO.OpenEditor(editor, nodePath); err != nil {
+			return fmt.Errorf("opening editor: %w", err)
+		}
+		// Refresh the 'updated' frontmatter field after the editor exits.
+		refreshed := refreshUpdated(content, time.Now().UTC().Format(time.RFC3339))
+		if writeErr := nodeIO.WriteNodeFileAtomic(nodePath, refreshed); writeErr != nil {
+			return fmt.Errorf("refreshing node file after edit: %w", writeErr)
+		}
+	}
+
+	return nil
 }
 
 // fileAddChildIO implements AddChildIO and newNodeIO using OS file I/O.
