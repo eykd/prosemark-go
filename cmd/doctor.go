@@ -99,7 +99,9 @@ func newDoctorCmdWithGetCWD(io DoctorIO, getwd func() (string, error)) *cobra.Co
 						Path:    d.Path,
 					}
 				}
-				_ = json.NewEncoder(cmd.OutOrStdout()).Encode(jsonDiags)
+				if err := json.NewEncoder(cmd.OutOrStdout()).Encode(jsonDiags); err != nil {
+					return fmt.Errorf("encoding output: %w", err)
+				}
 			} else {
 				for _, d := range diags {
 					fmt.Fprintf(cmd.OutOrStdout(), "%s %-7s %s\n",
