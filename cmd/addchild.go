@@ -35,6 +35,14 @@ type newNodeIO interface {
 	ReadNodeFile(path string) ([]byte, error)
 }
 
+// NewNodeAddChildIO is the combined IO interface for --new mode.
+// Embedding both AddChildIO and newNodeIO expresses the --new capability
+// in the type system rather than discovering it at runtime via type assertion.
+type NewNodeAddChildIO interface {
+	AddChildIO
+	newNodeIO
+}
+
 // nodeIDGenerator generates a new UUIDv7-based node filename.
 // Override in tests to inject specific values or simulate errors.
 var nodeIDGenerator = nodeIDv7Impl
