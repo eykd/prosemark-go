@@ -10,24 +10,6 @@ import (
 	"github.com/eykd/prosemark-go/internal/binder"
 )
 
-// TestNewAddChildCmd_NewMode_UnsupportedIO verifies that --new returns an error
-// when the IO implementation does not satisfy newNodeIO.
-func TestNewAddChildCmd_NewMode_UnsupportedIO(t *testing.T) {
-	// mockAddChildIO satisfies AddChildIO but NOT newNodeIO.
-	mock := &mockAddChildIO{
-		binderBytes: emptyBinder(),
-		project:     &binder.Project{Files: []string{}, BinderDir: "."},
-	}
-	c := NewAddChildCmd(mock)
-	c.SetOut(new(bytes.Buffer))
-	c.SetErr(new(bytes.Buffer))
-	c.SetArgs([]string{"--new", "--title", "X", "--parent", ".", "--project", "."})
-
-	if err := c.Execute(); err == nil {
-		t.Error("expected error when IO does not support --new mode")
-	}
-}
-
 // TestNewAddChildCmd_NewMode_UUIDGenError verifies that UUID generation failure
 // propagates as an error and no node file is written.
 func TestNewAddChildCmd_NewMode_UUIDGenError(t *testing.T) {

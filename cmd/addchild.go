@@ -58,11 +58,11 @@ func nodeIDv7Impl() (string, error) {
 }
 
 // NewAddChildCmd creates the add subcommand.
-func NewAddChildCmd(io AddChildIO) *cobra.Command {
+func NewAddChildCmd(io NewNodeAddChildIO) *cobra.Command {
 	return newAddChildCmdWithGetCWD(io, os.Getwd)
 }
 
-func newAddChildCmdWithGetCWD(io AddChildIO, getwd func() (string, error)) *cobra.Command {
+func newAddChildCmdWithGetCWD(io NewNodeAddChildIO, getwd func() (string, error)) *cobra.Command {
 	var (
 		parent   string
 		target   string
@@ -138,10 +138,6 @@ func newAddChildCmdWithGetCWD(io AddChildIO, getwd func() (string, error)) *cobr
 			}
 
 			if newMode {
-				newNodeIO, ok := io.(NewNodeAddChildIO)
-				if !ok {
-					return fmt.Errorf("IO does not support --new mode")
-				}
 				if err := node.ValidateNewNodeInput(target, title, synopsis); err != nil {
 					return err
 				}
@@ -152,7 +148,7 @@ func newAddChildCmdWithGetCWD(io AddChildIO, getwd func() (string, error)) *cobr
 					}
 					params.Target = id
 				}
-				return runNewMode(ctx, cmd, newNodeIO, binderPath, binderBytes, proj, params, synopsis, editMode)
+				return runNewMode(ctx, cmd, io, binderPath, binderBytes, proj, params, synopsis, editMode)
 			}
 
 			modifiedBytes, diags, _ := ops.AddChild(ctx, binderBytes, proj, params) //nolint:errcheck
