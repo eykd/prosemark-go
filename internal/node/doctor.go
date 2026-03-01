@@ -45,12 +45,7 @@ func RunDoctor(ctx context.Context, data DoctorData) []AuditDiagnostic {
 					refs = append(refs, n.Target)
 				} else if !duplicated[n.Target] {
 					duplicated[n.Target] = true
-					diags = append(diags, AuditDiagnostic{
-						Code:     AUD003,
-						Severity: SeverityError,
-						Message:  fmt.Sprintf("file appears more than once in binder: %s", n.Target),
-						Path:     n.Target,
-					})
+					diags = append(diags, errDiag(AUD003, n.Target, fmt.Sprintf("file appears more than once in binder: %s", n.Target)))
 				}
 			}
 			walkNodes(n.Children)
@@ -64,23 +59,13 @@ func RunDoctor(ctx context.Context, data DoctorData) []AuditDiagnostic {
 
 		// AUDW001: non-UUID filename linked in binder.
 		if !isUUID {
-			diags = append(diags, AuditDiagnostic{
-				Code:     AUDW001,
-				Severity: SeverityWarning,
-				Message:  fmt.Sprintf("non-UUID filename linked in binder: %s", ref),
-				Path:     ref,
-			})
+			diags = append(diags, warnDiag(AUDW001, ref, fmt.Sprintf("non-UUID filename linked in binder: %s", ref)))
 		}
 
 		// AUD001: referenced file does not exist.
 		content, ok := data.FileContents[ref]
 		if !ok || content == nil {
-			diags = append(diags, AuditDiagnostic{
-				Code:     AUD001,
-				Severity: SeverityError,
-				Message:  fmt.Sprintf("referenced file does not exist: %s", ref),
-				Path:     ref,
-			})
+			diags = append(diags, errDiag(AUD001, ref, fmt.Sprintf("referenced file does not exist: %s", ref)))
 			continue
 		}
 
@@ -93,12 +78,7 @@ func RunDoctor(ctx context.Context, data DoctorData) []AuditDiagnostic {
 		stem := strings.TrimSuffix(ref, ".md")
 		fm, body, err := ParseFrontmatter(content)
 		if err != nil {
-			diags = append(diags, AuditDiagnostic{
-				Code:     AUD007,
-				Severity: SeverityError,
-				Message:  fmt.Sprintf("frontmatter YAML is syntactically invalid: %v", err),
-				Path:     ref,
-			})
+			diags = append(diags, errDiag(AUD007, ref, fmt.Sprintf("frontmatter YAML is syntactically invalid: %v", err)))
 			continue
 		}
 
@@ -112,12 +92,7 @@ func RunDoctor(ctx context.Context, data DoctorData) []AuditDiagnostic {
 	// Step 4: Detect orphaned UUID files (AUD002).
 	for _, uuidFile := range data.UUIDFiles {
 		if !visited[uuidFile] {
-			diags = append(diags, AuditDiagnostic{
-				Code:     AUD002,
-				Severity: SeverityWarning,
-				Message:  fmt.Sprintf("orphaned UUID file not referenced in binder: %s", uuidFile),
-				Path:     uuidFile,
-			})
+			diags = append(diags, warnDiag(AUD002, uuidFile, fmt.Sprintf("orphaned UUID file not referenced in binder: %s", uuidFile)))
 		}
 	}
 
@@ -140,4 +115,14 @@ func severityRank(s AuditSeverity) int {
 		return 0
 	}
 	return 1
+}
+
+// errDiag constructs an error-severity AuditDiagnostic.
+func errDiag(code AuditCode, path, message string) AuditDiagnostic {
+	return AuditDiagnostic{Code: code, Severity: SeverityError, Message: message, Path: path}
+}
+
+// warnDiag constructs a warning-severity AuditDiagnostic.
+func warnDiag(code AuditCode, path, message string) AuditDiagnostic {
+	return AuditDiagnostic{Code: code, Severity: SeverityWarning, Message: message, Path: path}
 }
