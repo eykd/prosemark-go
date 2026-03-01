@@ -104,7 +104,7 @@ func newDoctorCmdWithGetCWD(io DoctorIO, getwd func() (string, error)) *cobra.Co
 				_ = json.NewEncoder(cmd.OutOrStdout()).Encode(jsonDiags)
 			} else {
 				for _, d := range diags {
-					fmt.Fprintf(cmd.OutOrStdout(), "%s %s %s\n",
+					fmt.Fprintf(cmd.OutOrStdout(), "%s %-7s %s\n",
 						string(d.Code),
 						string(d.Severity),
 						sanitizePath(d.Message),
