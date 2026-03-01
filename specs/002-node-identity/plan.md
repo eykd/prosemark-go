@@ -364,6 +364,8 @@ GWT specs must capture the acceptance scenarios from `spec.md` (US1–US4) in do
 - **`--project` path canonicalization**: All `--project` values must be resolved via `filepath.Abs` + `filepath.Clean` before use. This prevents `../../etc/` traversal and ensures consistent behavior with symlinked project roots.
 - **YAML special characters in `--title` / `--synopsis`**: `gopkg.in/yaml.v3` handles marshaling safely, but the serialized output must be round-trip verified in unit tests with inputs containing `:`, `#`, `"`, `'`, `|`, `>`, and leading/trailing whitespace.
 - **Flag length limits for `--title` / `--synopsis`**: No length cap risks storing multi-kilobyte strings in YAML frontmatter (e.g., pasting chapter body into `--synopsis` by accident). Enforce: `--title` ≤ 500 characters, `--synopsis` ≤ 2000 characters. Return an error at flag-parse time with message `"--title exceeds maximum length of 500 characters"`. These limits are enforced in the cmd layer before any IO.
+- **Control character injection in `--title` / `--synopsis`**: Length limits above do not prevent embedded control characters. A `--title` containing `\n` (newline) produces valid YAML — `gopkg.in/yaml.v3` marshals it as a block scalar — but a chapter title with an embedded newline is semantically wrong and would produce multi-line YAML `title` values that break the canonical single-line frontmatter format assumed by tooling. A `--title` containing `\x00` (null byte) can corrupt `gopkg.in/yaml.v3` parsing. Validate `--title` and `--synopsis` for control characters at flag-parse time: reject any value containing Unicode codepoints < 0x20 (the C0 control range). Return error: `"--title contains invalid control characters"`. Tab (`\t`, U+0009) may be permitted at implementer discretion but should be documented explicitly.
+- **`pmk edit --part` invalid value**: The spec defines `--part draft|notes` as the complete set of valid values. If a user passes `--part invalid`, the cobra command must reject it with an error before any IO occurs. Implement `--part` as a cobra `StringSlice` with explicit validation in `RunE` — or use a custom `Value` type — to reject any value not in `{draft, notes}`. Error message: `"--part must be one of: draft, notes"`. Without this guard, the unvalidated value would propagate to path construction, producing garbage file paths.
 
 ### Data Protection
 
@@ -382,6 +384,7 @@ GWT specs must capture the acceptance scenarios from `spec.md` (US1–US4) in do
 ### Terminal Output Safety
 
 - **ANSI injection in diagnostic output**: `pmk doctor`'s human-readable output echoes binder link targets (filenames) into diagnostic messages verbatim. A `_binder.md` crafted with ANSI escape sequences in link targets (e.g., `\x1b[2J` to clear the terminal) could corrupt terminal output when doctor prints diagnostics. Mitigate by sanitizing path values before formatting them into any message: replace non-printable bytes (codepoints < 0x20 or >= 0x7F except printable Unicode) with `?`. This applies to all human-readable stderr and stdout output, not to `--json` mode (which encodes them safely via `json.Marshal`).
+- **ANSI injection in success messages**: The sanitization above is defined for `pmk doctor` diagnostics, but the same risk applies to success messages in other commands. `pmk init` outputs `"Initialized {projectPath}"` and `pmk add --new` outputs `"Created {uuid}.md in {binderPath}"`, both of which include filesystem paths derived from user-provided `--project` values. After `filepath.Abs` + `filepath.Clean`, these paths are unlikely to contain ANSI escapes on standard systems, but defense-in-depth requires the same `sanitizePath` helper to be applied to all path values before inclusion in any human-readable stdout or stderr output — not just in doctor. Implement `sanitizePath` as a shared function in `internal/node` or a `cmd/output.go` helper and call it uniformly.
 
 ### Notes File Permissions
 
@@ -450,6 +453,12 @@ GWT specs must capture the acceptance scenarios from `spec.md` (US1–US4) in do
 ### Partial Init State
 
 - **`_binder.md` present without `.prosemark.yml`**: If a user manually creates `_binder.md` (or has a Feature 001 project) but has no `.prosemark.yml`, running `pmk init` fails with an error (binder exists). The user cannot create the missing `.prosemark.yml` without `--force`, which also overwrites the binder. The error message in this state MUST include a recovery hint: `"error: _binder.md already exists at {path}. Use --force to reinitialize (overwrites existing files)."` This makes the recovery path explicit without requiring documentation lookup.
+- **`pmk init` second-file write failure leaves unrecoverable partial state**: The init handler writes two files sequentially: first `_binder.md`, then `.prosemark.yml`. If the `_binder.md` write succeeds but the `.prosemark.yml` write fails (disk full, permissions change, I/O error), the project is left in a partial state — binder created, yml absent. At this point:
+  1. Running `pmk init` again fails with `"_binder.md already exists"` (the pre-check catches the now-present binder).
+  2. Running `pmk init --force` recovers but overwrites the newly created binder (acceptable, since it was just written with default content).
+  3. The user has no indication that `--force` is the correct recovery action without reading the error message.
+
+  The error message on `.prosemark.yml` write failure MUST include the recovery hint: `"error: failed to write .prosemark.yml: {err}. Project is partially initialized. Run 'pmk init --force' to complete initialization."` Unlike the node-file rollback in `pmk add --new`, rolling back the binder write here is not required — the default binder content is idempotent, and `--force` recovery is explicit. However, a failed rollback attempt (if implemented) must be reported to stderr alongside the yml error.
 
 ### Timestamp Correctness
 
