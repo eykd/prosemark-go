@@ -353,3 +353,72 @@ GWT specs must capture the acceptance scenarios from `spec.md` (US1–US4) in do
 | Add Extension | `cmd/addchild.go` (--new, --synopsis, --edit) | Atomic node creation + binder update |
 | Acceptance | GWT pipeline passes all US1–US4 specs | `just acceptance` green |
 | Quality | All gates pass | `just check` green |
+
+---
+
+## Security Considerations
+
+### Input Validation
+
+- **`--target` path injection**: `--target` must be validated as a bare filename only (no path separators, no `..` components). UUID pattern check alone is insufficient if the value contains `/`. Reject any `--target` value containing `filepath.Separator` or a `.` prefix before UUID validation.
+- **`--project` path canonicalization**: All `--project` values must be resolved via `filepath.Abs` + `filepath.Clean` before use. This prevents `../../etc/` traversal and ensures consistent behavior with symlinked project roots.
+- **YAML special characters in `--title` / `--synopsis`**: `gopkg.in/yaml.v3` handles marshaling safely, but the serialized output must be round-trip verified in unit tests with inputs containing `:`, `#`, `"`, `'`, `|`, `>`, and leading/trailing whitespace.
+
+### Data Protection
+
+- **Temp file location for atomic writes**: All temp files must be created in the **same directory** as the target file (e.g., `os.CreateTemp(filepath.Dir(target), ".pmk-tmp-*")`). Creating temp files in `/tmp` causes `os.Rename` to fail with a cross-device link error when `/tmp` is on a different filesystem. This applies to `WriteFileAtomic` in all `*Impl` implementations.
+- **Temp file permissions**: Temp files should be created with mode `0600` before content is written, matching the security posture of user-owned prose files.
+
+### Destructive Operations
+
+- **`pmk init --force` destroys existing binder**: `--force` overwrites `_binder.md`, silently discarding any existing project tree. Unlike `pmk delete --yes`, there is no explicit confirmation requirement. Mitigate by printing the overwritten file path to stderr as a warning: `Warning: overwriting existing _binder.md at {path}`. The `--force` flag itself serves as the user's confirmation, but the warning ensures it's never silent.
+
+---
+
+## Edge Cases & Error Handling
+
+### Atomic Write Robustness
+
+- **Rollback failure in `pmk add --new`**: Step 5 of the `--new` flow deletes the node file if binder write fails. If `DeleteFile` itself fails (e.g., concurrent deletion, permission change), the error must be reported to stderr alongside the original binder error — do not swallow it. Output: `"error: binder write failed: {err}; also failed to roll back node file: {rollbackErr}"`. The partial state (orphaned node file) is then detectable by `pmk doctor` via AUD002.
+- **Disk full during atomic write**: If `os.CreateTemp` or `file.Write` fails due to `ENOSPC`, the temp file must be cleaned up in a `defer` block before returning the error. Pattern: `defer func() { if err != nil { os.Remove(tmpPath) } }()`.
+- **`_binder.md` disappears mid-operation**: If `_binder.md` is deleted between `pmk init`'s existence check and its write, the atomic write will create it fresh (desired behavior). Document this explicitly in `WriteFileAtomic` — it creates-or-replaces, not update-in-place.
+
+### Concurrency
+
+- **Concurrent `pmk edit` on the same node**: No file locking is provided (single-user CLI assumption per spec scale). If two editor sessions are open on the same node, the last close wins and overwrites the other's changes silently. This is acceptable for the stated scale (single-user local CLI), but `pmk doctor` can detect inconsistency post-facto. Document this assumption explicitly in `cmd/edit.go`.
+- **`pmk init` race**: Two concurrent `pmk init` calls in the same directory will each check for `_binder.md` absence, then both attempt to write it. The atomic temp+rename idiom means the last writer wins with a consistent file (rename is atomic on POSIX). The earlier writer's content is silently replaced. This is acceptable for single-user local CLI.
+
+### Editor Integration
+
+- **`$EDITOR` non-zero exit code**: If the editor exits with a non-zero code (e.g., user quit without saving in some editors, or editor crashed), the `updated` timestamp must **not** be refreshed. The contract should be: only refresh `updated` if `OpenEditor` returns `nil` (exit code 0). This preserves the "updated = last actual edit" invariant.
+- **`$EDITOR` contains arguments**: `$EDITOR` values like `"nano -R"` or `"code --wait"` must be shell-split before exec (split on whitespace; use first token as binary, remainder as prepended args). Use `strings.Fields($EDITOR)` to split, then append the file path. This is the POSIX-conventional behavior for `$EDITOR`.
+- **Editor fails to launch**: If `OpenEditor` returns an error (binary not found, not executable), for `pmk edit` the node file already exists unchanged — report the error to stderr, exit 1, but do not modify the file. For `pmk add --new --edit`, the node and binder are already committed in valid state; report the editor error but exit 0 (per contracts.md: "node and binder are retained in valid state; command exits with error" — clarify exit code here: exit 1 is more consistent).
+
+### `pmk doctor` Resilience
+
+- **Unreadable UUID file**: If `ReadNodeFile` returns a permission error, emit an AUD diagnostic rather than aborting the scan. Suggested: treat as AUD007 with message `"cannot read file: {err}"` so the file appears in the report without crashing the tool.
+- **YAML with deeply nested anchors (YAML bomb)**: `gopkg.in/yaml.v3` does not protect against deeply nested anchor chains by default. Since doctor reads all UUID files, a malformed or adversarially crafted file could cause excessive memory use. Mitigate by applying a file size limit before parsing: files larger than 1 MB should be rejected with AUD007 (`"frontmatter exceeds size limit"`). For a prose writing tool, 1 MB is a generous upper bound for frontmatter.
+- **Symlinks in project root**: `ListUUIDFiles` must document whether it follows symlinks. Recommended: do not follow symlinks (use `os.Lstat` to identify regular files only). Symlinked UUID files should be excluded from orphan checks and documented as out of scope.
+
+### Timestamp Correctness
+
+- **UTC enforcement**: All `created` and `updated` timestamps must use `time.Now().UTC()` explicitly. Relying on `time.Now()` alone produces local-timezone timestamps on systems where `time.Local` is not UTC. Add a `NowUTC() string` helper in `internal/node` that formats in RFC3339 with `Z` suffix and use it everywhere.
+- **Timestamp precision**: Use second-level precision (`time.RFC3339` format: `2006-01-02T15:04:05Z`) for human readability and unambiguous parsing. Sub-second precision is unnecessary and complicates YAML parsing.
+
+---
+
+## Performance Considerations
+
+### `pmk doctor` Scale
+
+- **Stated scale**: O(100) node files. At this scale, sequential reads and linear scans are acceptable with no optimization needed.
+- **File read budget**: `DoctorIO.ReadNodeFile` reads each UUID file fully into memory. With 100 × 64 KB files (generous estimate), peak memory is ~6 MB — well within budget.
+- **File size guard**: Enforce the 1 MB per-file limit described in Edge Cases to prevent memory exhaustion from unexpectedly large files (protects both performance and security).
+
+### UUID Generation
+
+- **`github.com/google/uuid` v1.6.0 UUIDv7**: Generates monotonic UUIDs within the same millisecond using a random counter. If the system clock moves backward (NTP adjustment, DST), the library falls back to a randomly seeded counter rather than guaranteeing monotonicity across backward jumps. For a local CLI generating one UUID per invocation, this is not a problem — document that UUID monotonicity is best-effort, not guaranteed.
+
+### Output Flushing
+
+- **`pmk doctor --json`**: The JSON array is fully assembled in memory before output. At stated scale, this is fine. If scale grows, streaming JSON output would be preferred. No action required now, but avoid buffering patterns that would be hard to convert later (i.e., don't accumulate in a `strings.Builder`; use `json.Marshal` on the slice directly).
