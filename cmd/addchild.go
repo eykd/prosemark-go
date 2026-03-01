@@ -59,46 +59,6 @@ func hasDiagnosticError(diags []binder.Diagnostic) bool {
 	return false
 }
 
-// hasControlChars reports whether s contains any C0 control character
-// (U+0000–U+001F) or DEL (U+007F).
-func hasControlChars(s string) bool {
-	for _, r := range s {
-		if r < 0x20 || r == 0x7F {
-			return true
-		}
-	}
-	return false
-}
-
-// validateNewModeInput validates --target, --title, and --synopsis for --new mode.
-// target may be empty (will be generated); title is required; synopsis is optional.
-func validateNewModeInput(target, title, synopsis string) error {
-	if target != "" {
-		if strings.ContainsRune(target, os.PathSeparator) {
-			return fmt.Errorf("target must not contain path separators")
-		}
-		if !node.IsUUIDFilename(target) {
-			return fmt.Errorf("target must be a valid UUID filename when --new is set")
-		}
-	}
-	if title == "" && synopsis == "" {
-		return fmt.Errorf("--title or --synopsis is required when --new is set")
-	}
-	if len(title) > 500 {
-		return fmt.Errorf("--title must be 500 characters or fewer")
-	}
-	if hasControlChars(title) {
-		return fmt.Errorf("--title must not contain control characters")
-	}
-	if len(synopsis) > 2000 {
-		return fmt.Errorf("--synopsis must be 2000 characters or fewer")
-	}
-	if hasControlChars(synopsis) {
-		return fmt.Errorf("--synopsis must not contain control characters")
-	}
-	return nil
-}
-
 // NewAddChildCmd creates the add subcommand.
 func NewAddChildCmd(io AddChildIO) *cobra.Command {
 	return newAddChildCmdWithGetCWD(io, os.Getwd)
@@ -180,7 +140,7 @@ func newAddChildCmdWithGetCWD(io AddChildIO, getwd func() (string, error)) *cobr
 			}
 
 			if newMode {
-				if err := validateNewModeInput(target, title, synopsis); err != nil {
+				if err := node.ValidateNewNodeInput(target, title, synopsis); err != nil {
 					return err
 				}
 				if target == "" {
