@@ -114,7 +114,7 @@ func newMoveCmdWithGetCWD(io MoveIO, getwd func() (string, error)) *cobra.Comman
 			}
 
 			if !jsonMode {
-				if _, err := fmt.Fprintln(cmd.OutOrStdout(), "Moved "+source+" in "+binderPath); err != nil {
+				if _, err := fmt.Fprintln(cmd.OutOrStdout(), "Moved "+sanitizePath(source)+" in "+sanitizePath(binderPath)); err != nil {
 					return fmt.Errorf("writing output: %w", err)
 				}
 			}

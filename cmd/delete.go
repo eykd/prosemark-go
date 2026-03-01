@@ -97,7 +97,7 @@ func newDeleteCmdWithGetCWD(io DeleteIO, getwd func() (string, error)) *cobra.Co
 			}
 
 			if !jsonMode {
-				if _, err := fmt.Fprintln(cmd.OutOrStdout(), "Deleted "+selector+" from "+binderPath); err != nil {
+				if _, err := fmt.Fprintln(cmd.OutOrStdout(), "Deleted "+sanitizePath(selector)+" from "+sanitizePath(binderPath)); err != nil {
 					return fmt.Errorf("writing output: %w", err)
 				}
 			}

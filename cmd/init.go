@@ -72,7 +72,7 @@ func newInitCmdWithGetCWD(io InitIO, getwd func() (string, error)) *cobra.Comman
 				fmt.Fprintln(cmd.ErrOrStderr(), "warning: overwriting existing files")
 			}
 
-			fmt.Fprintln(cmd.OutOrStdout(), "Initialized "+project)
+			fmt.Fprintln(cmd.OutOrStdout(), "Initialized "+sanitizePath(project))
 			return nil
 		},
 	}

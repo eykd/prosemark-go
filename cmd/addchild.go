@@ -134,11 +134,11 @@ func newAddChildCmdWithGetCWD(io AddChildIO, getwd func() (string, error)) *cobr
 
 			if !jsonMode {
 				if changed {
-					if _, err := fmt.Fprintln(cmd.OutOrStdout(), "Added "+target+" to "+binderPath); err != nil {
+					if _, err := fmt.Fprintln(cmd.OutOrStdout(), "Added "+sanitizePath(target)+" to "+sanitizePath(binderPath)); err != nil {
 						return fmt.Errorf("writing output: %w", err)
 					}
 				} else {
-					if _, err := fmt.Fprintln(cmd.OutOrStdout(), target+" already in "+binderPath+" (skipped)"); err != nil {
+					if _, err := fmt.Fprintln(cmd.OutOrStdout(), sanitizePath(target)+" already in "+sanitizePath(binderPath)+" (skipped)"); err != nil {
 						return fmt.Errorf("writing output: %w", err)
 					}
 				}
