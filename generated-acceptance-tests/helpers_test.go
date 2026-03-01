@@ -18,12 +18,11 @@ type runResult struct {
 	OK     bool // true if exit code 0
 }
 
-// runParse invokes "pmk parse --project <dir>" via `go run .`
-// executed from the project root (one directory above this test package).
-// binderPath is the path to the _binder.md file; the project dir is derived from it.
-func runParse(t *testing.T, binderPath string) runResult {
+// runGoCmd runs `go <args>` from the repository root (one directory above this
+// test package) and returns the captured output.
+func runGoCmd(t *testing.T, args ...string) runResult {
 	t.Helper()
-	cmd := exec.Command("go", "run", ".", "parse", "--project", filepath.Dir(binderPath))
+	cmd := exec.Command("go", args...)
 	cmd.Dir = ".."
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -34,6 +33,12 @@ func runParse(t *testing.T, binderPath string) runResult {
 		Stderr: stderr.String(),
 		OK:     err == nil,
 	}
+}
+
+// runPMK runs `go run . <args>` from the repository root, invoking the pmk CLI.
+func runPMK(t *testing.T, args ...string) runResult {
+	t.Helper()
+	return runGoCmd(t, append([]string{"run", "."}, args...)...)
 }
 
 // writeFile writes content to dir/name, creating parent directories as needed,
@@ -50,23 +55,19 @@ func writeFile(t *testing.T, dir, name, content string) string {
 	return path
 }
 
+// runParse invokes "pmk parse --project <dir>".
+// binderPath is the path to the _binder.md file; the project dir is derived from it.
+func runParse(t *testing.T, binderPath string) runResult {
+	t.Helper()
+	return runPMK(t, "parse", "--project", filepath.Dir(binderPath))
+}
+
 // runAddChild invokes "pmk add --project <dir>" with any extra flag strings appended.
 // binderPath is the path to the _binder.md file; the project dir is derived from it.
 func runAddChild(t *testing.T, binderPath string, extraArgs ...string) runResult {
 	t.Helper()
-	args := []string{"run", ".", "add", "--project", filepath.Dir(binderPath)}
-	args = append(args, extraArgs...)
-	cmd := exec.Command("go", args...)
-	cmd.Dir = ".."
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	err := cmd.Run()
-	return runResult{
-		Stdout: stdout.String(),
-		Stderr: stderr.String(),
-		OK:     err == nil,
-	}
+	args := append([]string{"add", "--project", filepath.Dir(binderPath)}, extraArgs...)
+	return runPMK(t, args...)
 }
 
 // runDelete invokes "pmk delete --selector <sel> --project <dir>"
@@ -74,21 +75,11 @@ func runAddChild(t *testing.T, binderPath string, extraArgs ...string) runResult
 // binderPath is the path to the _binder.md file; the project dir is derived from it.
 func runDelete(t *testing.T, binderPath, selector string, yes bool) runResult {
 	t.Helper()
-	args := []string{"run", ".", "delete", "--selector", selector, "--project", filepath.Dir(binderPath)}
+	args := []string{"delete", "--selector", selector, "--project", filepath.Dir(binderPath)}
 	if yes {
 		args = append(args, "--yes")
 	}
-	cmd := exec.Command("go", args...)
-	cmd.Dir = ".."
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	err := cmd.Run()
-	return runResult{
-		Stdout: stdout.String(),
-		Stderr: stderr.String(),
-		OK:     err == nil,
-	}
+	return runPMK(t, args...)
 }
 
 // runMove invokes "pmk move --source <source> --dest <dest> --project <dir>"
@@ -96,36 +87,14 @@ func runDelete(t *testing.T, binderPath, selector string, yes bool) runResult {
 // binderPath is the path to the _binder.md file; the project dir is derived from it.
 func runMove(t *testing.T, binderPath, source, dest string, extraArgs ...string) runResult {
 	t.Helper()
-	args := []string{"run", ".", "move", "--source", source, "--dest", dest, "--project", filepath.Dir(binderPath)}
-	args = append(args, extraArgs...)
-	cmd := exec.Command("go", args...)
-	cmd.Dir = ".."
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	err := cmd.Run()
-	return runResult{
-		Stdout: stdout.String(),
-		Stderr: stderr.String(),
-		OK:     err == nil,
-	}
+	args := append([]string{"move", "--source", source, "--dest", dest, "--project", filepath.Dir(binderPath)}, extraArgs...)
+	return runPMK(t, args...)
 }
 
-// runConformance runs the conformance test suite with the given test filter,
-// executed from the repository root (one directory above this test package).
+// runConformance runs the conformance test suite with the given test filter.
 func runConformance(t *testing.T, filter string) runResult {
 	t.Helper()
-	cmd := exec.Command("go", "test", "-run", filter, "-timeout", "120s", "./conformance/...")
-	cmd.Dir = ".."
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	err := cmd.Run()
-	return runResult{
-		Stdout: stdout.String(),
-		Stderr: stderr.String(),
-		OK:     err == nil,
-	}
+	return runGoCmd(t, "test", "-run", filter, "-timeout", "120s", "./conformance/...")
 }
 
 // readFile reads the contents of path and returns it as a string.
