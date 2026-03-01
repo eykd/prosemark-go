@@ -60,12 +60,15 @@ func newEditCmdWithGetCWD(io EditIO, getwd func() (string, error)) *cobra.Comman
 
 			binderBytes, err := io.ReadBinder(binderPath)
 			if err != nil {
+				if errors.Is(err, os.ErrNotExist) {
+					return fmt.Errorf("project not initialized — run 'pmk init' first")
+				}
 				return fmt.Errorf("reading binder: %w", err)
 			}
 
 			parsed, _, err := binder.Parse(cmd.Context(), binderBytes, nil)
 			if err != nil {
-				return fmt.Errorf("parsing binder: %w", err)
+				return fmt.Errorf("cannot parse binder: %w", err)
 			}
 
 			targetFilename := nodeID + ".md"
