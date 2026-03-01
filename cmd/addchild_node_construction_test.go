@@ -72,7 +72,8 @@ func (m *mockAddChildIOWithEditorBody) ReadNodeFile(path string) ([]byte, error)
 // buildNodeContent (to be deleted) always emitted "title: \n" even when the
 // title was the empty string.
 //
-// RED: fails because buildNodeContent writes "title: " unconditionally.
+// node.SerializeFrontmatter omits the title field when empty, so no "title:"
+// line appears in the written content.
 func TestNewAddChildCmd_NewMode_EmptyTitleAbsentFromNodeContent(t *testing.T) {
 	mock := &mockAddChildIOWithNew{
 		mockAddChildIO: mockAddChildIO{
@@ -104,13 +105,9 @@ func TestNewAddChildCmd_NewMode_EmptyTitleAbsentFromNodeContent(t *testing.T) {
 // pre-editor content stored in the local variable) so that body text added by
 // the editor is preserved in the final node file.
 //
-// RED: fails because refreshUpdated operates on the initial 'content' variable
-// (built before the editor opens), discarding any body written by the editor.
-// After GREEN, runNewMode must call ReadNodeFile after the editor exits, then
-// use node.ParseFrontmatter → fm.Updated → node.SerializeFrontmatter + body.
-//
-// NOTE: when the GREEN implementation adds ReadNodeFile to the newNodeIO
-// interface, all existing newNodeIO mocks must also gain a ReadNodeFile method.
+// runNewMode calls ReadNodeFile after the editor exits and uses the returned
+// content (including any editor-added body) when refreshing the Updated
+// timestamp, so the final file retains both the body and the updated time.
 func TestNewAddChildCmd_NewMode_RefreshPreservesEditorBodyContent(t *testing.T) {
 	t.Setenv("EDITOR", "vi")
 

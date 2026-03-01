@@ -287,8 +287,8 @@ func TestNewAddChildCmd_NewMode_RefreshNodeWriteError(t *testing.T) {
 // found) in --new mode, the command returns an error and rolls back the node
 // file that was already created on disk.
 //
-// RED: the current implementation does not inspect diagnostic severity in --new
-// mode and therefore does not roll back or return an error.
+// The implementation inspects diagnostic severity and rolls back the node file
+// when ops.AddChild returns an error-severity diagnostic.
 func TestNewAddChildCmd_NewMode_ErrorDiagnosticRollsBackNode(t *testing.T) {
 	mock := &mockAddChildIOWithNew{
 		mockAddChildIO: mockAddChildIO{
