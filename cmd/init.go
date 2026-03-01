@@ -92,12 +92,12 @@ func newDefaultInitIO() *fileInitIO {
 
 // StatFile returns true if the file at path exists, false if it does not.
 // Returns an error only for unexpected OS errors.
-func (f *fileInitIO) StatFile(path string) (bool, error) {
+func (f fileInitIO) StatFile(path string) (bool, error) {
 	return f.StatFileImpl(path)
 }
 
 // StatFileImpl wraps os.Stat to check file existence.
-func (f *fileInitIO) StatFileImpl(path string) (bool, error) {
+func (f fileInitIO) StatFileImpl(path string) (bool, error) {
 	_, err := os.Stat(path)
 	if err == nil {
 		return true, nil
@@ -109,12 +109,12 @@ func (f *fileInitIO) StatFileImpl(path string) (bool, error) {
 }
 
 // WriteFileAtomic writes content to path atomically via a temp file with 0600 permissions.
-func (f *fileInitIO) WriteFileAtomic(path, content string) error {
+func (f fileInitIO) WriteFileAtomic(path, content string) error {
 	return f.WriteFileAtomicImpl(path, content)
 }
 
 // WriteFileAtomicImpl performs the atomic write via OS temp file rename.
-func (f *fileInitIO) WriteFileAtomicImpl(path, content string) error {
+func (f fileInitIO) WriteFileAtomicImpl(path, content string) error {
 	dir := filepath.Dir(path)
 	tmp, err := os.CreateTemp(dir, ".init-*.tmp")
 	if err != nil {

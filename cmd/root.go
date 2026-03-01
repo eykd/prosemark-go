@@ -24,7 +24,7 @@ func NewRootCmd() *cobra.Command {
 	root.AddCommand(NewAddChildCmd(newDefaultAddChildIO()))
 	root.AddCommand(NewDeleteCmd(newDefaultDeleteIO()))
 	root.AddCommand(NewMoveCmd(newDefaultMoveIO()))
-	root.AddCommand(NewInitCmd(newDefaultInitIO()))
+	root.AddCommand(NewInitCmd(fileInitIO{}))
 	return root
 }
 
