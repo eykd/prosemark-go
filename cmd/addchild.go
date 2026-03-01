@@ -60,6 +60,16 @@ func nodeIDv7Impl() (string, error) {
 	return id.String() + ".md", nil
 }
 
+// hasDiagnosticError reports whether any diagnostic in diags has error severity.
+func hasDiagnosticError(diags []binder.Diagnostic) bool {
+	for _, d := range diags {
+		if d.Severity == "error" {
+			return true
+		}
+	}
+	return false
+}
+
 // hasControlChars reports whether s contains any C0 control character
 // (U+0000–U+001F) or DEL (U+007F).
 func hasControlChars(s string) bool {
@@ -199,7 +209,7 @@ func newAddChildCmdWithGetCWD(io AddChildIO, getwd func() (string, error)) *cobr
 				}
 
 				// Require IO that supports node file creation.
-				nnIO, ok := io.(newNodeIO)
+				nodeIO, ok := io.(newNodeIO)
 				if !ok {
 					return fmt.Errorf("IO does not support --new mode")
 				}
@@ -210,7 +220,7 @@ func newAddChildCmdWithGetCWD(io AddChildIO, getwd func() (string, error)) *cobr
 				timestamp := time.Now().UTC().Format(time.RFC3339)
 				content := buildNodeContent(uuidStem, title, synopsis, timestamp)
 
-				if err := nnIO.WriteNodeFileAtomic(nodePath, content); err != nil {
+				if err := nodeIO.WriteNodeFileAtomic(nodePath, content); err != nil {
 					return fmt.Errorf("creating node file: %w", err)
 				}
 
@@ -221,22 +231,15 @@ func newAddChildCmdWithGetCWD(io AddChildIO, getwd func() (string, error)) *cobr
 
 				printDiagnostics(cmd, diags)
 
-				hasOpsError := false
-				for _, d := range diags {
-					if d.Severity == "error" {
-						hasOpsError = true
-						break
-					}
-				}
-				if hasOpsError {
-					rollbackErr := nnIO.DeleteFile(nodePath)
+				if hasDiagnosticError(diags) {
+					rollbackErr := nodeIO.DeleteFile(nodePath)
 					return errors.Join(fmt.Errorf("add has errors"), rollbackErr)
 				}
 
 				changed := !bytes.Equal(binderBytes, modifiedBytes)
 				if changed {
 					if writeErr := io.WriteBinderAtomic(ctx, binderPath, modifiedBytes); writeErr != nil {
-						if rollbackErr := nnIO.DeleteFile(nodePath); rollbackErr != nil {
+						if rollbackErr := nodeIO.DeleteFile(nodePath); rollbackErr != nil {
 							return fmt.Errorf("writing binder: %w; rollback also failed: %v", writeErr, rollbackErr)
 						}
 						return fmt.Errorf("writing binder: %w", writeErr)
@@ -252,12 +255,12 @@ func newAddChildCmdWithGetCWD(io AddChildIO, getwd func() (string, error)) *cobr
 					if editor == "" {
 						return fmt.Errorf("$EDITOR is not set")
 					}
-					if err := nnIO.OpenEditor(editor, nodePath); err != nil {
+					if err := nodeIO.OpenEditor(editor, nodePath); err != nil {
 						return fmt.Errorf("opening editor: %w", err)
 					}
 					// Refresh the 'updated' frontmatter field after the editor exits.
 					refreshed := refreshUpdated(content, time.Now().UTC().Format(time.RFC3339))
-					if writeErr := nnIO.WriteNodeFileAtomic(nodePath, refreshed); writeErr != nil {
+					if writeErr := nodeIO.WriteNodeFileAtomic(nodePath, refreshed); writeErr != nil {
 						return fmt.Errorf("refreshing node file after edit: %w", writeErr)
 					}
 				}
@@ -272,14 +275,6 @@ func newAddChildCmdWithGetCWD(io AddChildIO, getwd func() (string, error)) *cobr
 
 			changed := !bytes.Equal(binderBytes, modifiedBytes)
 
-			hasError := false
-			for _, d := range diags {
-				if d.Severity == "error" {
-					hasError = true
-					break
-				}
-			}
-
 			if jsonMode {
 				out := binder.OpResult{Version: "1", Changed: changed, Diagnostics: diags}
 				if err := json.NewEncoder(cmd.OutOrStdout()).Encode(out); err != nil {
@@ -289,7 +284,7 @@ func newAddChildCmdWithGetCWD(io AddChildIO, getwd func() (string, error)) *cobr
 				printDiagnostics(cmd, diags)
 			}
 
-			if hasError {
+			if hasDiagnosticError(diags) {
 				return fmt.Errorf("add has errors")
 			}
 

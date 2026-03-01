@@ -243,6 +243,100 @@ func TestNewAddChildCmd_NewMode_AtFlag(t *testing.T) {
 	}
 }
 
+// mockAddChildIOWithFailingRefresh wraps mockAddChildIOWithNew but returns an
+// error on the second (and later) call to WriteNodeFileAtomic. This lets tests
+// exercise the post-editor updated-refresh failure path (lines 247-249 of
+// addchild.go) without affecting the initial node-creation write.
+type mockAddChildIOWithFailingRefresh struct {
+	mockAddChildIOWithNew
+	refreshErr     error
+	writeCallCount int
+}
+
+// WriteNodeFileAtomic succeeds on the first call and returns refreshErr on
+// subsequent calls (simulating a disk failure during the post-editor refresh).
+func (m *mockAddChildIOWithFailingRefresh) WriteNodeFileAtomic(path string, content []byte) error {
+	m.writeCallCount++
+	if m.writeCallCount > 1 && m.refreshErr != nil {
+		return m.refreshErr
+	}
+	return m.mockAddChildIOWithNew.WriteNodeFileAtomic(path, content)
+}
+
+// TestNewAddChildCmd_NewMode_RefreshNodeWriteError verifies that when the
+// second WriteNodeFileAtomic call (post-editor updated-refresh) fails, the
+// command returns an error whose message contains "refreshing node file after
+// edit:".
+//
+// This is the only path in the --new --edit flow not covered by existing tests:
+// current mocks either succeed on all writes or fail on all writes.
+func TestNewAddChildCmd_NewMode_RefreshNodeWriteError(t *testing.T) {
+	mock := &mockAddChildIOWithFailingRefresh{
+		mockAddChildIOWithNew: mockAddChildIOWithNew{
+			mockAddChildIO: mockAddChildIO{
+				binderBytes: emptyBinder(),
+				project:     &binder.Project{Files: []string{}, BinderDir: "."},
+			},
+		},
+		refreshErr: errors.New("refresh write failed"),
+	}
+	t.Setenv("EDITOR", "vi")
+
+	c := NewAddChildCmd(mock)
+	c.SetOut(new(bytes.Buffer))
+	c.SetErr(new(bytes.Buffer))
+	c.SetArgs([]string{"--new", "--title", "Chapter", "--edit", "--parent", ".", "--project", "."})
+
+	err := c.Execute()
+	if err == nil {
+		t.Fatal("expected error when post-editor WriteNodeFileAtomic fails")
+	}
+	if !strings.Contains(err.Error(), "refreshing node file after edit:") {
+		t.Errorf("error = %q, want to contain \"refreshing node file after edit:\"", err.Error())
+	}
+	// The node file should have been written once (initial creation succeeds).
+	if mock.writeCallCount < 2 {
+		t.Errorf("expected at least 2 WriteNodeFileAtomic calls, got %d", mock.writeCallCount)
+	}
+}
+
+// TestNewAddChildCmd_NewMode_ErrorDiagnosticRollsBackNode verifies that when
+// ops.AddChild produces an error-severity diagnostic (e.g. OPE001: parent not
+// found) in --new mode, the command returns an error and rolls back the node
+// file that was already created on disk.
+//
+// RED: the current implementation does not inspect diagnostic severity in --new
+// mode and therefore does not roll back or return an error.
+func TestNewAddChildCmd_NewMode_ErrorDiagnosticRollsBackNode(t *testing.T) {
+	mock := &mockAddChildIOWithNew{
+		mockAddChildIO: mockAddChildIO{
+			binderBytes: emptyBinder(),
+			project:     &binder.Project{Files: []string{}, BinderDir: "."},
+		},
+	}
+	c := NewAddChildCmd(mock)
+	c.SetOut(new(bytes.Buffer))
+	c.SetErr(new(bytes.Buffer))
+	// "nonexistent.md" is not in the binder → ops.AddChild produces an
+	// OPE001 error-severity diagnostic; --new mode must treat this as failure.
+	c.SetArgs([]string{
+		"--new", "--title", "Orphan",
+		"--parent", "nonexistent.md",
+		"--project", ".",
+	})
+
+	err := c.Execute()
+	if err == nil {
+		t.Error("expected error when ops.AddChild reports error diagnostics in --new mode")
+	}
+	if mock.nodeWrittenPath == "" {
+		t.Error("expected WriteNodeFileAtomic to be called before the diagnostic check")
+	}
+	if mock.deletedPath == "" {
+		t.Error("expected DeleteFile to roll back the node file on ops error diagnostic")
+	}
+}
+
 // TestFileAddChildIO_NewModeInterface verifies that fileAddChildIO satisfies
 // the newNodeIO interface at compile time.
 var _ newNodeIO = (*fileAddChildIO)(nil)
