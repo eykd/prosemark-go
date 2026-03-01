@@ -374,6 +374,15 @@ GWT specs must capture the acceptance scenarios from `spec.md` (US1–US4) in do
 
 - **`pmk init --force` destroys existing binder**: `--force` overwrites `_binder.md`, silently discarding any existing project tree. Unlike `pmk delete --yes`, there is no explicit confirmation requirement. Mitigate by printing the overwritten file path to stderr as a warning: `Warning: overwriting existing _binder.md at {path}`. The `--force` flag itself serves as the user's confirmation, but the warning ensures it's never silent.
 
+### Path Containment for Doctor File Reads
+
+- **Binder path traversal in `pmk doctor`**: `RunDoctor` reads files referenced by binder link targets. If `_binder.md` contains a crafted link like `../../sensitive-data.md`, the cmd handler joining project dir + target would resolve to a path outside the project directory. Before calling `DoctorIO.ReadNodeFile`, the cmd handler MUST validate that `filepath.Join(projectDir, target)` is contained within `projectDir`: resolve both via `filepath.Abs` + `filepath.Clean`, then verify the result has `projectDir + string(filepath.Separator)` as a prefix. If the resolved path escapes the project boundary, skip the file read and emit AUDW001 with message `"binder link escapes project directory"`.
+- **`pmk edit` is not affected** — it validates the ID against the binder and constructs its own path from the UUID + project dir, never using binder link text directly as a file path.
+
+### Terminal Output Safety
+
+- **ANSI injection in diagnostic output**: `pmk doctor`'s human-readable output echoes binder link targets (filenames) into diagnostic messages verbatim. A `_binder.md` crafted with ANSI escape sequences in link targets (e.g., `\x1b[2J` to clear the terminal) could corrupt terminal output when doctor prints diagnostics. Mitigate by sanitizing path values before formatting them into any message: replace non-printable bytes (codepoints < 0x20 or >= 0x7F except printable Unicode) with `?`. This applies to all human-readable stderr and stdout output, not to `--json` mode (which encodes them safely via `json.Marshal`).
+
 ---
 
 ## Edge Cases & Error Handling
@@ -408,6 +417,31 @@ GWT specs must capture the acceptance scenarios from `spec.md` (US1–US4) in do
 - **Unreadable UUID file**: If `ReadNodeFile` returns a permission error, emit an AUD diagnostic rather than aborting the scan. Suggested: treat as AUD007 with message `"cannot read file: {err}"` so the file appears in the report without crashing the tool.
 - **YAML with deeply nested anchors (YAML bomb)**: `gopkg.in/yaml.v3` does not protect against deeply nested anchor chains by default. Since doctor reads all UUID files, a malformed or adversarially crafted file could cause excessive memory use. Mitigate by applying a file size limit before parsing: files larger than 1 MB should be rejected with AUD007 (`"frontmatter exceeds size limit"`). For a prose writing tool, 1 MB is a generous upper bound for frontmatter.
 - **Symlinks in project root**: `ListUUIDFiles` must document whether it follows symlinks. Recommended: do not follow symlinks (use `os.Lstat` to identify regular files only). Symlinked UUID files should be excluded from orphan checks and documented as out of scope.
+
+### Frontmatter Delimiter Ambiguity
+
+- **Multi-line YAML values containing `---`**: The `ParseFrontmatter` function must not use naive line scanning for the closing `---` delimiter. A YAML value that spans multiple lines and includes `---` on a line by itself (e.g., `synopsis: "---"` or a block scalar `synopsis: |-\n  ---`) would cause a line-scanner to prematurely close the frontmatter block, corrupting the parsed output. Implementation MUST use `gopkg.in/yaml.v3`'s decoder in a two-pass approach: (1) find the closing delimiter by scanning after the opening `---\n` with awareness that `---` can appear inside quoted/block scalar values (use yaml.Decoder to attempt parse and report the byte offset consumed), or (2) find the second standalone `---\n` using a state machine that tracks whether scanning is inside a block scalar or flow string. Unit tests MUST cover: `synopsis: "---"`, `synopsis: |-\n  ---\n  other`, title containing `---`.
+
+### Timestamp Format Validation (AUD005)
+
+- **AUD005 must validate field format, not just presence**: "Absent or malformed" must be defined precisely. A timestamp present as `created: 2026-02-28` (valid YAML string but missing time component and Z suffix) passes a presence check but violates the RFC3339+Z contract. `ValidateNode` MUST validate that `created` and `updated` are non-empty strings that parse successfully via `time.Parse(time.RFC3339, value)` and that the string has a `Z` suffix (not `+00:00` or other UTC representations). Any field that is present but not a valid UTC RFC3339 timestamp with `Z` suffix triggers AUD005 with message `"field '{name}' is not a valid UTC timestamp"`.
+
+### Binder Parse Failure in `pmk edit`
+
+- **`binder.Parse` error vs. file-not-found**: The `pmk edit` flow reads then parses `_binder.md` to validate node ID membership. Distinct error cases must produce distinct user-facing messages: (1) file not found → `"error: project not initialized — run 'pmk init' first"`, (2) file exists but unreadable (permissions) → `"error: cannot read binder: {err}"`, (3) file readable but parse fails → `"error: cannot parse binder: {err}"`. Treating case (3) as a raw Go error surface (e.g., `"yaml: unmarshal error"`) is confusing. The cmd handler for `pmk edit` must handle all three cases explicitly before proceeding to ID lookup.
+
+### UUID Case Sensitivity
+
+- **`--target` must be lowercase**: If `--target 0192F0C1-3E7A-7000-8000-5A4B3C2D1E0F.md` (uppercase) is provided, the UUID pattern check must reject it. Emit: `"target must be a valid UUID filename (lowercase hex with hyphens) when --new is set"`. Auto-generated UUIDs from `github.com/google/uuid` are lowercase; `--target` values must match the same canonical form to prevent mixed-case filenames that cause issues on case-insensitive filesystems (macOS HFS+/APFS).
+- **`ListUUIDFiles` on case-insensitive filesystems**: `IsUUIDFilename` uses a lowercase-only regex. On macOS (HFS+/APFS case-insensitive), a manually created `{UUID}.md` (uppercase stem) would not match the regex and would not appear in AUD002 orphan checks. This is an acceptable limitation for the current scope — pmk never generates uppercase filenames. Document explicitly in `IsUUIDFilename` that it matches the canonical lowercase form only.
+
+### Notes File Cleanup on Editor Failure
+
+- **New notes file created but editor exits non-zero**: When `pmk edit --part notes` creates a new empty `{uuid}.notes.md` (because it did not previously exist) and the editor subsequently exits with a non-zero code, the empty notes file should be deleted as rollback. An empty notes file with no author content left by a failed edit is clutter. If the delete-on-rollback itself fails, log to stderr: `"warning: failed to clean up notes file after editor error: {err}"` and exit 1. If the notes file already existed before the edit (non-new case), no rollback is performed.
+
+### Partial Init State
+
+- **`_binder.md` present without `.prosemark.yml`**: If a user manually creates `_binder.md` (or has a Feature 001 project) but has no `.prosemark.yml`, running `pmk init` fails with an error (binder exists). The user cannot create the missing `.prosemark.yml` without `--force`, which also overwrites the binder. The error message in this state MUST include a recovery hint: `"error: _binder.md already exists at {path}. Use --force to reinitialize (overwrites existing files)."` This makes the recovery path explicit without requiring documentation lookup.
 
 ### Timestamp Correctness
 
