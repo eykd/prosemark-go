@@ -6,8 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-
-	"github.com/eykd/prosemark-go/internal/node"
 )
 
 func TestFileDoctorIO_ReadBinder(t *testing.T) {
@@ -81,28 +79,6 @@ func TestFileDoctorIO_ReadNodeFile_NotExists(t *testing.T) {
 	}
 	if got != nil {
 		t.Errorf("expected nil content for missing file, got %q", got)
-	}
-}
-
-func TestScanEscapingBinderLinks_NoEscaping(t *testing.T) {
-	binderBytes := []byte("<!-- prosemark-binder:v1 -->\n- [Node](01234567-89ab-7def-0123-456789abcdef.md)\n")
-	diags := scanEscapingBinderLinks(binderBytes)
-	if len(diags) != 0 {
-		t.Errorf("expected no diagnostics for non-escaping binder, got: %v", diags)
-	}
-}
-
-func TestScanEscapingBinderLinks_WithEscaping(t *testing.T) {
-	binderBytes := []byte("<!-- prosemark-binder:v1 -->\n- [Secret](../../etc/passwd)\n")
-	diags := scanEscapingBinderLinks(binderBytes)
-	if len(diags) != 1 {
-		t.Fatalf("expected 1 diagnostic for escaping link, got %d: %v", len(diags), diags)
-	}
-	if diags[0].Code != node.AUDW001 {
-		t.Errorf("expected AUDW001, got %s", diags[0].Code)
-	}
-	if diags[0].Severity != node.SeverityWarning {
-		t.Errorf("expected warning severity, got %s", diags[0].Severity)
 	}
 }
 

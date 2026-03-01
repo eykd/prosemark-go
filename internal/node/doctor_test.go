@@ -653,6 +653,94 @@ func TestRunDoctor_DiagnosticsHaveNonEmptyMessage(t *testing.T) {
 	}
 }
 
+// TestRunDoctor_WithPrecomputedRefs verifies the fast path: when DoctorData.BinderRefs
+// is non-nil, RunDoctor uses the pre-supplied refs and skips re-parsing BinderSrc.
+func TestRunDoctor_WithPrecomputedRefs(t *testing.T) {
+	ctx := context.Background()
+
+	tests := []struct {
+		name      string
+		data      node.DoctorData
+		wantCodes []node.AuditCode
+		wantNone  []node.AuditCode
+	}{
+		{
+			name: "clean project via pre-computed refs produces no diagnostics",
+			data: node.DoctorData{
+				BinderSrc: binderWithRefs(testDoctorUUID1 + ".md"),
+				UUIDFiles: []string{testDoctorUUID1 + ".md"},
+				FileContents: map[string][]byte{
+					testDoctorUUID1 + ".md": nodeFileBytes(testDoctorUUID1),
+				},
+				BinderRefs:     []string{testDoctorUUID1 + ".md"},
+				BinderRefDiags: nil,
+			},
+			wantNone: []node.AuditCode{
+				node.AUD001, node.AUD002, node.AUD003, node.AUD004,
+				node.AUD005, node.AUD006, node.AUD007, node.AUDW001,
+			},
+		},
+		{
+			name: "pre-computed refDiags (AUD003) are included in output",
+			data: node.DoctorData{
+				BinderSrc: binderWithRefs(testDoctorUUID1 + ".md"),
+				UUIDFiles: []string{testDoctorUUID1 + ".md"},
+				FileContents: map[string][]byte{
+					testDoctorUUID1 + ".md": nodeFileBytes(testDoctorUUID1),
+				},
+				BinderRefs: []string{testDoctorUUID1 + ".md"},
+				BinderRefDiags: []node.AuditDiagnostic{
+					{Code: node.AUD003, Severity: node.SeverityError, Message: "dup", Path: testDoctorUUID1 + ".md"},
+				},
+			},
+			wantCodes: []node.AuditCode{node.AUD003},
+		},
+		{
+			name: "orphan detection works with pre-computed refs",
+			data: node.DoctorData{
+				BinderSrc: binderWithRefs(testDoctorUUID1 + ".md"),
+				UUIDFiles: []string{testDoctorUUID1 + ".md", testDoctorUUID2 + ".md"},
+				FileContents: map[string][]byte{
+					testDoctorUUID1 + ".md": nodeFileBytes(testDoctorUUID1),
+					testDoctorUUID2 + ".md": nodeFileBytes(testDoctorUUID2),
+				},
+				BinderRefs:     []string{testDoctorUUID1 + ".md"},
+				BinderRefDiags: nil,
+			},
+			wantCodes: []node.AuditCode{node.AUD002},
+		},
+		{
+			name: "empty BinderRefs produces only orphan diagnostics for existing UUID files",
+			data: node.DoctorData{
+				BinderSrc:      []byte{},
+				UUIDFiles:      []string{testDoctorUUID1 + ".md"},
+				FileContents:   map[string][]byte{},
+				BinderRefs:     []string{},
+				BinderRefDiags: nil,
+			},
+			wantCodes: []node.AuditCode{node.AUD002},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			diags := node.RunDoctor(ctx, tt.data)
+			codes := diagCodesOf(diags)
+
+			for _, want := range tt.wantCodes {
+				if _, ok := codes[want]; !ok {
+					t.Errorf("RunDoctor() missing expected code %q; got %v", want, diags)
+				}
+			}
+			for _, none := range tt.wantNone {
+				if _, ok := codes[none]; ok {
+					t.Errorf("RunDoctor() produced unexpected code %q; got %v", none, diags)
+				}
+			}
+		})
+	}
+}
+
 // TestRunDoctor_NoPanic_CancelledContext verifies RunDoctor does not panic when
 // called with an already-cancelled context.
 func TestRunDoctor_NoPanic_CancelledContext(t *testing.T) {

@@ -7,12 +7,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
-	"strings"
 
 	"github.com/spf13/cobra"
 
-	"github.com/eykd/prosemark-go/internal/binder"
 	"github.com/eykd/prosemark-go/internal/node"
 )
 
@@ -72,24 +69,25 @@ func newDoctorCmdWithGetCWD(io DoctorIO, getwd func() (string, error)) *cobra.Co
 				uuidFiles = []string{}
 			}
 
-			// Scan raw binder for path-escaping links that binder.Parse rejects from
-			// the tree. These require a direct AUDW001 diagnostic from the cmd layer.
-			extraDiags := scanEscapingBinderLinks(binderBytes)
-
-			// Parse binder tree to collect referenced file targets.
-			parseResult, _, _ := binder.Parse(cmd.Context(), binderBytes, nil)
+			// Collect binder refs and binder-level diagnostics (escape warnings, duplicates).
+			// This is the sole binder.Parse call per doctor invocation.
+			refs, refDiags := node.CollectBinderRefs(cmd.Context(), binderBytes)
 
 			// Build FileContents map: one entry per unique referenced filename.
-			fileContents := collectBinderRefs(parseResult.Root.Children, io, projectDir)
-
-			data := node.DoctorData{
-				BinderSrc:    binderBytes,
-				UUIDFiles:    uuidFiles,
-				FileContents: fileContents,
+			fileContents := make(map[string][]byte, len(refs))
+			for _, ref := range refs {
+				fileContents[ref] = doctorReadFile(io, projectDir, ref)
 			}
 
-			runDiags := node.RunDoctor(cmd.Context(), data)
-			diags := append(extraDiags, runDiags...)
+			data := node.DoctorData{
+				BinderSrc:      binderBytes,
+				UUIDFiles:      uuidFiles,
+				FileContents:   fileContents,
+				BinderRefs:     refs,
+				BinderRefDiags: refDiags,
+			}
+
+			diags := node.RunDoctor(cmd.Context(), data)
 
 			// Emit diagnostics.
 			if jsonMode {
@@ -124,48 +122,6 @@ func newDoctorCmdWithGetCWD(io DoctorIO, getwd func() (string, error)) *cobra.Co
 	cmd.Flags().Bool("json", false, "output diagnostics as JSON array")
 
 	return cmd
-}
-
-// binderLinkTargetRE finds markdown inline link targets in binder source.
-var binderLinkTargetRE = regexp.MustCompile(`\]\(([^)]+)\)`)
-
-// scanEscapingBinderLinks returns AUDW001 diagnostics for any link target in the
-// raw binder source that resolves outside the project root (starts with "../" or
-// equals ".."). binder.Parse already rejects these from the parse tree, so this
-// scan ensures the cmd layer still emits a visible diagnostic.
-func scanEscapingBinderLinks(binderBytes []byte) []node.AuditDiagnostic {
-	var diags []node.AuditDiagnostic
-	for _, m := range binderLinkTargetRE.FindAllSubmatch(binderBytes, -1) {
-		target := string(m[1])
-		if target == ".." || strings.HasPrefix(target, "../") {
-			diags = append(diags, node.AuditDiagnostic{
-				Code:     node.AUDW001,
-				Severity: node.SeverityWarning,
-				Message:  fmt.Sprintf("binder link escapes project directory: %s", target),
-				Path:     target,
-			})
-		}
-	}
-	return diags
-}
-
-// collectBinderRefs walks the binder node tree and returns a FileContents map
-// keyed by each unique referenced filename. Files are read via doctorReadFile.
-func collectBinderRefs(nodes []*binder.Node, io DoctorIO, projectDir string) map[string][]byte {
-	fileContents := make(map[string][]byte)
-	var walk func([]*binder.Node)
-	walk = func(ns []*binder.Node) {
-		for _, n := range ns {
-			if n.Target != "" {
-				if _, seen := fileContents[n.Target]; !seen {
-					fileContents[n.Target] = doctorReadFile(io, projectDir, n.Target)
-				}
-			}
-			walk(n.Children)
-		}
-	}
-	walk(nodes)
-	return fileContents
 }
 
 // hasErrorDiagnostic reports whether any diagnostic in the slice has error severity.

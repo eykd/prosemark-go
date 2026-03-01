@@ -20,40 +20,57 @@ type DoctorData struct {
 	// FileContents maps each filename to its raw bytes.
 	// A nil value indicates the file does not exist on disk.
 	FileContents map[string][]byte
+	// BinderRefs, when non-nil, provides deduplicated refs pre-computed by CollectBinderRefs.
+	// RunDoctor uses these directly and skips re-parsing BinderSrc.
+	BinderRefs []string
+	// BinderRefDiags holds diagnostics produced by CollectBinderRefs (escape warnings, AUD003).
+	// Ignored unless BinderRefs is non-nil.
+	BinderRefDiags []AuditDiagnostic
 }
 
 // RunDoctor performs all audit checks on the provided pre-loaded project data
 // and returns diagnostics sorted by severity (errors first) then path.
 // It is a pure function and performs no IO.
+//
+// When DoctorData.BinderRefs is non-nil, RunDoctor uses those pre-computed refs
+// and skips re-parsing BinderSrc, ensuring binder.Parse is called at most once
+// per doctor invocation.
 func RunDoctor(ctx context.Context, data DoctorData) []AuditDiagnostic {
 	var diags []AuditDiagnostic
-
-	// Step 1: Parse the binder.
-	parseResult, _, _ := binder.Parse(ctx, data.BinderSrc, nil)
-
-	// Step 2: Walk binder tree to collect references and detect duplicates (AUD003).
-	visited := make(map[string]bool)
-	duplicated := make(map[string]bool)
 	var refs []string
+	visited := make(map[string]bool)
 
-	var walkNodes func(nodes []*binder.Node)
-	walkNodes = func(nodes []*binder.Node) {
-		for _, n := range nodes {
-			if n.Target != "" {
-				if !visited[n.Target] {
-					visited[n.Target] = true
-					refs = append(refs, n.Target)
-				} else if !duplicated[n.Target] {
-					duplicated[n.Target] = true
-					diags = append(diags, errDiag(AUD003, n.Target, fmt.Sprintf("file appears more than once in binder: %s", n.Target)))
-				}
-			}
-			walkNodes(n.Children)
+	if data.BinderRefs != nil {
+		// Fast path: use pre-computed refs and diags from CollectBinderRefs.
+		diags = append(diags, data.BinderRefDiags...)
+		refs = data.BinderRefs
+		for _, ref := range refs {
+			visited[ref] = true
 		}
-	}
-	walkNodes(parseResult.Root.Children)
+	} else {
+		// Legacy path: parse the binder and detect duplicates.
+		parseResult, _, _ := binder.Parse(ctx, data.BinderSrc, nil)
 
-	// Step 3: Check each uniquely referenced file.
+		duplicated := make(map[string]bool)
+		var walkNodes func(nodes []*binder.Node)
+		walkNodes = func(nodes []*binder.Node) {
+			for _, n := range nodes {
+				if n.Target != "" {
+					if !visited[n.Target] {
+						visited[n.Target] = true
+						refs = append(refs, n.Target)
+					} else if !duplicated[n.Target] {
+						duplicated[n.Target] = true
+						diags = append(diags, errDiag(AUD003, n.Target, fmt.Sprintf("file appears more than once in binder: %s", n.Target)))
+					}
+				}
+				walkNodes(n.Children)
+			}
+		}
+		walkNodes(parseResult.Root.Children)
+	}
+
+	// Check each uniquely referenced file.
 	for _, ref := range refs {
 		isUUID := IsUUIDFilename(ref)
 
@@ -89,7 +106,7 @@ func RunDoctor(ctx context.Context, data DoctorData) []AuditDiagnostic {
 		}
 	}
 
-	// Step 4: Detect orphaned UUID files (AUD002).
+	// Detect orphaned UUID files (AUD002).
 	for _, uuidFile := range data.UUIDFiles {
 		if !visited[uuidFile] {
 			diags = append(diags, warnDiag(AUD002, uuidFile, fmt.Sprintf("orphaned UUID file not referenced in binder: %s", uuidFile)))

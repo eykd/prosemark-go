@@ -56,6 +56,19 @@ func TestCollectBinderRefs(t *testing.T) {
 			wantRefs:  []string{testDoctorUUID1 + ".md"},
 			wantCodes: []node.AuditCode{node.AUDW001},
 		},
+		{
+			name:      "duplicate ref emits AUD003 and appears only once in refs",
+			binderSrc: binderWithRefs(testDoctorUUID1+".md", testDoctorUUID1+".md"),
+			wantRefs:  []string{testDoctorUUID1 + ".md"},
+			wantCodes: []node.AuditCode{node.AUD003},
+			wantNone:  []node.AuditCode{node.AUDW001},
+		},
+		{
+			name:      "triplicate ref emits one AUD003",
+			binderSrc: binderWithRefs(testDoctorUUID1+".md", testDoctorUUID1+".md", testDoctorUUID1+".md"),
+			wantRefs:  []string{testDoctorUUID1 + ".md"},
+			wantCodes: []node.AuditCode{node.AUD003},
+		},
 	}
 
 	for _, tt := range tests {
