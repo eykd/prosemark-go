@@ -383,6 +383,14 @@ GWT specs must capture the acceptance scenarios from `spec.md` (US1–US4) in do
 
 - **ANSI injection in diagnostic output**: `pmk doctor`'s human-readable output echoes binder link targets (filenames) into diagnostic messages verbatim. A `_binder.md` crafted with ANSI escape sequences in link targets (e.g., `\x1b[2J` to clear the terminal) could corrupt terminal output when doctor prints diagnostics. Mitigate by sanitizing path values before formatting them into any message: replace non-printable bytes (codepoints < 0x20 or >= 0x7F except printable Unicode) with `?`. This applies to all human-readable stderr and stdout output, not to `--json` mode (which encodes them safely via `json.Marshal`).
 
+### Notes File Permissions
+
+- **`CreateNotesFile` mode not specified**: The plan specifies 0600 for atomic-write temp files, but `CreateNotesFile` (which creates an empty `{uuid}.notes.md`) has no documented permission mode. Implement using `os.OpenFile(path, os.O_CREATE|os.O_EXCL, 0600)` to match the security posture of draft files. Using the default `os.Create` applies 0666 minus umask, which on systems with a permissive umask (e.g., 0022) produces 0644 — world-readable notes files. Use `O_EXCL` to also guarantee the file does not yet exist (making `CreateNotesFile` atomic and safe against TOCTOU).
+
+### JSON Output Schema Compliance
+
+- **`AuditDiagnostic.Severity` conflicts with `doctor-diagnostic.json` schema**: The JSON contract schema (`contracts/doctor-diagnostic.json`) sets `"additionalProperties": false` and requires only `code`, `message`, and `path` fields. The `AuditDiagnostic` struct also has a `Severity` field. If the cmd handler passes the struct directly to `json.Marshal`, the output will include `"Severity"` (or `"severity"`) and fail schema validation. Resolution: define a separate JSON-output type (`DoctorDiagnosticJSON`) containing only `code`, `message`, and `path`, and convert to it before marshaling. Alternatively, tag `Severity` with `json:"-"` to exclude it from marshaling — but then severity is only available via the Go type, not the JSON output. The separate JSON type is preferred for clarity.
+
 ---
 
 ## Edge Cases & Error Handling
@@ -448,6 +456,30 @@ GWT specs must capture the acceptance scenarios from `spec.md` (US1–US4) in do
 - **UTC enforcement**: All `created` and `updated` timestamps must use `time.Now().UTC()` explicitly. Relying on `time.Now()` alone produces local-timezone timestamps on systems where `time.Local` is not UTC. Add a `NowUTC() string` helper in `internal/node` that formats in RFC3339 with `Z` suffix and use it everywhere.
 - **Timestamp precision**: Use second-level precision (`time.RFC3339` format: `2006-01-02T15:04:05Z`) for human readability and unambiguous parsing. Sub-second precision is unnecessary and complicates YAML parsing.
 
+### `pmk init` Handler Logic Gap — `.prosemark.yml` Existence Check
+
+- **High: Silent overwrite of `.prosemark.yml` when only `_binder.md` is absent**: The `InitIO` interface has a single `StatFile(path string) (bool, error)` method, and the plan only describes statting `_binder.md`. When `_binder.md` is absent but `.prosemark.yml` already exists, the handler will unconditionally call `WriteFileAtomic` for both files — overwriting user-modified project config. The contracts table explicitly requires: "`.prosemark.yml` exists but `_binder.md` does not → Create `_binder.md`; leave `.prosemark.yml` unchanged; exit 0." The cmd handler must stat `.prosemark.yml` separately and skip its write when it already exists (unless `--force` is set). Corrected logic:
+  1. `StatFile(_binder.md)` — if exists and no `--force`, error.
+  2. `WriteFileAtomic(_binder.md, binderContent)` unconditionally (it's either absent or `--force` is set).
+  3. `StatFile(.prosemark.yml)` — if exists AND no `--force`, skip writing it.
+  4. `WriteFileAtomic(.prosemark.yml, ymlContent)` only if absent or `--force`.
+
+### `pmk edit` — `ParseFrontmatter` Failure After Editor Exit
+
+- **Unspecified error path when editor corrupts frontmatter**: The plan's editor flow (step 6) calls `ParseFrontmatter` on the file content after the editor exits. If the user inadvertently makes the frontmatter YAML syntactically invalid and saves, `ParseFrontmatter` returns an error. The plan specifies behavior for `WriteNodeFileAtomic` failure but not for this prior parse failure. Required handling: if `ParseFrontmatter` returns an error after the editor exits with code 0, emit to stderr `"warning: could not refresh 'updated' timestamp — frontmatter is unparseable after edit: {err}"` and exit 1. Do NOT write anything to the file. The prose content the editor saved is already on disk and is not lost. The invalid frontmatter state is detectable by `pmk doctor` (AUD007). This error path must be covered by a unit test with a corrupted-frontmatter fixture.
+
+### Signal-Interrupted `pmk add --new` Rollback Gap
+
+- **SIGKILL / power-loss leaves orphaned node file — no automatic recovery**: The spec flags this as unresolved: "What happens when the UUID file write succeeds but the process is killed before the binder write completes?" The plan's rollback at step 5 (`DeleteFile`) only executes when the binder write returns a Go error. A `SIGKILL`, OOM kill, or power loss after `WriteNodeFileAtomic` (step 3) but before `WriteBinderAtomic` completes cannot trigger defer-based cleanup. Explicitly document in `cmd/addchild.go`:
+  - Signal interruption after node file creation is a known unrecoverable race at the stated scale.
+  - The orphaned file is detectable by `pmk doctor` as AUD002 (orphaned UUID file, warning).
+  - Recovery: the user manually deletes the orphaned file or links it into the binder via `pmk add --target`.
+  - No automatic journal or lock file is introduced — the complexity cost exceeds the benefit for a single-user local CLI at O(100) nodes.
+
+### AUD007 Semantic Conflict for File-Read Permission Errors
+
+- **AUD007 defined as "unparseable YAML" but reused for permission errors**: The plan states to treat `ReadNodeFile` permission errors as AUD007 with message `"cannot read file: {err}"`. However, AUD007's canonical meaning (per the JSON schema example) is `"frontmatter YAML is syntactically invalid: ..."`. Using AUD007 for a permissions-denied scenario misleads users who will search for a YAML syntax error when the actual problem is filesystem permissions. Resolution: use AUD007 only for YAML parse failures (after successful read). For read errors (permissions, I/O), emit AUDW001 with message `"cannot read file: {err}"` (AUDW001 is the existing "warning" catch-all not defined in the formal error set) OR treat it as AUD001 with message `"referenced file not readable: {err}"` (AUD001 already covers "referenced file does not exist" and is close in intent). Document explicitly which code is chosen in `cmd/doctor.go`. Do not introduce AUD008 without updating `contracts/doctor-diagnostic.json` and the JSON schema enum.
+
 ---
 
 ## Performance Considerations
@@ -465,3 +497,7 @@ GWT specs must capture the acceptance scenarios from `spec.md` (US1–US4) in do
 ### Output Flushing
 
 - **`pmk doctor --json`**: The JSON array is fully assembled in memory before output. At stated scale, this is fine. If scale grows, streaming JSON output would be preferred. No action required now, but avoid buffering patterns that would be hard to convert later (i.e., don't accumulate in a `strings.Builder`; use `json.Marshal` on the slice directly).
+
+### Binder Cycle Guard in `RunDoctor`
+
+- **Malformed binder with circular references could loop indefinitely**: `RunDoctor`'s audit sequence walks the binder tree (step 2) using the Feature 001 `binder.Parse` output. If a corrupted or adversarially crafted `_binder.md` produces a cyclic tree (a node referencing one of its own ancestors in the parsed structure), the tree walk could loop. At O(100) nodes the runtime impact is bounded, but a malformed binder with many self-referential entries could be a DoS vector. `RunDoctor` must maintain a `visited map[string]bool` of seen target filenames during tree traversal and skip any target already in the set (already emitting AUD003 for duplicate references, which naturally acts as the cycle detection). Confirm that the Feature 001 binder parser returns references as a flat list or a tree with no back-edges; if the parser itself can loop, the guard must be placed in the tree walk logic inside `RunDoctor`, not after parsing.
