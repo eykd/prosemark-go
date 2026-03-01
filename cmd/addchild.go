@@ -37,6 +37,14 @@ type newNodeIO interface {
 // uuidFilenameRe matches a valid lowercase UUIDv7 filename (UUID.md).
 var uuidFilenameRe = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.md$`)
 
+// updatedLineRe matches the YAML frontmatter "updated: ..." line.
+var updatedLineRe = regexp.MustCompile(`(?m)^updated:.*$`)
+
+// refreshUpdated replaces the "updated:" line in YAML frontmatter with a new timestamp.
+func refreshUpdated(content []byte, timestamp string) []byte {
+	return updatedLineRe.ReplaceAll(content, []byte("updated: "+timestamp))
+}
+
 // nodeIDGenerator generates a new UUIDv7-based node filename.
 // Override in tests to inject specific values or simulate errors.
 var nodeIDGenerator = nodeIDv7Impl
@@ -233,6 +241,11 @@ func newAddChildCmdWithGetCWD(io AddChildIO, getwd func() (string, error)) *cobr
 					}
 					if err := nnIO.OpenEditor(editor, nodePath); err != nil {
 						return fmt.Errorf("opening editor: %w", err)
+					}
+					// Refresh the 'updated' frontmatter field after the editor exits.
+					refreshed := refreshUpdated(content, time.Now().UTC().Format(time.RFC3339))
+					if writeErr := nnIO.WriteNodeFileAtomic(nodePath, refreshed); writeErr != nil {
+						return fmt.Errorf("refreshing node file after edit: %w", writeErr)
 					}
 				}
 
