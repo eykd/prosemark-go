@@ -34,19 +34,19 @@ type AuditCode string
 const (
 	// AUD001 indicates a referenced file does not exist on disk.
 	AUD001 AuditCode = "AUD001"
-	// AUD002 indicates a node is missing required front matter fields.
+	// AUD002 indicates a UUID-pattern file exists in project root but is not referenced in the binder (orphaned node).
 	AUD002 AuditCode = "AUD002"
-	// AUD003 indicates a node has a malformed or non-UUID identifier.
+	// AUD003 indicates the same file appears more than once in the binder (duplicate reference).
 	AUD003 AuditCode = "AUD003"
-	// AUD004 indicates a binder entry does not match any known node file.
+	// AUD004 indicates a node file frontmatter id does not match its filename stem.
 	AUD004 AuditCode = "AUD004"
-	// AUD005 indicates a node file exists on disk but is absent from the binder.
+	// AUD005 indicates a required frontmatter field (id, created, or updated) is absent or malformed.
 	AUD005 AuditCode = "AUD005"
-	// AUD006 indicates a node's front matter ID does not match its filename.
+	// AUD006 indicates a node file has valid frontmatter but empty or whitespace-only body (warning).
 	AUD006 AuditCode = "AUD006"
-	// AUD007 indicates a node has a duplicate identifier within the project.
+	// AUD007 indicates a node file YAML frontmatter block is syntactically unparseable.
 	AUD007 AuditCode = "AUD007"
-	// AUDW001 is a warning indicating a node has no title set.
+	// AUDW001 is a warning indicating a non-UUID filename linked in binder (backward-compatibility warning for Feature 001 projects).
 	AUDW001 AuditCode = "AUDW001"
 )
 
