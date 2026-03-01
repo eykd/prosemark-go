@@ -26,6 +26,7 @@ func NewRootCmd() *cobra.Command {
 	root.AddCommand(NewMoveCmd(newDefaultMoveIO()))
 	root.AddCommand(NewInitCmd(fileInitIO{}))
 	root.AddCommand(NewEditCmd(fileEditIO{}))
+	root.AddCommand(NewDoctorCmd(fileDoctorIO{}))
 	return root
 }
 
