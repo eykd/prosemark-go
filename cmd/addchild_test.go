@@ -467,6 +467,12 @@ type mockAddChildIOWithNew struct {
 	nodeWrittenContent []byte
 	nodeWriteErr       error
 
+	// nodeWrittenPaths and nodeWrittenContents record every call to
+	// WriteNodeFileAtomic in order, enabling tests that verify a second
+	// atomic write occurs after the editor exits (updated-refresh).
+	nodeWrittenPaths    []string
+	nodeWrittenContents [][]byte
+
 	deletedPath string
 	deleteErr   error
 
@@ -478,10 +484,12 @@ type mockAddChildIOWithNew struct {
 func (m *mockAddChildIOWithNew) WriteNodeFileAtomic(path string, content []byte) error {
 	m.nodeWrittenPath = path
 	m.nodeWrittenContent = content
+	m.nodeWrittenPaths = append(m.nodeWrittenPaths, path)
+	m.nodeWrittenContents = append(m.nodeWrittenContents, content)
 	return m.nodeWriteErr
 }
 
-// DeleteFile records the call and returns the configured error.
+// DeleteFile records the path and returns the configured error.
 func (m *mockAddChildIOWithNew) DeleteFile(path string) error {
 	m.deletedPath = path
 	return m.deleteErr
@@ -577,6 +585,17 @@ func TestNewAddChildCmd_NewMode_Scenarios(t *testing.T) {
 			editorEnv:      "vi",
 			wantNodeCalled: true,
 			wantEditorCall: true,
+		},
+		{
+			// US2 scenario 5: Feature 001 behavior is preserved when --new is omitted.
+			// A plain `pmk add --parent . --target chapter-two.md` must still add the
+			// target to the binder without creating a UUID node file.
+			name:           "US2/5 Feature 001 behavior preserved: plain add without --new",
+			args:           []string{"--parent", ".", "--target", "chapter-two.md", "--project", "."},
+			binderBytes:    emptyBinder(),
+			projectFiles:   []string{"chapter-two.md"},
+			wantNodeCalled: false,
+			wantStdout:     "Added",
 		},
 		{
 			// US2 scenario 6: node file rolled back when binder write fails
@@ -844,5 +863,51 @@ func TestNewAddChildCmd_NewMode_FrontmatterFields(t *testing.T) {
 		if !strings.Contains(content, want) {
 			t.Errorf("node file content missing %q\ncontent:\n%s", want, content)
 		}
+	}
+}
+
+// TestNewAddChildCmd_NewMode_EditRefreshesUpdated verifies that after --edit
+// opens the editor and it exits successfully (code 0), the 'updated' field in
+// the node file frontmatter is refreshed by a second atomic write.
+//
+// This test is RED: the current implementation does not perform the refresh, so
+// WriteNodeFileAtomic is called only once. When the GREEN implementation adds
+// the "read → update 'updated' → write-back" step, this test will pass.
+func TestNewAddChildCmd_NewMode_EditRefreshesUpdated(t *testing.T) {
+	mock := &mockAddChildIOWithNew{
+		mockAddChildIO: mockAddChildIO{
+			binderBytes: emptyBinder(),
+			project:     &binder.Project{Files: []string{}, BinderDir: "."},
+		},
+	}
+	t.Setenv("EDITOR", "vi")
+
+	c := NewAddChildCmd(mock)
+	out := new(bytes.Buffer)
+	c.SetOut(out)
+	c.SetArgs([]string{
+		"--new",
+		"--title", "Chapter One",
+		"--edit",
+		"--parent", ".", "--project", ".",
+	})
+
+	if err := c.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// After OpenEditor returns nil the implementation must: read the node file,
+	// update the 'updated' frontmatter field to time.Now().UTC(), then write it
+	// back atomically.  This requires a second call to WriteNodeFileAtomic.
+	if len(mock.nodeWrittenContents) < 2 {
+		t.Fatalf("expected WriteNodeFileAtomic called at least twice "+
+			"(initial create + post-editor updated-refresh), got %d call(s)",
+			len(mock.nodeWrittenContents))
+	}
+
+	// The refreshed write must still contain an 'updated:' field.
+	refreshed := string(mock.nodeWrittenContents[1])
+	if !strings.Contains(refreshed, "updated:") {
+		t.Errorf("refreshed node file missing 'updated:' field\ncontent:\n%s", refreshed)
 	}
 }

@@ -341,15 +341,11 @@ func (w *fileAddChildIO) WriteBinderAtomic(ctx context.Context, path string, dat
 	return w.WriteBinderAtomicImpl(ctx, path, data)
 }
 
-// WriteBinderAtomicImpl performs the atomic write via OS temp file rename.
-func (w *fileAddChildIO) WriteBinderAtomicImpl(_ context.Context, path string, data []byte) error {
-	if fi, statErr := os.Stat(path); statErr == nil {
-		if fi.Mode().Perm()&0200 == 0 {
-			return fmt.Errorf("binder file is read-only")
-		}
-	}
+// writeFileAtomicImpl writes data to path atomically via a temp file and rename.
+// tmpPrefix is the leading label used for the temp file name (e.g. ".binder" or ".node").
+func writeFileAtomicImpl(path, tmpPrefix string, data []byte) error {
 	dir := filepath.Dir(path)
-	tmp, err := os.CreateTemp(dir, ".binder-*.tmp")
+	tmp, err := os.CreateTemp(dir, tmpPrefix+"-*.tmp")
 	if err != nil {
 		return fmt.Errorf("creating temp file: %w", err)
 	}
@@ -370,6 +366,16 @@ func (w *fileAddChildIO) WriteBinderAtomicImpl(_ context.Context, path string, d
 	return nil
 }
 
+// WriteBinderAtomicImpl performs the atomic write via OS temp file rename.
+func (w *fileAddChildIO) WriteBinderAtomicImpl(_ context.Context, path string, data []byte) error {
+	if fi, statErr := os.Stat(path); statErr == nil {
+		if fi.Mode().Perm()&0200 == 0 {
+			return fmt.Errorf("binder file is read-only")
+		}
+	}
+	return writeFileAtomicImpl(path, ".binder", data)
+}
+
 // WriteNodeFileAtomic writes content to path atomically (for --new mode).
 func (w *fileAddChildIO) WriteNodeFileAtomic(path string, content []byte) error {
 	return w.WriteNodeFileAtomicImpl(path, content)
@@ -377,26 +383,7 @@ func (w *fileAddChildIO) WriteNodeFileAtomic(path string, content []byte) error 
 
 // WriteNodeFileAtomicImpl performs the atomic write of a new node file.
 func (w *fileAddChildIO) WriteNodeFileAtomicImpl(path string, content []byte) error {
-	dir := filepath.Dir(path)
-	tmp, err := os.CreateTemp(dir, ".node-*.tmp")
-	if err != nil {
-		return fmt.Errorf("creating temp file: %w", err)
-	}
-	tmpName := tmp.Name()
-	if _, err = tmp.Write(content); err != nil {
-		_ = tmp.Close()
-		_ = os.Remove(tmpName)
-		return fmt.Errorf("writing temp file: %w", err)
-	}
-	if err = tmp.Close(); err != nil {
-		_ = os.Remove(tmpName)
-		return fmt.Errorf("closing temp file: %w", err)
-	}
-	if err = os.Rename(tmpName, path); err != nil {
-		_ = os.Remove(tmpName)
-		return fmt.Errorf("renaming temp file: %w", err)
-	}
-	return nil
+	return writeFileAtomicImpl(path, ".node", content)
 }
 
 // DeleteFile removes the file at path (used for rollback in --new mode).
