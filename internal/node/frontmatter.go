@@ -39,15 +39,12 @@ func ParseFrontmatter(content []byte) (Frontmatter, []byte, error) {
 		return Frontmatter{}, nil, errors.New("no valid frontmatter block found")
 	}
 
-	yamlContent := content[:loc[1]]
-	body := content[loc[1]:]
-
 	var fm Frontmatter
-	if err := yaml.Unmarshal(yamlContent, &fm); err != nil {
+	if err := yaml.Unmarshal(content[:loc[1]], &fm); err != nil {
 		return Frontmatter{}, nil, fmt.Errorf("parse frontmatter: %w", err)
 	}
 
-	return fm, append([]byte(nil), body...), nil
+	return fm, bytes.Clone(content[loc[1]:]), nil
 }
 
 // SerializeFrontmatter serializes fm into a canonical frontmatter block.
