@@ -18,11 +18,12 @@ type runResult struct {
 	OK     bool // true if exit code 0
 }
 
-// runParse invokes "pmk parse <binderPath>" via `go run .`
+// runParse invokes "pmk parse --project <dir>" via `go run .`
 // executed from the project root (one directory above this test package).
+// binderPath is the path to the _binder.md file; the project dir is derived from it.
 func runParse(t *testing.T, binderPath string) runResult {
 	t.Helper()
-	cmd := exec.Command("go", "run", ".", "parse", binderPath)
+	cmd := exec.Command("go", "run", ".", "parse", "--project", filepath.Dir(binderPath))
 	cmd.Dir = ".."
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -49,11 +50,11 @@ func writeFile(t *testing.T, dir, name, content string) string {
 	return path
 }
 
-// runAddChild invokes "pmk add <binderPath>"
-// with any extra flag strings appended.
+// runAddChild invokes "pmk add --project <dir>" with any extra flag strings appended.
+// binderPath is the path to the _binder.md file; the project dir is derived from it.
 func runAddChild(t *testing.T, binderPath string, extraArgs ...string) runResult {
 	t.Helper()
-	args := []string{"run", ".", "add", binderPath}
+	args := []string{"run", ".", "add", "--project", filepath.Dir(binderPath)}
 	args = append(args, extraArgs...)
 	cmd := exec.Command("go", args...)
 	cmd.Dir = ".."
@@ -68,15 +69,15 @@ func runAddChild(t *testing.T, binderPath string, extraArgs ...string) runResult
 	}
 }
 
-// runDelete invokes "pmk delete <binderPath> --selector <sel>"
+// runDelete invokes "pmk delete --selector <sel> --project <dir>"
 // and optionally "--yes" if yes is true.
+// binderPath is the path to the _binder.md file; the project dir is derived from it.
 func runDelete(t *testing.T, binderPath, selector string, yes bool) runResult {
 	t.Helper()
-	args := []string{"run", ".", "delete", "--selector", selector}
+	args := []string{"run", ".", "delete", "--selector", selector, "--project", filepath.Dir(binderPath)}
 	if yes {
 		args = append(args, "--yes")
 	}
-	args = append(args, binderPath)
 	cmd := exec.Command("go", args...)
 	cmd.Dir = ".."
 	var stdout, stderr bytes.Buffer
@@ -90,11 +91,12 @@ func runDelete(t *testing.T, binderPath, selector string, yes bool) runResult {
 	}
 }
 
-// runMove invokes "pmk move <binderPath> --source <source> --dest <dest>"
+// runMove invokes "pmk move --source <source> --dest <dest> --project <dir>"
 // with any extra flag strings appended.
+// binderPath is the path to the _binder.md file; the project dir is derived from it.
 func runMove(t *testing.T, binderPath, source, dest string, extraArgs ...string) runResult {
 	t.Helper()
-	args := []string{"run", ".", "move", "--source", source, "--dest", dest, binderPath}
+	args := []string{"run", ".", "move", "--source", source, "--dest", dest, "--project", filepath.Dir(binderPath)}
 	args = append(args, extraArgs...)
 	cmd := exec.Command("go", args...)
 	cmd.Dir = ".."
