@@ -26,8 +26,7 @@ type AddChildIO interface {
 	WriteBinderAtomic(ctx context.Context, path string, data []byte) error
 }
 
-// newNodeIO is an optional extension of AddChildIO for --new mode.
-// Commands implementing this interface support atomic node file creation.
+// newNodeIO defines the I/O capabilities required for --new mode node file management.
 type newNodeIO interface {
 	WriteNodeFileAtomic(path string, content []byte) error
 	DeleteFile(path string) error
@@ -285,7 +284,7 @@ func runNewMode(ctx context.Context, cmd *cobra.Command, io NewNodeAddChildIO, b
 	return nil
 }
 
-// fileAddChildIO implements AddChildIO and newNodeIO using OS file I/O.
+// fileAddChildIO implements NewNodeAddChildIO using OS file I/O.
 type fileAddChildIO struct{}
 
 func newDefaultAddChildIO() *fileAddChildIO {
