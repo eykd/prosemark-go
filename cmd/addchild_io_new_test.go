@@ -41,6 +41,24 @@ func TestFileAddChildIO_DeleteFile(t *testing.T) {
 	}
 }
 
+func TestFileAddChildIO_ReadNodeFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "01234567-89ab-7def-0123-456789abcdef.md")
+	content := []byte("---\nid: 01234567-89ab-7def-0123-456789abcdef\n---\n")
+	if err := os.WriteFile(path, content, 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	fio := newDefaultAddChildIO()
+	got, err := fio.ReadNodeFile(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !bytes.Equal(got, content) {
+		t.Errorf("got %q, want %q", got, content)
+	}
+}
+
 func TestFileAddChildIO_OpenEditor(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "test.md")

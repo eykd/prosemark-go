@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/eykd/prosemark-go/internal/binder"
+	"github.com/eykd/prosemark-go/internal/node"
 )
 
 // mockAddChildIO is a test double for AddChildIO.
@@ -501,6 +502,11 @@ func (m *mockAddChildIOWithNew) OpenEditor(editor, path string) error {
 	return m.editorErr
 }
 
+// ReadNodeFile returns the most recently written node file content.
+func (m *mockAddChildIOWithNew) ReadNodeFile(_ string) ([]byte, error) {
+	return m.nodeWrittenContent, nil
+}
+
 // emptyBinder returns a minimal initialized binder with no children.
 func emptyBinder() []byte {
 	return []byte("<!-- prosemark-binder:v1 -->\n")
@@ -868,11 +874,9 @@ func TestNewAddChildCmd_NewMode_FrontmatterFields(t *testing.T) {
 
 // ─── RED Cycle 4: Gaps identified in REVIEW ──────────────────────────────────
 
-// TestUUIDFilenameRe_RejectsNonV7UUID verifies that uuidFilenameRe accepts
+// TestIsUUIDFilename_RejectsNonV7UUID verifies that node.IsUUIDFilename accepts
 // only UUIDv7 filenames by requiring the third UUID group to begin with '7'.
-// Currently FAILS because the regex uses [0-9a-f]{4} for that group, which
-// accepts v1, v4, v6, and v8+ identifiers.
-func TestUUIDFilenameRe_RejectsNonV7UUID(t *testing.T) {
+func TestIsUUIDFilename_RejectsNonV7UUID(t *testing.T) {
 	tests := []struct {
 		name      string
 		input     string
@@ -891,9 +895,9 @@ func TestUUIDFilenameRe_RejectsNonV7UUID(t *testing.T) {
 	for _, tt := range tests {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
-			got := uuidFilenameRe.MatchString(tt.input)
+			got := node.IsUUIDFilename(tt.input)
 			if got != tt.wantMatch {
-				t.Errorf("uuidFilenameRe.MatchString(%q) = %v, want %v",
+				t.Errorf("node.IsUUIDFilename(%q) = %v, want %v",
 					tt.input, got, tt.wantMatch)
 			}
 		})

@@ -151,8 +151,8 @@ func TestNewAddChildCmd_NewMode_SynopsisWithoutTitle(t *testing.T) {
 	if !strings.Contains(content, "synopsis: Brief intro.") {
 		t.Errorf("expected synopsis in node content, got:\n%s", content)
 	}
-	if !strings.Contains(content, "title: \n") {
-		t.Errorf("expected empty title line in node content, got:\n%s", content)
+	if strings.Contains(content, "title:") {
+		t.Errorf("node content must not include 'title:' when no title is provided, got:\n%s", content)
 	}
 }
 

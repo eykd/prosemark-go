@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"time"
 
@@ -18,6 +17,7 @@ import (
 
 	"github.com/eykd/prosemark-go/internal/binder"
 	"github.com/eykd/prosemark-go/internal/binder/ops"
+	"github.com/eykd/prosemark-go/internal/node"
 )
 
 // AddChildIO handles I/O for the add command.
@@ -33,18 +33,7 @@ type newNodeIO interface {
 	WriteNodeFileAtomic(path string, content []byte) error
 	DeleteFile(path string) error
 	OpenEditor(editor, path string) error
-}
-
-// uuidFilenameRe matches a valid lowercase UUIDv7 filename (UUID.md).
-// The third group must start with '7' to enforce the UUIDv7 version nibble.
-var uuidFilenameRe = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12}\.md$`)
-
-// updatedLineRe matches the YAML frontmatter "updated: ..." line.
-var updatedLineRe = regexp.MustCompile(`(?m)^updated:.*$`)
-
-// refreshUpdated replaces the "updated:" line in YAML frontmatter with a new timestamp.
-func refreshUpdated(content []byte, timestamp string) []byte {
-	return updatedLineRe.ReplaceAll(content, []byte("updated: "+timestamp))
+	ReadNodeFile(path string) ([]byte, error)
 }
 
 // nodeIDGenerator generates a new UUIDv7-based node filename.
@@ -82,22 +71,6 @@ func hasControlChars(s string) bool {
 	return false
 }
 
-// buildNodeContent returns YAML frontmatter content for a new node file.
-// The synopsis key is omitted entirely when synopsis is empty.
-func buildNodeContent(uuidStem, title, synopsis, timestamp string) []byte {
-	var buf bytes.Buffer
-	buf.WriteString("---\n")
-	fmt.Fprintf(&buf, "id: %s\n", uuidStem)
-	fmt.Fprintf(&buf, "title: %s\n", title)
-	if synopsis != "" {
-		fmt.Fprintf(&buf, "synopsis: %s\n", synopsis)
-	}
-	fmt.Fprintf(&buf, "created: %s\n", timestamp)
-	fmt.Fprintf(&buf, "updated: %s\n", timestamp)
-	buf.WriteString("---\n")
-	return buf.Bytes()
-}
-
 // validateNewModeInput validates --target, --title, and --synopsis for --new mode.
 // target may be empty (will be generated); title is required; synopsis is optional.
 func validateNewModeInput(target, title, synopsis string) error {
@@ -105,7 +78,7 @@ func validateNewModeInput(target, title, synopsis string) error {
 		if strings.ContainsRune(target, os.PathSeparator) {
 			return fmt.Errorf("target must not contain path separators")
 		}
-		if !uuidFilenameRe.MatchString(target) {
+		if !node.IsUUIDFilename(target) {
 			return fmt.Errorf("target must be a valid UUID filename when --new is set")
 		}
 	}
@@ -293,7 +266,14 @@ func runNewMode(ctx context.Context, cmd *cobra.Command, io AddChildIO, binderPa
 	binderDir := filepath.Dir(binderPath)
 	nodePath := filepath.Join(binderDir, params.Target)
 	timestamp := time.Now().UTC().Format(time.RFC3339)
-	content := buildNodeContent(uuidStem, params.Title, synopsis, timestamp)
+	fm := node.Frontmatter{
+		ID:       uuidStem,
+		Title:    params.Title,
+		Synopsis: synopsis,
+		Created:  timestamp,
+		Updated:  timestamp,
+	}
+	content := node.SerializeFrontmatter(fm)
 
 	if err := nodeIO.WriteNodeFileAtomic(nodePath, content); err != nil {
 		return fmt.Errorf("creating node file: %w", err)
@@ -334,7 +314,17 @@ func runNewMode(ctx context.Context, cmd *cobra.Command, io AddChildIO, binderPa
 			return fmt.Errorf("opening editor: %w", err)
 		}
 		// Refresh the 'updated' frontmatter field after the editor exits.
-		refreshed := refreshUpdated(content, time.Now().UTC().Format(time.RFC3339))
+		// Re-read the file so that body text added by the editor is preserved.
+		currentContent, readErr := nodeIO.ReadNodeFile(nodePath)
+		if readErr != nil {
+			return fmt.Errorf("reading node file after edit: %w", readErr)
+		}
+		parsedFM, body, parseErr := node.ParseFrontmatter(currentContent)
+		if parseErr != nil {
+			return fmt.Errorf("parsing node file after edit: %w", parseErr)
+		}
+		parsedFM.Updated = time.Now().UTC().Format(time.RFC3339)
+		refreshed := append(node.SerializeFrontmatter(parsedFM), body...)
 		if writeErr := nodeIO.WriteNodeFileAtomic(nodePath, refreshed); writeErr != nil {
 			return fmt.Errorf("refreshing node file after edit: %w", writeErr)
 		}
@@ -432,4 +422,14 @@ func (w *fileAddChildIO) OpenEditorImpl(editor, path string) error {
 	c.Stdout = os.Stdout
 	c.Stderr = os.Stderr
 	return c.Run()
+}
+
+// ReadNodeFile reads the node file at path.
+func (w *fileAddChildIO) ReadNodeFile(path string) ([]byte, error) {
+	return w.ReadNodeFileImpl(path)
+}
+
+// ReadNodeFileImpl reads the node file at path using os.ReadFile.
+func (w *fileAddChildIO) ReadNodeFileImpl(path string) ([]byte, error) {
+	return os.ReadFile(path)
 }
