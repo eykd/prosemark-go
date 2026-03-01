@@ -48,8 +48,6 @@ func newInitCmdWithGetCWD(io InitIO, getwd func() (string, error)) *cobra.Comman
 				return fmt.Errorf("_binder.md already exists in %s; use --force to overwrite", project)
 			}
 
-			needsWarning := force && binderExists
-
 			const binderContent = "<!-- prosemark-binder:v1 -->\n"
 			if err := io.WriteFileAtomic(binderPath, binderContent); err != nil {
 				return fmt.Errorf("writing _binder.md: %w", err)
@@ -60,7 +58,7 @@ func newInitCmdWithGetCWD(io InitIO, getwd func() (string, error)) *cobra.Comman
 				return fmt.Errorf("checking %s: %w", configPath, err)
 			}
 
-			needsWarning = needsWarning || (force && configExists)
+			needsWarning := force && (binderExists || configExists)
 
 			if !configExists || force {
 				const configContent = "version: \"1\"\n"
