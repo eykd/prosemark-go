@@ -206,6 +206,34 @@ func TestParseFrontmatter(t *testing.T) {
 			wantErr: true,
 		},
 		{
+			// YAML escape sequence \x01 is syntactically valid YAML (yaml.v3 processes it
+			// without error) but produces an SOH control character (0x01) in the decoded
+			// field value. ParseFrontmatter must reject these decoded control characters.
+			name: "SOH control char via YAML escape (\\x01) in synopsis returns error",
+			content: "---\n" +
+				"id: 0192f0c1-3e7a-7000-8000-5a4b3c2d1e0f\n" +
+				"synopsis: \"\\x01embedded control char\"\n" +
+				"created: 2026-02-28T15:04:05Z\n" +
+				"updated: 2026-02-28T15:04:05Z\n" +
+				"---\n" +
+				"\nBody here.\n",
+			wantErr: true,
+		},
+		{
+			// YAML escape sequence \0 is syntactically valid YAML (yaml.v3 processes it
+			// without error) but produces a null byte (0x00) in the decoded field value.
+			// ParseFrontmatter must reject decoded null bytes in field values.
+			name: "null byte via YAML escape (\\0) in title returns error",
+			content: "---\n" +
+				"id: 0192f0c1-3e7a-7000-8000-5a4b3c2d1e0f\n" +
+				"title: \"\\0null byte in title\"\n" +
+				"created: 2026-02-28T15:04:05Z\n" +
+				"updated: 2026-02-28T15:04:05Z\n" +
+				"---\n" +
+				"\nBody here.\n",
+			wantErr: true,
+		},
+		{
 			name: "body with only whitespace is returned as-is (AUD006 is caller concern)",
 			content: "---\n" +
 				"id: 0192f0c1-3e7a-7000-8000-5a4b3c2d1e0f\n" +
@@ -307,11 +335,7 @@ func TestSerializeFrontmatter(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := node.SerializeFrontmatter(tt.fm)
-			if err != nil {
-				t.Fatalf("SerializeFrontmatter() error = %v", err)
-			}
-			out := string(got)
+			out := string(node.SerializeFrontmatter(tt.fm))
 
 			if !strings.HasPrefix(out, tt.wantPrefix) {
 				t.Errorf("output does not start with %q:\n%s", tt.wantPrefix, out)

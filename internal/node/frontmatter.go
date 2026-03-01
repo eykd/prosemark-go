@@ -57,9 +57,9 @@ func ParseFrontmatter(content []byte) (Frontmatter, []byte, error) {
 }
 
 // containsControlChars reports whether s contains any control characters that
-// are not permitted in frontmatter field values. Tab (0x09), newline (0x0A),
-// and carriage return (0x0D) are allowed; all other characters below U+0020
-// and the DEL character (0x7F) are rejected.
+// are not permitted in frontmatter field values. The range 0x09–0x0D (TAB,
+// LF, VT, FF, CR) is allowed; all other characters below U+0020 and the DEL
+// character (0x7F) are rejected.
 func containsControlChars(s string) bool {
 	for _, r := range s {
 		if r < 0x09 || (r > 0x0D && r < 0x20) || r == 0x7F {
@@ -73,7 +73,7 @@ func containsControlChars(s string) bool {
 // Field order: id → title → synopsis → created → updated.
 // Empty optional fields (title, synopsis) are omitted.
 // The output is wrapped in "---\n" delimiters.
-func SerializeFrontmatter(fm Frontmatter) ([]byte, error) {
+func SerializeFrontmatter(fm Frontmatter) []byte {
 	var buf bytes.Buffer
 	buf.WriteString("---\n")
 	buf.WriteString("id: " + fm.ID + "\n")
@@ -86,7 +86,7 @@ func SerializeFrontmatter(fm Frontmatter) ([]byte, error) {
 	buf.WriteString("created: " + fm.Created + "\n")
 	buf.WriteString("updated: " + fm.Updated + "\n")
 	buf.WriteString("---\n")
-	return buf.Bytes(), nil
+	return buf.Bytes()
 }
 
 // ValidateNode checks the given node for AUD004, AUD005, and AUD006 violations.
