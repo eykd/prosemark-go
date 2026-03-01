@@ -64,15 +64,34 @@ func hasControlChars(s string) bool {
 
 // buildNodeContent returns YAML frontmatter content for a new node file.
 func buildNodeContent(uuidStem, title, synopsis, timestamp string) []byte {
-	var sb strings.Builder
-	sb.WriteString("---\n")
-	sb.WriteString("id: " + uuidStem + "\n")
-	sb.WriteString("title: " + title + "\n")
-	sb.WriteString("synopsis: " + synopsis + "\n")
-	sb.WriteString("created: " + timestamp + "\n")
-	sb.WriteString("updated: " + timestamp + "\n")
-	sb.WriteString("---\n")
-	return []byte(sb.String())
+	return []byte(fmt.Sprintf("---\nid: %s\ntitle: %s\nsynopsis: %s\ncreated: %s\nupdated: %s\n---\n",
+		uuidStem, title, synopsis, timestamp, timestamp))
+}
+
+// validateNewModeInput validates --target, --title, and --synopsis for --new mode.
+// target may be empty (will be generated); title and synopsis are always validated.
+func validateNewModeInput(target, title, synopsis string) error {
+	if target != "" {
+		if strings.ContainsRune(target, os.PathSeparator) {
+			return fmt.Errorf("target must not contain path separators")
+		}
+		if !uuidFilenameRe.MatchString(target) {
+			return fmt.Errorf("target must be a valid UUID filename when --new is set")
+		}
+	}
+	if len(title) > 500 {
+		return fmt.Errorf("--title must be 500 characters or fewer")
+	}
+	if hasControlChars(title) {
+		return fmt.Errorf("--title must not contain control characters")
+	}
+	if len(synopsis) > 2000 {
+		return fmt.Errorf("--synopsis must be 2000 characters or fewer")
+	}
+	if hasControlChars(synopsis) {
+		return fmt.Errorf("--synopsis must not contain control characters")
+	}
+	return nil
 }
 
 // NewAddChildCmd creates the add subcommand.
@@ -142,31 +161,22 @@ func newAddChildCmdWithGetCWD(io AddChildIO, getwd func() (string, error)) *cobr
 				position = "first"
 			}
 
+			params := binder.AddChildParams{
+				ParentSelector: parent,
+				Target:         target,
+				Title:          title,
+				Position:       position,
+				Before:         before,
+				After:          after,
+				Force:          force,
+			}
+			if cmd.Flags().Changed("at") {
+				params.At = &at
+			}
+
 			if newMode {
-				// Validate target (must be UUID filename format; no path separators).
-				if target != "" {
-					if strings.ContainsRune(target, os.PathSeparator) {
-						return fmt.Errorf("target must not contain path separators")
-					}
-					if !uuidFilenameRe.MatchString(target) {
-						return fmt.Errorf("target must be a valid UUID filename when --new is set")
-					}
-				}
-
-				// Validate title (≤500 chars, no control characters).
-				if len(title) > 500 {
-					return fmt.Errorf("--title must be 500 characters or fewer")
-				}
-				if hasControlChars(title) {
-					return fmt.Errorf("--title must not contain control characters")
-				}
-
-				// Validate synopsis (≤2000 chars, no control characters).
-				if len(synopsis) > 2000 {
-					return fmt.Errorf("--synopsis must be 2000 characters or fewer")
-				}
-				if hasControlChars(synopsis) {
-					return fmt.Errorf("--synopsis must not contain control characters")
+				if err := validateNewModeInput(target, title, synopsis); err != nil {
+					return err
 				}
 
 				// Generate UUID filename if not explicitly provided.
@@ -176,6 +186,7 @@ func newAddChildCmdWithGetCWD(io AddChildIO, getwd func() (string, error)) *cobr
 						return fmt.Errorf("generating node ID: %w", genErr)
 					}
 					target = id
+					params.Target = target
 				}
 
 				// Require IO that supports node file creation.
@@ -192,19 +203,6 @@ func newAddChildCmdWithGetCWD(io AddChildIO, getwd func() (string, error)) *cobr
 
 				if err := nnIO.WriteNodeFileAtomic(nodePath, content); err != nil {
 					return fmt.Errorf("creating node file: %w", err)
-				}
-
-				params := binder.AddChildParams{
-					ParentSelector: parent,
-					Target:         target,
-					Title:          title,
-					Position:       position,
-					Before:         before,
-					After:          after,
-					Force:          force,
-				}
-				if cmd.Flags().Changed("at") {
-					params.At = &at
 				}
 
 				modifiedBytes, diags, _ := ops.AddChild(ctx, binderBytes, proj, params) //nolint:errcheck
@@ -239,19 +237,6 @@ func newAddChildCmdWithGetCWD(io AddChildIO, getwd func() (string, error)) *cobr
 				}
 
 				return nil
-			}
-
-			params := binder.AddChildParams{
-				ParentSelector: parent,
-				Target:         target,
-				Title:          title,
-				Position:       position,
-				Before:         before,
-				After:          after,
-				Force:          force,
-			}
-			if cmd.Flags().Changed("at") {
-				params.At = &at
 			}
 
 			modifiedBytes, diags, _ := ops.AddChild(ctx, binderBytes, proj, params) //nolint:errcheck
