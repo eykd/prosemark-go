@@ -33,6 +33,9 @@ var frontmatterRE = regexp.MustCompile(`(?s)^---\n(.*?)\n---\n`)
 // frontmatter and body is located by frontmatterRE, which matches the first
 // unindented closing "---" — so "---" inside YAML block scalars (which are
 // always indented by at least one space) does not cause a false split.
+// ParseFrontmatter rejects decoded field values that contain control characters
+// (including null bytes and other non-printable characters below U+0020, except
+// for tab, newline, and carriage return which are valid in multi-line fields).
 func ParseFrontmatter(content []byte) (Frontmatter, []byte, error) {
 	loc := frontmatterRE.FindIndex(content)
 	if loc == nil {
@@ -44,7 +47,26 @@ func ParseFrontmatter(content []byte) (Frontmatter, []byte, error) {
 		return Frontmatter{}, nil, fmt.Errorf("parse frontmatter: %w", err)
 	}
 
+	for _, field := range []string{fm.ID, fm.Title, fm.Synopsis, fm.Created, fm.Updated} {
+		if containsControlChars(field) {
+			return Frontmatter{}, nil, errors.New("frontmatter field contains invalid control character")
+		}
+	}
+
 	return fm, bytes.Clone(content[loc[1]:]), nil
+}
+
+// containsControlChars reports whether s contains any control characters that
+// are not permitted in frontmatter field values. Tab (0x09), newline (0x0A),
+// and carriage return (0x0D) are allowed; all other characters below U+0020
+// and the DEL character (0x7F) are rejected.
+func containsControlChars(s string) bool {
+	for _, r := range s {
+		if r < 0x09 || (r > 0x0D && r < 0x20) || r == 0x7F {
+			return true
+		}
+	}
+	return false
 }
 
 // SerializeFrontmatter serializes fm into a canonical frontmatter block.
