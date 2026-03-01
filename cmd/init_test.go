@@ -49,7 +49,6 @@ func TestNewInitCmd_HasRequiredFlags(t *testing.T) {
 	c := NewInitCmd(nil)
 	required := []string{"project", "force"}
 	for _, name := range required {
-		name := name
 		t.Run(name, func(t *testing.T) {
 			if c.Flags().Lookup(name) == nil {
 				t.Errorf("expected --%s flag on init command", name)
@@ -137,7 +136,6 @@ func TestNewInitCmd_Scenarios(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			mock := newMockInitIO()
 			mock.binderExists = tt.binderExists

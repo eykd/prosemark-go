@@ -60,9 +60,7 @@ func newInitCmdWithGetCWD(io InitIO, getwd func() (string, error)) *cobra.Comman
 				return fmt.Errorf("checking %s: %w", configPath, err)
 			}
 
-			if force && configExists {
-				needsWarning = true
-			}
+			needsWarning = needsWarning || (force && configExists)
 
 			if !configExists || force {
 				const configContent = "# prosemark project configuration\n"
