@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"errors"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -99,5 +100,82 @@ func TestRootCmd_InitHelp_ShowsUsage(t *testing.T) {
 	want := "Initialize a prosemark project"
 	if !strings.Contains(out.String(), want) {
 		t.Errorf("'pmk init --help' output = %q, want to contain %q", out.String(), want)
+	}
+}
+
+// TestRootCmd_FileEditIO_ImplementsEditIO is a compile-time assertion that
+// fileEditIO (value, not pointer) satisfies the EditIO interface.
+// Acceptance: NewEditCmd(fileEditIO{}) registered via rootCmd.AddCommand.
+func TestRootCmd_FileEditIO_ImplementsEditIO(t *testing.T) {
+	var _ EditIO = fileEditIO{} // fileEditIO value must implement EditIO
+	t.Log("fileEditIO value satisfies EditIO")
+}
+
+// TestRootCmd_EditHelp_ShowsUsage verifies pmk edit --help from the root
+// command shows the edit command description.
+func TestRootCmd_EditHelp_ShowsUsage(t *testing.T) {
+	root := NewRootCmd()
+	out := new(bytes.Buffer)
+	root.SetOut(out)
+	root.SetErr(new(bytes.Buffer))
+	root.SetArgs([]string{"edit", "--help"})
+	_ = root.Execute()
+
+	want := "Open a node file in $EDITOR"
+	if !strings.Contains(out.String(), want) {
+		t.Errorf("'pmk edit --help' output = %q, want to contain %q", out.String(), want)
+	}
+}
+
+// TestRootCmd_EditCmd_BinderNotFound_ShowsProjectNotInitialized verifies that
+// pmk edit in a directory without _binder.md produces an error message guiding
+// the user to run 'pmk init' first, per plan.md §Binder Parse Failure in pmk edit.
+func TestRootCmd_EditCmd_BinderNotFound_ShowsProjectNotInitialized(t *testing.T) {
+	dir := t.TempDir() // empty dir — no _binder.md
+	t.Setenv("EDITOR", "true")
+
+	root := NewRootCmd()
+	root.SetOut(new(bytes.Buffer))
+	errOut := new(bytes.Buffer)
+	root.SetErr(errOut)
+	root.SetArgs([]string{"edit", "--project", dir, "01234567-89ab-7def-0123-456789abcdef"})
+
+	err := root.Execute()
+	if err == nil {
+		t.Fatal("expected error when _binder.md does not exist")
+	}
+	want := "project not initialized"
+	combined := err.Error() + errOut.String()
+	if !strings.Contains(combined, want) {
+		t.Errorf("expected error to contain %q, got err=%q stderr=%q", want, err.Error(), errOut.String())
+	}
+}
+
+// TestRootCmd_EditCmd_BinderParseError_ShowsCannotParse verifies that pmk edit
+// produces a "cannot parse binder" error message when _binder.md exists but is
+// malformed, per plan.md §Binder Parse Failure in pmk edit case (3).
+func TestRootCmd_EditCmd_BinderParseError_ShowsCannotParse(t *testing.T) {
+	dir := t.TempDir()
+	binderPath := filepath.Join(dir, "_binder.md")
+	// Write an invalid binder file (bad UTF-8 → binder.Parse returns error)
+	if err := os.WriteFile(binderPath, []byte{0xff, 0xfe}, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("EDITOR", "true")
+
+	root := NewRootCmd()
+	root.SetOut(new(bytes.Buffer))
+	errOut := new(bytes.Buffer)
+	root.SetErr(errOut)
+	root.SetArgs([]string{"edit", "--project", dir, "01234567-89ab-7def-0123-456789abcdef"})
+
+	err := root.Execute()
+	if err == nil {
+		t.Fatal("expected error when _binder.md is malformed")
+	}
+	want := "cannot parse binder"
+	combined := err.Error() + errOut.String()
+	if !strings.Contains(combined, want) {
+		t.Errorf("expected error to contain %q, got err=%q stderr=%q", want, err.Error(), errOut.String())
 	}
 }
