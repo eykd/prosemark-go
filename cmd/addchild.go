@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -219,6 +220,18 @@ func newAddChildCmdWithGetCWD(io AddChildIO, getwd func() (string, error)) *cobr
 				}
 
 				printDiagnostics(cmd, diags)
+
+				hasOpsError := false
+				for _, d := range diags {
+					if d.Severity == "error" {
+						hasOpsError = true
+						break
+					}
+				}
+				if hasOpsError {
+					rollbackErr := nnIO.DeleteFile(nodePath)
+					return errors.Join(fmt.Errorf("add has errors"), rollbackErr)
+				}
 
 				changed := !bytes.Equal(binderBytes, modifiedBytes)
 				if changed {
