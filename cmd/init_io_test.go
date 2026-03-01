@@ -13,7 +13,7 @@ func TestFileInitIO_StatFile_ExistingFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	fio := newDefaultInitIO()
+	fio := fileInitIO{}
 	exists, err := fio.StatFile(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -24,7 +24,7 @@ func TestFileInitIO_StatFile_ExistingFile(t *testing.T) {
 }
 
 func TestFileInitIO_StatFile_NonExistentFile(t *testing.T) {
-	fio := newDefaultInitIO()
+	fio := fileInitIO{}
 	exists, err := fio.StatFile(filepath.Join(t.TempDir(), "nonexistent.md"))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -39,7 +39,7 @@ func TestFileInitIO_WriteFileAtomic(t *testing.T) {
 	path := filepath.Join(dir, "_binder.md")
 	content := "<!-- prosemark-binder:v1 -->\n"
 
-	fio := newDefaultInitIO()
+	fio := fileInitIO{}
 	if err := fio.WriteFileAtomic(path, content); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -60,7 +60,7 @@ func TestFileInitIO_WriteFileAtomic_CreatesWithCorrectPermissions(t *testing.T) 
 	dir := t.TempDir()
 	path := filepath.Join(dir, "_binder.md")
 
-	fio := newDefaultInitIO()
+	fio := fileInitIO{}
 	if err := fio.WriteFileAtomic(path, "content"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -78,7 +78,7 @@ func TestFileInitIO_WriteFileAtomic_LeavesNothingOnError(t *testing.T) {
 	// Write to a path whose directory does not exist → must fail
 	path := filepath.Join(t.TempDir(), "nonexistent-dir", "_binder.md")
 
-	fio := newDefaultInitIO()
+	fio := fileInitIO{}
 	err := fio.WriteFileAtomic(path, "content")
 	if err == nil {
 		t.Error("expected error writing to nonexistent directory")

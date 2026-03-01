@@ -86,10 +86,6 @@ func newInitCmdWithGetCWD(io InitIO, getwd func() (string, error)) *cobra.Comman
 // fileInitIO implements InitIO using OS file I/O.
 type fileInitIO struct{}
 
-func newDefaultInitIO() *fileInitIO {
-	return &fileInitIO{}
-}
-
 // StatFile returns true if the file at path exists, false if it does not.
 // Returns an error only for unexpected OS errors.
 func (f fileInitIO) StatFile(path string) (bool, error) {

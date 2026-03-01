@@ -77,3 +77,27 @@ func TestResolveBinderPath_ReturnsErrorWhenGetCWDFails(t *testing.T) {
 		t.Error("expected error when getwd fails")
 	}
 }
+
+// TestRootCmd_FileInitIO_ImplementsInitIO is a compile-time assertion that
+// fileInitIO (value, not pointer) satisfies the InitIO interface.
+// Acceptance: NewInitCmd(fileInitIO{}) registered via rootCmd.AddCommand.
+func TestRootCmd_FileInitIO_ImplementsInitIO(t *testing.T) {
+	var _ InitIO = fileInitIO{} // fileInitIO value must implement InitIO
+	t.Log("fileInitIO value satisfies InitIO")
+}
+
+// TestRootCmd_InitHelp_ShowsUsage verifies pmk init --help from the root
+// command shows the init command description.
+func TestRootCmd_InitHelp_ShowsUsage(t *testing.T) {
+	root := NewRootCmd()
+	out := new(bytes.Buffer)
+	root.SetOut(out)
+	root.SetErr(new(bytes.Buffer))
+	root.SetArgs([]string{"init", "--help"})
+	_ = root.Execute()
+
+	want := "Initialize a prosemark project"
+	if !strings.Contains(out.String(), want) {
+		t.Errorf("'pmk init --help' output = %q, want to contain %q", out.String(), want)
+	}
+}
