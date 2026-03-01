@@ -133,6 +133,17 @@ func TestNewInitCmd_Scenarios(t *testing.T) {
 			wantErr:     true,
 			wantBinder:  false,
 		},
+		{
+			name:          "binder stat error",
+			binderStatErr: errors.New("stat failed"),
+			wantErr:       true,
+		},
+		{
+			name:          "config stat error",
+			configStatErr: errors.New("stat failed"),
+			wantErr:       true,
+			wantBinder:    true, // binder is written before config stat is checked
+		},
 	}
 
 	for _, tt := range tests {
@@ -213,6 +224,24 @@ func TestNewInitCmd_PartialInitErrorIncludesRecoveryHint(t *testing.T) {
 	combined := errOut.String() + err.Error()
 	if !strings.Contains(combined, "--force") {
 		t.Errorf("expected partial-init error to include --force recovery hint, got: %q", combined)
+	}
+}
+
+func TestNewInitCmd_ConfigFileContent(t *testing.T) {
+	mock := newMockInitIO()
+	c := newInitCmdWithGetCWD(mock, func() (string, error) { return ".", nil })
+	c.SetOut(new(bytes.Buffer))
+	c.SetErr(new(bytes.Buffer))
+	c.SetArgs([]string{"--project", "."})
+
+	if err := c.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	const wantConfigContent = "version: \"1\"\n"
+	got := mock.written[".prosemark.yml"]
+	if got != wantConfigContent {
+		t.Errorf(".prosemark.yml content = %q, want %q", got, wantConfigContent)
 	}
 }
 
