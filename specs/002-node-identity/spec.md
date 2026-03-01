@@ -108,7 +108,7 @@ An author wants to verify their project is internally consistent — all binder 
 ### Edge Cases
 
 - **Resolved**: `pmk add --new --edit` with `$EDITOR` unset — node and binder are created successfully, then the command exits with an error. The node persists in valid state. (See US2 Scenario 9.)
-- What happens when the UUID file write succeeds but the process is killed before the binder write completes?
+- **Resolved**: What happens when the UUID file write succeeds but the process is killed before the binder write completes? — SIGKILL/OOM-kill after node file creation is an unrecoverable race at the stated single-user scale. The orphaned file is detectable by `pmk doctor` as AUD002 (warning). Recovery: delete the orphaned file manually or link it via `pmk add --target`. No journal or lock file is introduced. (See plan.md §Signal-Interrupted `pmk add --new` Rollback Gap.)
 - **Resolved**: Syntactically malformed YAML frontmatter triggers AUD007 (distinct from AUD005 for field-level issues). (See US4 Scenario 11, FR-019c.)
 - Does `pmk doctor` scan only the immediate project root for orphan files, or also subdirectories? — **Resolved in Assumptions**: immediate project root only.
 - **Resolved**: `pmk edit` with `$EDITOR` unset — command fails immediately with error; no files created or modified. (See US3 Scenario 7.)
