@@ -633,3 +633,28 @@ func TestRootCmd_FileDoctorIO_ImplementsDoctorIO(t *testing.T) {
 
 // Compile-time assertion: *fileDoctorIO satisfies DoctorIO.
 var _ DoctorIO = (*fileDoctorIO)(nil)
+
+// ─── JSON encode error handling ───────────────────────────────────────────────
+
+// TestNewDoctorCmd_JSONEncodeError verifies that a write failure during --json
+// output is NOT silently discarded. The command must return an error when
+// json.Encode fails (e.g., stdout is closed or a pipe breaks).
+func TestNewDoctorCmd_JSONEncodeError(t *testing.T) {
+	// Clean project so hasErrorDiagnostic is false — the only error path is
+	// the encode failure itself.
+	mock := &mockDoctorIO{
+		binderBytes: doctorBinderWithNode(doctorTestNodeUUID),
+		nodeFiles: map[string]nodeFileEntry{
+			doctorTestNodeUUID + ".md": {content: validDoctorNodeContent(doctorTestNodeUUID), exists: true},
+		},
+	}
+	c := NewDoctorCmd(mock)
+	c.SetOut(&errWriter{err: errors.New("stdout closed")}) // write always fails
+	c.SetErr(new(bytes.Buffer))
+	c.SetArgs([]string{"--project", ".", "--json"})
+
+	err := c.Execute()
+	if err == nil {
+		t.Error("expected error when JSON encoding fails, got nil")
+	}
+}
