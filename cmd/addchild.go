@@ -213,6 +213,32 @@ func newAddChildCmdWithGetCWD(io NewNodeAddChildIO, getwd func() (string, error)
 	return cmd
 }
 
+// nodeRefresher is the minimal IO surface needed to refresh a node file's
+// 'updated' frontmatter timestamp after an editor session.
+type nodeRefresher interface {
+	ReadNodeFile(path string) ([]byte, error)
+	WriteNodeFileAtomic(path string, content []byte) error
+}
+
+// refreshNodeUpdated reads the node file at path, stamps the 'updated'
+// frontmatter field with the current UTC time, and writes it back atomically.
+func refreshNodeUpdated(io nodeRefresher, path string) error {
+	content, err := io.ReadNodeFile(path)
+	if err != nil {
+		return fmt.Errorf("reading node file after edit: %w", err)
+	}
+	fm, body, err := node.ParseFrontmatter(content)
+	if err != nil {
+		return fmt.Errorf("parsing node file after edit: %w", err)
+	}
+	fm.Updated = nowUTCFunc()
+	refreshed := append(node.SerializeFrontmatter(fm), body...)
+	if err := io.WriteNodeFileAtomic(path, refreshed); err != nil {
+		return fmt.Errorf("refreshing node file after edit: %w", err)
+	}
+	return nil
+}
+
 // runNewMode handles the --new flag workflow: creates a UUID node file, updates
 // the binder, and optionally opens an editor to populate the file.
 // params.Target must already be set to a valid UUID filename before calling.
@@ -268,20 +294,10 @@ func runNewMode(ctx context.Context, cmd *cobra.Command, io NewNodeAddChildIO, b
 		if err := io.OpenEditor(editor, nodePath); err != nil {
 			return fmt.Errorf("opening editor: %w", err)
 		}
-		// Refresh the 'updated' frontmatter field after the editor exits.
-		// Re-read the file so that body text added by the editor is preserved.
-		currentContent, readErr := io.ReadNodeFile(nodePath)
-		if readErr != nil {
-			return fmt.Errorf("reading node file after edit: %w", readErr)
-		}
-		parsedFM, body, parseErr := node.ParseFrontmatter(currentContent)
-		if parseErr != nil {
-			return fmt.Errorf("parsing node file after edit: %w", parseErr)
-		}
-		parsedFM.Updated = nowUTCFunc()
-		refreshed := append(node.SerializeFrontmatter(parsedFM), body...)
-		if writeErr := io.WriteNodeFileAtomic(nodePath, refreshed); writeErr != nil {
-			return fmt.Errorf("refreshing node file after edit: %w", writeErr)
+		// Re-read the file after the editor exits so body text is preserved,
+		// then stamp the 'updated' frontmatter field and write back atomically.
+		if err := refreshNodeUpdated(io, nodePath); err != nil {
+			return err
 		}
 	}
 
@@ -370,9 +386,13 @@ func (w *fileAddChildIO) OpenEditor(editor, path string) error {
 	return w.OpenEditorImpl(editor, path)
 }
 
-// OpenEditorImpl launches the editor process and waits for it to exit.
+// OpenEditorImpl launches the editor process, splitting $EDITOR with strings.Fields.
 func (w *fileAddChildIO) OpenEditorImpl(editor, path string) error {
-	c := exec.Command(editor, path)
+	parts := strings.Fields(editor)
+	if len(parts) == 0 {
+		return fmt.Errorf("EDITOR is empty")
+	}
+	c := exec.Command(parts[0], append(parts[1:], path)...)
 	c.Stdin = os.Stdin
 	c.Stdout = os.Stdout
 	c.Stderr = os.Stderr

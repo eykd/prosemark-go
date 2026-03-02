@@ -11,7 +11,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/eykd/prosemark-go/internal/binder"
-	"github.com/eykd/prosemark-go/internal/node"
 )
 
 // EditIO handles I/O for the edit command.
@@ -110,21 +109,10 @@ func newEditCmdWithGetCWD(io EditIO, getwd func() (string, error)) *cobra.Comman
 				return fmt.Errorf("editor: %w", err)
 			}
 
-			draftContent, err := io.ReadNodeFile(draftPath)
-			if err != nil {
-				return fmt.Errorf("reading node file after edit: %w", err)
-			}
-
-			fm, body, err := node.ParseFrontmatter(draftContent)
-			if err != nil {
-				return fmt.Errorf("parsing frontmatter after edit: %w", err)
-			}
-
-			fm.Updated = node.NowUTC()
-			newContent := append(node.SerializeFrontmatter(fm), body...)
-
-			if err := io.WriteNodeFileAtomic(draftPath, newContent); err != nil {
-				return fmt.Errorf("writing node file: %w", err)
+			// Re-read the draft after the editor exits so body text is preserved,
+			// then stamp the 'updated' frontmatter field and write back atomically.
+			if err := refreshNodeUpdated(io, draftPath); err != nil {
+				return err
 			}
 
 			return nil
