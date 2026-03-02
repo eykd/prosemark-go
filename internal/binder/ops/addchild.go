@@ -116,9 +116,16 @@ func AddChild(ctx context.Context, src []byte, project *binder.Project, params b
 	return binder.Serialize(result), allDiags, nil
 }
 
-// validateOpTarget checks OPE004 (path escapes root, illegal chars, non-.md extension)
-// and OPE005 (target is binder).
+// validateOpTarget checks OPE004 (absolute path, path escapes root, illegal chars,
+// non-.md extension) and OPE005 (target is binder).
 func validateOpTarget(target string) *binder.Diagnostic {
+	if strings.HasPrefix(target, "/") {
+		return &binder.Diagnostic{
+			Severity: "error",
+			Code:     binder.CodeInvalidTargetPath,
+			Message:  "target path must be relative, not absolute",
+		}
+	}
 	if opEscapesRoot(target) {
 		return &binder.Diagnostic{
 			Severity: "error",

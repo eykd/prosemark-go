@@ -1055,3 +1055,44 @@ func TestNewAddChildCmd_NewMode_EditRefreshesUpdated(t *testing.T) {
 		t.Errorf("refreshed node file missing 'updated:' field\ncontent:\n%s", refreshed)
 	}
 }
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Absolute path rejection (prosemark-go-irm)
+// ──────────────────────────────────────────────────────────────────────────────
+
+// TestNewAddChildCmd_AbsoluteTargetReturnsError verifies that --target with an
+// absolute path is rejected: the command must return a non-nil error and print
+// nothing to stdout.
+func TestNewAddChildCmd_AbsoluteTargetReturnsError(t *testing.T) {
+	tests := []struct {
+		name   string
+		target string
+	}{
+		{"unix_root_file", "/file.md"},
+		{"unix_deep_path", "/absolute/path/to/file.md"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock := &mockAddChildIO{
+				binderBytes: acBinder(),
+				project:     &binder.Project{Files: []string{}, BinderDir: "."},
+			}
+			c := NewAddChildCmd(mock)
+			out := new(bytes.Buffer)
+			errOut := new(bytes.Buffer)
+			c.SetOut(out)
+			c.SetErr(errOut)
+			c.SetArgs([]string{"--parent", ".", "--target", tt.target, "--project", "."})
+
+			err := c.Execute()
+
+			if err == nil {
+				t.Errorf("expected error for absolute target %q, got nil", tt.target)
+			}
+			if out.Len() > 0 {
+				t.Errorf("expected no stdout on error, got: %q", out.String())
+			}
+		})
+	}
+}

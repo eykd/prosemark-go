@@ -1006,3 +1006,45 @@ func TestAddChild_BracketTitle_DoubleRoundTrip(t *testing.T) {
 		t.Fatalf("expected 2 children after second add+parse, got %d; double-escape zombie bug", len(result2.Root.Children))
 	}
 }
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Absolute path rejection (prosemark-go-irm)
+// ──────────────────────────────────────────────────────────────────────────────
+
+// TestAddChild_AbsoluteTarget_ReturnsOPE004 verifies that an absolute path as
+// --target is rejected with OPE004 and leaves the binder unchanged.
+func TestAddChild_AbsoluteTarget_ReturnsOPE004(t *testing.T) {
+	tests := []struct {
+		name   string
+		target string
+	}{
+		{"unix_root_file", "/file.md"},
+		{"unix_deep_path", "/absolute/path/to/file.md"},
+		{"unix_single_dir", "/foo.md"},
+	}
+
+	src := binderSrc("- [Alpha](alpha.md)")
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			params := binder.AddChildParams{
+				ParentSelector: ".",
+				Target:         tt.target,
+				Title:          "Absolute",
+				Position:       "last",
+			}
+
+			out, diags, err := AddChild(context.Background(), src, nil, params)
+
+			if err != nil {
+				t.Fatalf("unexpected fatal error: %v", err)
+			}
+			if !hasDiagCode(diags, binder.CodeInvalidTargetPath) {
+				t.Errorf("expected OPE004 diagnostic for absolute target %q, got: %v", tt.target, diags)
+			}
+			if !bytes.Equal(out, src) {
+				t.Errorf("expected src unchanged on OPE004 for target %q", tt.target)
+			}
+		})
+	}
+}
