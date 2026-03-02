@@ -1221,3 +1221,53 @@ func TestParse_EscapedBracketTitle(t *testing.T) {
 		t.Errorf("Target = %q, want %q", result.Root.Children[0].Target, "ch1.md")
 	}
 }
+
+// TestParse_EscapedBracketTitle_TitleIsDisplayForm verifies that Node.Title
+// returned by Parse contains the display form (unescaped) of a backslash-escaped
+// bracket title. A title stored as \[Special\] Title must be exposed as
+// [Special] Title so that callers re-using the title in a second add-child do
+// not cause double-escaping.
+func TestParse_EscapedBracketTitle_TitleIsDisplayForm(t *testing.T) {
+	tests := []struct {
+		name      string
+		src       string
+		wantTitle string
+	}{
+		{
+			name:      "single escaped bracket pair",
+			src:       "<!-- prosemark-binder:v1 -->\n- [\\[Special\\] Title](ch1.md)\n",
+			wantTitle: "[Special] Title",
+		},
+		{
+			name:      "leading bracket only",
+			src:       "<!-- prosemark-binder:v1 -->\n- [\\[Bracketed](ch1.md)\n",
+			wantTitle: "[Bracketed",
+		},
+		{
+			name:      "multiple bracket pairs",
+			src:       "<!-- prosemark-binder:v1 -->\n- [Chapter \\[One\\] and \\[Two\\]](ch1.md)\n",
+			wantTitle: "Chapter [One] and [Two]",
+		},
+		{
+			name:      "no brackets, no change",
+			src:       "<!-- prosemark-binder:v1 -->\n- [Plain Title](ch1.md)\n",
+			wantTitle: "Plain Title",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, _, err := binder.Parse(context.Background(), []byte(tt.src), nil)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if len(result.Root.Children) != 1 {
+				t.Fatalf("expected 1 child, got %d", len(result.Root.Children))
+			}
+			gotTitle := result.Root.Children[0].Title
+			if gotTitle != tt.wantTitle {
+				t.Errorf("Node.Title = %q, want %q (display form without backslash escapes)", gotTitle, tt.wantTitle)
+			}
+		})
+	}
+}

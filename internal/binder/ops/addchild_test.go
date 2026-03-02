@@ -848,3 +848,59 @@ func TestAddChild_BracketTitleRoundTrip(t *testing.T) {
 		t.Errorf("Target = %q, want %q", result.Root.Children[0].Target, "chapter.md")
 	}
 }
+
+// TestAddChild_BracketTitle_DoubleRoundTrip verifies that using the title
+// returned by Parse in a second AddChild call does not cause double-escaping.
+// The bug: AddChild stores "[Foo]" as "\[Foo\]"; Parse returns "\[Foo\]" as
+// Node.Title; re-adding with that title produces "\\[Foo\\]" which the parser
+// cannot read, silently dropping the node ("zombie entry").
+func TestAddChild_BracketTitle_DoubleRoundTrip(t *testing.T) {
+	proj := &binder.Project{Files: []string{"alpha.md", "beta.md"}, BinderDir: "."}
+
+	// First add: user provides the display title with brackets.
+	out1, _, err := AddChild(context.Background(), binderSrc(), proj, binder.AddChildParams{
+		ParentSelector: ".",
+		Target:         "alpha.md",
+		Title:          "[Brackets] Test",
+		Position:       "last",
+	})
+	if err != nil {
+		t.Fatalf("first AddChild error: %v", err)
+	}
+
+	// Parse to get the title as returned to the caller (e.g. via JSON output).
+	result1, _, err := binder.Parse(context.Background(), out1, proj)
+	if err != nil {
+		t.Fatalf("first parse error: %v", err)
+	}
+	if len(result1.Root.Children) != 1 {
+		t.Fatalf("expected 1 child after first add, got %d", len(result1.Root.Children))
+	}
+	parsedTitle := result1.Root.Children[0].Title
+
+	// The returned title must already be in display form so re-using it is safe.
+	if parsedTitle != "[Brackets] Test" {
+		t.Errorf("first parse: Node.Title = %q, want %q (display form)", parsedTitle, "[Brackets] Test")
+	}
+
+	// Second add: user re-uses the title returned by parse (common workflow).
+	out2, _, err := AddChild(context.Background(), out1, proj, binder.AddChildParams{
+		ParentSelector: ".",
+		Target:         "beta.md",
+		Title:          parsedTitle,
+		Position:       "last",
+	})
+	if err != nil {
+		t.Fatalf("second AddChild error: %v", err)
+	}
+
+	// Both nodes must survive the second parse. If double-escaping occurred,
+	// the second node becomes a zombie and silently disappears.
+	result2, _, err := binder.Parse(context.Background(), out2, proj)
+	if err != nil {
+		t.Fatalf("second parse error: %v", err)
+	}
+	if len(result2.Root.Children) != 2 {
+		t.Fatalf("expected 2 children after second add+parse, got %d; double-escape zombie bug", len(result2.Root.Children))
+	}
+}
