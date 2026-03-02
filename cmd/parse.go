@@ -36,8 +36,7 @@ func newParseCmdWithGetCWD(reader ParseReader, getwd func() (string, error)) *co
 		Args:         cobra.NoArgs,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			project, _ := cmd.Flags().GetString("project")
-			binderPath, err := resolveBinderPath(project, getwd)
+			binderPath, err := resolveBinderPathFromCmd(cmd, getwd)
 			if err != nil {
 				return err
 			}
@@ -98,7 +97,7 @@ func newDefaultParseReader() *fileParseReader {
 }
 
 func (r *fileParseReader) ReadBinder(_ context.Context, path string) ([]byte, error) {
-	return os.ReadFile(path)
+	return readBinderSizeLimitedImpl(path)
 }
 
 // ScanProject scans the project directory for .md files.

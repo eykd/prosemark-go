@@ -1,0 +1,71 @@
+;===============================================================
+; Editing a node opens the draft file and refreshes the last-edited timestamp on save.
+;===============================================================
+GIVEN a node registered in the project outline with a corresponding draft file.
+GIVEN a preferred editor is configured.
+
+WHEN the author edits the node's draft.
+
+THEN the preferred editor opens the node's draft file.
+THEN the node's last-edited timestamp is updated to the current time when the editor closes.
+
+;===============================================================
+; Editing the notes part of a node refreshes the draft's last-edited timestamp.
+;===============================================================
+GIVEN a node registered in the project outline with a corresponding draft file and a notes file.
+GIVEN a preferred editor is configured.
+
+WHEN the author edits the node's notes.
+
+THEN the preferred editor opens the node's notes file.
+THEN the draft file's last-edited timestamp is updated to the current time when the editor closes.
+
+;===============================================================
+; Editing the notes part creates the notes file when it does not yet exist.
+;===============================================================
+GIVEN a node registered in the project outline with a draft file but no notes file.
+GIVEN a preferred editor is configured.
+
+WHEN the author edits the node's notes.
+
+THEN a new empty notes file is created for the node.
+THEN the preferred editor opens the new notes file.
+
+;===============================================================
+; Editing a node that is not registered in the outline fails with a clear error.
+;===============================================================
+GIVEN an initialized project.
+
+WHEN the author attempts to edit a node that is not registered in the project outline.
+
+THEN the command fails with an error indicating the node is not in the outline.
+
+;===============================================================
+; Editing a node whose file is missing fails with a clear error.
+;===============================================================
+GIVEN a node registered in the project outline but whose draft file does not exist on disk.
+
+WHEN the author attempts to edit the node's draft.
+
+THEN the command fails with an error indicating the node file is missing.
+
+;===============================================================
+; Editing a node without specifying a part defaults to the draft.
+;===============================================================
+GIVEN a node registered in the project outline with a draft file.
+GIVEN a preferred editor is configured.
+
+WHEN the author edits the node without specifying which part to open.
+
+THEN the preferred editor opens the node's draft file.
+
+;===============================================================
+; Editing a node fails immediately when no preferred editor is configured.
+;===============================================================
+GIVEN a node registered in the project outline with a draft file.
+GIVEN no preferred editor is configured.
+
+WHEN the author attempts to edit the node.
+
+THEN the command fails with an error indicating no preferred editor is configured.
+THEN no file is created or modified.

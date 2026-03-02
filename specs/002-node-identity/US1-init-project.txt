@@ -1,0 +1,49 @@
+;===============================================================
+; An empty directory becomes a prosemark project after initialization.
+;===============================================================
+GIVEN a directory with no prosemark project files.
+
+WHEN the author initializes the project.
+
+THEN a project outline file is created with the managed outline block.
+THEN a project settings file is created with default settings.
+
+;===============================================================
+; Initialization refuses to overwrite an existing project without explicit permission.
+;===============================================================
+GIVEN a directory where a project outline file already exists with author content.
+
+WHEN the author initializes the project without the force option.
+
+THEN the command fails with an informative error message.
+THEN the existing outline file is unchanged.
+
+;===============================================================
+; Forced reinitialization recreates project files with defaults.
+;===============================================================
+GIVEN a directory that has already been initialized as a prosemark project.
+
+WHEN the author re-initializes the project with the force option.
+
+THEN the managed outline block is confirmed present in the project outline.
+THEN the project settings file is overwritten with default settings.
+
+;===============================================================
+; Initialization creates only the missing project file when settings already exist.
+;===============================================================
+GIVEN a directory where a project settings file exists but no project outline file.
+
+WHEN the author initializes the project.
+
+THEN the project outline file is created.
+THEN the existing project settings file is left unchanged.
+
+;===============================================================
+; Initialization fails cleanly when the directory is not writable.
+;===============================================================
+GIVEN a directory where the author does not have write permission.
+
+WHEN the author initializes the project.
+
+THEN the command fails with a clear filesystem error.
+THEN no partial project files are left behind.

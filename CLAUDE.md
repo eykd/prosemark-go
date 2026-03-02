@@ -96,6 +96,8 @@ Pipeline CLI: `go run ./acceptance/cmd/pipeline -action=<parse|generate|run>`
 - Additional dependencies will expand as features are implemented
 - Go 1.25 + cobra v1.10.2, spf13/pflag v1.0.9 (no new external dependencies needed) (001-prosemark-binder)
 - Files (`_binder.md` read/written in-place; `project.json` read-only) (001-prosemark-binder)
+- Go 1.25.6 (002-node-identity)
+- Filesystem (`{uuid}.md`, `{uuid}.notes.md`, `_binder.md`, `.prosemark.yml`) (002-node-identity)
 
 
 ---
@@ -105,4 +107,5 @@ Pipeline CLI: `go run ./acceptance/cmd/pipeline -action=<parse|generate|run>`
 Always use subagents liberally and aggressively to conserve the main context window. Delegate research, exploration, and parallelizable work to subagents rather than doing it inline. This keeps the main context clean and allows more work to be done in parallel.
 
 ## Recent Changes
+- 002-node-identity: Added Go 1.25.6
 - 001-prosemark-binder: Added Go 1.25 + cobra v1.10.2, spf13/pflag v1.0.9 (no new external dependencies needed)

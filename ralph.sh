@@ -721,11 +721,17 @@ get_ready_tasks() {
 
     # Filter out parent container tasks (tasks that have children).
     # Parent tasks are not work items; ralph processes their children individually.
+    # Exception: sp:* phase tasks are container tasks by design — they are returned
+    # as-is so execute_spec_kit_phase_task can handle them.
     local leaf_ids=()
-    local task_id
+    local task_id task_title
     while IFS= read -r task_id; do
         [[ -z "$task_id" ]] && continue
-        if task_has_children "$task_id"; then
+        task_title=$(echo "$filtered" | jq -r --arg id "$task_id" '.[] | select(.id == $id) | .title // ""')
+        if echo "$task_title" | grep -qP '\[sp:[0-9]{2}-'; then
+            log DEBUG "Keeping sp:* phase task as-is: $task_id"
+            leaf_ids+=("$task_id")
+        elif task_has_children "$task_id"; then
             log DEBUG "Skipping parent container task: $task_id"
         else
             leaf_ids+=("$task_id")
