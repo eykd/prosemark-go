@@ -28,16 +28,9 @@ func newInitCmdWithGetCWD(io InitIO, getwd func() (string, error)) *cobra.Comman
 		Args:         cobra.NoArgs,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			project, _ := cmd.Flags().GetString("project")
-			if cmd.Flags().Changed("project") && project == "" {
-				return fmt.Errorf("--project flag cannot be empty")
-			}
-			if project == "" {
-				cwd, err := getwd()
-				if err != nil {
-					return fmt.Errorf("getting working directory: %w", err)
-				}
-				project = cwd
+			project, err := resolveProjectDirFromCmd(cmd, getwd)
+			if err != nil {
+				return err
 			}
 
 			binderPath := filepath.Join(project, "_binder.md")

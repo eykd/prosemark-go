@@ -103,3 +103,43 @@ func TestNewMoveCmd_RejectsExplicitlyEmptyProject(t *testing.T) {
 		t.Errorf("expected error message to mention --project, got: %s", errOut.String())
 	}
 }
+
+func TestNewInitCmd_RejectsExplicitlyEmptyProject(t *testing.T) {
+	mock := newMockInitIO()
+	c := newInitCmdWithGetCWD(mock, validGetwd)
+	out := new(bytes.Buffer)
+	errOut := new(bytes.Buffer)
+	c.SetOut(out)
+	c.SetErr(errOut)
+	c.SetArgs([]string{"--project", ""})
+
+	if err := c.Execute(); err == nil {
+		t.Error("expected error when --project is explicitly set to empty string")
+	}
+	if out.Len() > 0 {
+		t.Errorf("expected no stdout before validation error, got: %s", out.String())
+	}
+	if !strings.Contains(errOut.String(), "project") {
+		t.Errorf("expected error message to mention --project, got: %s", errOut.String())
+	}
+}
+
+func TestNewDoctorCmd_RejectsExplicitlyEmptyProject(t *testing.T) {
+	mock := &mockDoctorIO{binderBytes: doctorBinderEmpty()}
+	c := newDoctorCmdWithGetCWD(mock, validGetwd)
+	out := new(bytes.Buffer)
+	errOut := new(bytes.Buffer)
+	c.SetOut(out)
+	c.SetErr(errOut)
+	c.SetArgs([]string{"--project", ""})
+
+	if err := c.Execute(); err == nil {
+		t.Error("expected error when --project is explicitly set to empty string")
+	}
+	if out.Len() > 0 {
+		t.Errorf("expected no stdout before validation error, got: %s", out.String())
+	}
+	if !strings.Contains(errOut.String(), "project") {
+		t.Errorf("expected error message to mention --project, got: %s", errOut.String())
+	}
+}
