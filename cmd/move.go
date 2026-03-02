@@ -45,6 +45,9 @@ func newMoveCmdWithGetCWD(io MoveIO, getwd func() (string, error)) *cobra.Comman
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			project, _ := cmd.Flags().GetString("project")
+			if cmd.Flags().Changed("project") && project == "" {
+				return fmt.Errorf("--project flag cannot be empty")
+			}
 			binderPath, err := resolveBinderPath(project, getwd)
 			if err != nil {
 				return err
