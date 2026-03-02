@@ -102,12 +102,9 @@ func yamlScalar(s string) string {
 // yamlNeedsQuoting reports whether s must be quoted when used as an inline YAML
 // scalar value. In block context, quoting is required when the value starts with
 // a flow indicator ([ or {) or contains an inline comment marker (space + #).
+// s must be non-empty; callers are responsible for guarding empty strings.
 func yamlNeedsQuoting(s string) bool {
-	switch s[0] {
-	case '[', '{':
-		return true
-	}
-	return strings.Contains(s, " #")
+	return s[0] == '[' || s[0] == '{' || strings.Contains(s, " #")
 }
 
 // ValidateNode checks the given node for AUD004, AUD005, and AUD006 violations.
