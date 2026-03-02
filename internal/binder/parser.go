@@ -234,9 +234,11 @@ func Parse(ctx context.Context, src []byte, project *Project) (*ParseResult, []D
 		seenTargets[target] = true
 
 		// Check for missing/case-mismatch target file when project context is available.
-		if project != nil && !projectFileSet[target] {
+		// Normalize "./" prefix before lookup so "./a.md" and "a.md" resolve to the same file.
+		lookupTarget := strings.TrimPrefix(target, "./")
+		if project != nil && !projectFileSet[lookupTarget] {
 			// Check for case-insensitive match (BNDW009).
-			if lowerMatch := projectFilesLower[strings.ToLower(target)]; lowerMatch != "" {
+			if lowerMatch := projectFilesLower[strings.ToLower(lookupTarget)]; lowerMatch != "" {
 				diags = append(diags, Diagnostic{
 					Severity: "warning",
 					Code:     CodeCaseInsensitiveMatch,

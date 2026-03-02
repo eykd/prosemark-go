@@ -37,6 +37,9 @@ func AddChild(ctx context.Context, src []byte, project *binder.Project, params b
 		params.Target = params.Target[2 : len(params.Target)-2]
 	}
 
+	// Normalize "./" prefix: treat "./a.md" as equivalent to "a.md".
+	params.Target = strings.TrimPrefix(params.Target, "./")
+
 	// Validate target path (OPE004, OPE005) before touching the selector.
 	if diag := validateOpTarget(params.Target); diag != nil {
 		return src, append(parseDiags, *diag), nil
