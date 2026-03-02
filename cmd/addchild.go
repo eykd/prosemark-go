@@ -280,16 +280,18 @@ func runNewMode(ctx context.Context, cmd *cobra.Command, io NewNodeAddChildIO, b
 		}
 	}
 
-	if _, err := fmt.Fprintln(cmd.OutOrStdout(), "Created "+sanitizePath(params.Target)+" in "+sanitizePath(binderPath)); err != nil {
-		return fmt.Errorf("writing output: %w", err)
-	}
-
 	if editMode {
 		editor := os.Getenv("EDITOR")
 		if strings.TrimSpace(editor) == "" {
 			return fmt.Errorf("$EDITOR is not set")
 		}
 		if err := io.OpenEditor(editor, nodePath); err != nil {
+			_ = io.DeleteFile(nodePath)
+			if changed {
+				if rollbackErr := io.WriteBinderAtomic(ctx, binderPath, binderBytes); rollbackErr != nil {
+					return fmt.Errorf("opening editor: %w; binder rollback also failed: %v", err, rollbackErr)
+				}
+			}
 			return fmt.Errorf("opening editor: %w", err)
 		}
 		// Re-read the file after the editor exits so body text is preserved,
@@ -297,6 +299,10 @@ func runNewMode(ctx context.Context, cmd *cobra.Command, io NewNodeAddChildIO, b
 		if err := refreshNodeUpdated(io, nodePath); err != nil {
 			return err
 		}
+	}
+
+	if _, err := fmt.Fprintln(cmd.OutOrStdout(), "Created "+sanitizePath(params.Target)+" in "+sanitizePath(binderPath)); err != nil {
+		return fmt.Errorf("writing output: %w", err)
 	}
 
 	return nil
