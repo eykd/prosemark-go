@@ -45,10 +45,9 @@ func newDoctorCmdWithGetCWD(io DoctorIO, getwd func() (string, error)) *cobra.Co
 		Args:         cobra.NoArgs,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			project, _ := cmd.Flags().GetString("project")
 			jsonMode, _ := cmd.Flags().GetBool("json")
 
-			binderPath, err := resolveBinderPath(project, getwd)
+			binderPath, err := resolveBinderPathFromCmd(cmd, getwd)
 			if err != nil {
 				return err
 			}

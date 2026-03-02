@@ -29,6 +29,9 @@ func newInitCmdWithGetCWD(io InitIO, getwd func() (string, error)) *cobra.Comman
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			project, _ := cmd.Flags().GetString("project")
+			if cmd.Flags().Changed("project") && project == "" {
+				return fmt.Errorf("--project flag cannot be empty")
+			}
 			if project == "" {
 				cwd, err := getwd()
 				if err != nil {
