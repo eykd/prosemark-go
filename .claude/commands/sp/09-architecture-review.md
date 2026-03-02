@@ -44,7 +44,7 @@ Compute the review range:
 2. Retrieve the current epic id:
 
 ```bash
-grep "Beads Epic" FEATURE_DIR/spec.md | grep -oE 'workspace-[a-z0-9]+|bd-[a-z0-9]+'
+grep "Beads Epic" FEATURE_DIR/spec.md | grep -oE '`[^`]+`' | tr -d '`'
 ```
 
 If no epic id is found, ERROR with: "No Beads Epic found for this feature. Run `/sp:01-specify` first."

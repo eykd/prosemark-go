@@ -102,8 +102,8 @@ func Test_Moving_a_chapter_into_one_of_its_own_descendants_is_rejected(t *testin
 	if result.OK {
 		t.Fatalf("expected non-zero exit for cycle detection\nstdout: %s", result.Stdout)
 	}
-	if !strings.Contains(result.Stdout, `"OPE003"`) {
-		t.Errorf("expected OPE003 cycle error\nstdout: %s", result.Stdout)
+	if !strings.Contains(result.Stderr, "OPE003") {
+		t.Errorf("expected OPE003 cycle error\nstderr: %s", result.Stderr)
 	}
 	// THEN the binder is unchanged.
 	after := readFile(t, binderPath)
@@ -242,7 +242,7 @@ func Test_Moving_a_chapter_with_non_structural_text_destroys_that_text_with_a_wa
 		t.Errorf("expected non-structural '[ ]' prefix to be removed\ncontent: %s", content)
 	}
 	// THEN a "non-structural content destroyed" warning is included in the result.
-	if !strings.Contains(result.Stdout, `"OPW003"`) {
-		t.Errorf("expected OPW003 non-structural-content-destroyed warning\nstdout: %s", result.Stdout)
+	if !strings.Contains(result.Stderr, "OPW003") {
+		t.Errorf("expected OPW003 non-structural-content-destroyed warning\nstderr: %s", result.Stderr)
 	}
 }

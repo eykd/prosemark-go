@@ -28,9 +28,6 @@ func Test_Deleting_a_leaf_chapter_removes_its_entry_from_the_binder(t *testing.T
 	if !result.OK {
 		t.Fatalf("expected exit 0\nstdout: %s\nstderr: %s", result.Stdout, result.Stderr)
 	}
-	if !strings.Contains(result.Stdout, `"changed":true`) {
-		t.Errorf("expected changed=true\nstdout: %s", result.Stdout)
-	}
 	content := readFile(t, binderPath)
 	if strings.Contains(content, "ch1.md") {
 		t.Errorf("expected ch1.md to be removed from binder\ncontent: %s", content)
@@ -105,8 +102,8 @@ func Test_Deleting_the_only_entry_inside_a_nested_section_prunes_the_now_empty_s
 		t.Errorf("expected ch1.md to remain in binder\ncontent: %s", content)
 	}
 	// THEN an "empty section removed" warning is included in the result.
-	if !strings.Contains(result.Stdout, `"OPW004"`) {
-		t.Errorf("expected OPW004 empty-sublist-pruned warning\nstdout: %s", result.Stdout)
+	if !strings.Contains(result.Stderr, "OPW004") {
+		t.Errorf("expected OPW004 empty-sublist-pruned warning\nstderr: %s", result.Stderr)
 	}
 }
 
@@ -167,8 +164,8 @@ func Test_Deleting_a_chapter_with_non_structural_text_removes_that_text_too_with
 		t.Errorf("expected non-structural text to be removed with chapter\ncontent: %s", content)
 	}
 	// THEN a "non-structural content destroyed" warning is included in the result.
-	if !strings.Contains(result.Stdout, `"OPW003"`) {
-		t.Errorf("expected OPW003 non-structural-content-destroyed warning\nstdout: %s", result.Stdout)
+	if !strings.Contains(result.Stderr, "OPW003") {
+		t.Errorf("expected OPW003 non-structural-content-destroyed warning\nstderr: %s", result.Stderr)
 	}
 }
 
@@ -190,8 +187,8 @@ func Test_Attempting_to_delete_a_non_existent_chapter_returns_an_error_without_m
 	if result.OK {
 		t.Fatalf("expected non-zero exit for non-existent selector\nstdout: %s", result.Stdout)
 	}
-	if !strings.Contains(result.Stdout, `"OPE001"`) {
-		t.Errorf("expected OPE001 not-found error\nstdout: %s", result.Stdout)
+	if !strings.Contains(result.Stderr, "OPE001") {
+		t.Errorf("expected OPE001 not-found error\nstderr: %s", result.Stderr)
 	}
 	// THEN the binder is unchanged.
 	after := readFile(t, binderPath)

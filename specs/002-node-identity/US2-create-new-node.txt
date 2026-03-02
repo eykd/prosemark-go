@@ -1,0 +1,85 @@
+;===============================================================
+; A new node is created with a unique identity and registered in the project outline.
+;===============================================================
+GIVEN an initialized prosemark project.
+
+WHEN the author creates a new node titled "Chapter One" at the root of the outline.
+
+THEN a new node file is created with a unique identifier, a title, a creation timestamp, and a last-edited timestamp.
+THEN the project outline gains a link to the new node at the root level.
+
+;===============================================================
+; A new node can be nested under an existing parent node.
+;===============================================================
+GIVEN an initialized project with an existing node.
+
+WHEN the author creates a new node titled "Scene 1" as a child of the existing node.
+
+THEN the new node is nested under the specified parent in the project outline.
+
+;===============================================================
+; A new node can be created with a synopsis.
+;===============================================================
+GIVEN an initialized project.
+
+WHEN the author creates a new node titled "Prologue" with synopsis "The world before the war."
+
+THEN the new node's synopsis field contains the provided text.
+
+;===============================================================
+; A new node can be opened in the editor immediately after creation.
+;===============================================================
+GIVEN an initialized project and a preferred editor configured.
+
+WHEN the author creates a new node titled "Chapter Two" and requests the editor to open immediately.
+
+THEN the node is created and registered in the outline.
+THEN the preferred editor opens the new node's draft file.
+
+;===============================================================
+; An existing file can be linked into the outline without creating a new node.
+;===============================================================
+GIVEN an initialized project and an existing file named "existing.md".
+
+WHEN the author links "existing.md" into the outline at the root without the new-node option.
+
+THEN the existing file is linked in the outline without creating a new node file.
+
+;===============================================================
+; Node file creation is rolled back when the outline update fails.
+;===============================================================
+GIVEN an initialized project where the outline cannot be updated due to a write error.
+
+WHEN the author attempts to create a new node.
+
+THEN the node file that was created is deleted.
+THEN the project outline is unchanged.
+
+;===============================================================
+; An explicitly provided identity is validated and used for the new node.
+;===============================================================
+GIVEN an initialized project.
+
+WHEN the author creates a new node and explicitly provides a valid node identifier as the target filename.
+
+THEN the provided identifier is used as the node's stable identity.
+
+;===============================================================
+; An invalid target filename is rejected when creating a new node.
+;===============================================================
+GIVEN an initialized project.
+
+WHEN the author creates a new node and provides a target filename that is not a valid node identifier.
+
+THEN the command fails with an error indicating the target must be a valid node identifier.
+
+;===============================================================
+; A new node is retained in valid state when the editor cannot be opened.
+;===============================================================
+GIVEN an initialized project and no preferred editor configured.
+
+WHEN the author creates a new node with a title and requests the editor to open immediately.
+
+THEN the node file is created in valid state.
+THEN the project outline is updated with the new node.
+THEN the command exits with an error indicating the preferred editor is not configured.

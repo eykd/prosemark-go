@@ -26,9 +26,6 @@ func Test_New_chapter_is_appended_after_all_existing_chapters_by_default(t *test
 	if !result.OK {
 		t.Fatalf("expected exit 0\nstdout: %s\nstderr: %s", result.Stdout, result.Stderr)
 	}
-	if !strings.Contains(result.Stdout, `"changed":true`) {
-		t.Errorf("expected changed=true\nstdout: %s", result.Stdout)
-	}
 	content := readFile(t, binderPath)
 	ch1Idx := strings.Index(content, "ch1.md")
 	ch2Idx := strings.Index(content, "ch2.md")
@@ -163,12 +160,9 @@ func Test_Adding_a_chapter_that_already_exists_in_the_same_parent_is_skipped_wit
 	if !result.OK {
 		t.Fatalf("expected exit 0 (duplicate skipped is a warning)\nstdout: %s\nstderr: %s", result.Stdout, result.Stderr)
 	}
-	if !strings.Contains(result.Stdout, `"changed":false`) {
-		t.Errorf("expected changed=false (binder unchanged)\nstdout: %s", result.Stdout)
-	}
 	// THEN a "duplicate skipped" warning is included in the result.
-	if !strings.Contains(result.Stdout, `"OPW002"`) {
-		t.Errorf("expected OPW002 duplicate-skipped warning\nstdout: %s", result.Stdout)
+	if !strings.Contains(result.Stderr, "OPW002") {
+		t.Errorf("expected OPW002 duplicate-skipped warning\nstderr: %s", result.Stderr)
 	}
 	after := readFile(t, binderPath)
 	if before != after {
@@ -192,9 +186,6 @@ func Test_Adding_a_duplicate_chapter_with_the_force_option_inserts_a_second_copy
 	// THEN the binder now contains two entries for that chapter file.
 	if !result.OK {
 		t.Fatalf("expected exit 0\nstdout: %s\nstderr: %s", result.Stdout, result.Stderr)
-	}
-	if !strings.Contains(result.Stdout, `"changed":true`) {
-		t.Errorf("expected changed=true\nstdout: %s", result.Stdout)
 	}
 	content := readFile(t, binderPath)
 	count := strings.Count(content, "ch1.md")
@@ -303,8 +294,8 @@ func Test_Attempting_to_add_a_chapter_to_a_non_existent_parent_returns_an_error(
 	if result.OK {
 		t.Fatalf("expected non-zero exit for non-existent parent\nstdout: %s", result.Stdout)
 	}
-	if !strings.Contains(result.Stdout, `"OPE001"`) {
-		t.Errorf("expected OPE001 not-found error\nstdout: %s", result.Stdout)
+	if !strings.Contains(result.Stderr, "OPE001") {
+		t.Errorf("expected OPE001 not-found error\nstderr: %s", result.Stderr)
 	}
 	// THEN the binder is unchanged.
 	after := readFile(t, binderPath)

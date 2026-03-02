@@ -4,12 +4,29 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 
 	"github.com/spf13/cobra"
 
 	"github.com/eykd/prosemark-go/internal/binder"
 )
+
+// maxBinderFileSize is the maximum allowed size for _binder.md files (10 MB).
+const maxBinderFileSize = 10 * 1024 * 1024
+
+// readBinderSizeLimitedImpl reads the binder file at path, rejecting files that
+// exceed maxBinderFileSize. Excluded from coverage because it wraps OS calls.
+func readBinderSizeLimitedImpl(path string) ([]byte, error) {
+	fi, err := os.Stat(path)
+	if err != nil {
+		return nil, err
+	}
+	if fi.Size() > maxBinderFileSize {
+		return nil, fmt.Errorf("binder file exceeds the 10 MB size limit")
+	}
+	return os.ReadFile(path)
+}
 
 // NewRootCmd creates the root pmk command with all subcommands registered.
 func NewRootCmd() *cobra.Command {
@@ -24,11 +41,24 @@ func NewRootCmd() *cobra.Command {
 	root.AddCommand(NewAddChildCmd(newDefaultAddChildIO()))
 	root.AddCommand(NewDeleteCmd(newDefaultDeleteIO()))
 	root.AddCommand(NewMoveCmd(newDefaultMoveIO()))
+	root.AddCommand(NewInitCmd(fileInitIO{}))
+	root.AddCommand(NewEditCmd(fileEditIO{}))
+	root.AddCommand(NewDoctorCmd(fileDoctorIO{}))
 	return root
 }
 
 func rootRunE(cmd *cobra.Command, _ []string) error {
 	return cmd.Help()
+}
+
+// resolveBinderPathFromCmd validates the --project flag and resolves the binder path.
+// It returns an error if the flag was explicitly set to an empty string.
+func resolveBinderPathFromCmd(cmd *cobra.Command, getwd func() (string, error)) (string, error) {
+	project, _ := cmd.Flags().GetString("project")
+	if cmd.Flags().Changed("project") && project == "" {
+		return "", fmt.Errorf("--project flag cannot be empty")
+	}
+	return resolveBinderPath(project, getwd)
 }
 
 // resolveBinderPath derives the binder path from a project directory.
