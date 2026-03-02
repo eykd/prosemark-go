@@ -1,20 +1,14 @@
 package cmd
 
-// binder_concurrent_integration_test.go — RED tests for the two identified gaps
-// in concurrent write protection.
+// binder_concurrent_integration_test.go — GREEN tests for concurrent write protection.
 //
-// Gap 1: TestWriteBinderAtomic_InterfaceMethodPath_ConcurrentCallsPreserveAllEntries
-//   The existing TestConcurrentAddChild_AllEntriesPreserved calls writeFileAtomicImpl
-//   directly with ".binder" prefix, which routes to writeBinderAtomicMergeImpl (locked+merge).
-//   The production code path goes through io.WriteBinderAtomic → WriteBinderAtomicImpl →
-//   writeBinderCheckedImpl → writeBinderDirectImpl (NO lock, NO merge).
-//   This test exercises that interface method path and must FAIL in RED.
+// Test 1: TestWriteBinderAtomic_InterfaceMethodPath_ConcurrentCallsPreserveAllEntries
+//   Exercises the production code path: io.WriteBinderAtomic → WriteBinderAtomicImpl →
+//   writeBinderAtomicMergeImpl (lock+merge). Verifies all N entries survive concurrent writes.
 //
-// Gap 2: TestAddChildCmd_RunE_ConcurrentCallsPreserveAllEntries
-//   No integration-level test verifies that running the full add-child cobra
-//   handler concurrently preserves all entries. The existing test bypasses the
-//   interface and calls writeFileAtomicImpl directly. This test runs N concurrent
-//   command executions through newAddChildCmdWithGetCWD and must FAIL in RED.
+// Test 2: TestAddChildCmd_RunE_ConcurrentCallsPreserveAllEntries
+//   Runs N concurrent add-child command executions through newAddChildCmdWithGetCWD.
+//   Verifies all N entries survive via the full command handler path.
 
 import (
 	"bytes"
@@ -102,12 +96,8 @@ func TestWriteBinderAtomic_InterfaceMethodPath_ConcurrentCallsPreserveAllEntries
 			}
 
 			// ── Write via the AddChildIO interface method ──────────────────────
-			// This exercises the path taken by the real command at runtime:
-			//   io.WriteBinderAtomic → WriteBinderAtomicImpl → writeBinderCheckedImpl
-			//   → writeBinderDirectImpl (NO lock, NO merge).
-			//
-			// Without locking or merging, last-writer-wins silently discards all
-			// other goroutines' changes.
+			// Exercises the production path: WriteBinderAtomic → WriteBinderAtomicImpl
+			// → writeBinderAtomicMergeImpl (lock + merge). All N entries must survive.
 			var io AddChildIO = newDefaultAddChildIO()
 			if werr := io.WriteBinderAtomic(context.Background(), binderPath, modified); werr != nil {
 				errs[idx] = fmt.Errorf("goroutine %d WriteBinderAtomic: %w", idx, werr)
@@ -131,7 +121,7 @@ func TestWriteBinderAtomic_InterfaceMethodPath_ConcurrentCallsPreserveAllEntries
 
 	for _, target := range targets {
 		if !strings.Contains(finalStr, target) {
-			t.Errorf("interface path race: entry %q lost (WriteBinderAtomicImpl bypasses lock+merge)", target)
+			t.Errorf("interface path race: entry %q lost", target)
 		}
 	}
 }
@@ -177,10 +167,7 @@ func (b *commandBarrierIO) ReadBinder(ctx context.Context, path string) ([]byte,
 // of the full add-child cobra command handler against the same project directory.
 // A commandBarrierIO intercepts ReadBinder to hold all goroutines at the barrier
 // until all have read, then releases them — guaranteeing a worst-case write race.
-//
-// This test FAILS in RED because the command calls io.WriteBinderAtomic which routes
-// through WriteBinderAtomicImpl → writeBinderCheckedImpl (no lock, no merge).
-// Without locking, last-writer-wins silently drops N-1 entries.
+// Asserts all N entries survive via writeBinderAtomicMergeImpl (lock + merge).
 func TestAddChildCmd_RunE_ConcurrentCallsPreserveAllEntries(t *testing.T) {
 	const n = 5
 
@@ -258,7 +245,7 @@ func TestAddChildCmd_RunE_ConcurrentCallsPreserveAllEntries(t *testing.T) {
 
 	for _, target := range targets {
 		if !strings.Contains(finalStr, target) {
-			t.Errorf("cmd handler race: entry %q lost (WriteBinderAtomicImpl bypasses lock+merge)", target)
+			t.Errorf("cmd handler race: entry %q lost", target)
 		}
 	}
 }
@@ -267,12 +254,8 @@ func TestAddChildCmd_RunE_ConcurrentCallsPreserveAllEntries(t *testing.T) {
 // WriteBinderAtomic on a fileAddChildIO acquires the global binder lock and merges
 // the incoming data with the current on-disk content.
 //
-// This is a regression test: if WriteBinderAtomicImpl reverts to calling
-// writeBinderCheckedImpl directly (bypassing the lock+merge path), a concurrent
-// caller will write without merging and this test will fail.
-//
-// This test FAILS in RED because WriteBinderAtomicImpl currently calls
-// writeBinderCheckedImpl which does not merge.
+// Regression guard: if WriteBinderAtomicImpl stops calling writeBinderAtomicMergeImpl,
+// a concurrent caller will overwrite without merging and this test will fail.
 func TestWriteBinderAtomic_InterfaceMethodUsesLockAndMerge(t *testing.T) {
 	dir := t.TempDir()
 	binderPath := filepath.Join(dir, "_binder.md")

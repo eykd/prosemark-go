@@ -1,17 +1,12 @@
 package cmd
 
-// binder_concurrent_test.go — behavioral RED test for the concurrent write race.
+// binder_concurrent_test.go — behavioral test for concurrent write protection.
 //
-// This test demonstrates the lost-update bug: concurrent pmk mutation commands
-// all read the same binder state, each modify it independently, and then each
-// write back — last writer wins, silently discarding all other writers' changes.
-//
-// The test is DETERMINISTIC: a synchronization barrier forces every goroutine to
-// finish its read before any goroutine begins its write, guaranteeing all N
-// goroutines work from the same stale snapshot and that N-1 entries are lost.
-//
-// Expected behaviour after the fix: all N entries survive, protected by the
-// LockBinder exclusive lock that serialises the read-modify-write cycle.
+// Demonstrates that concurrent pmk mutation commands writing to the same binder
+// all preserve their entries. The test is DETERMINISTIC: a synchronization barrier
+// forces every goroutine to finish its read before any goroutine begins its write,
+// maximising the chance of a lost update. All N entries must survive, protected
+// by the writeBinderAtomicMergeImpl lock-and-merge path.
 
 import (
 	"context"
@@ -30,10 +25,8 @@ import (
 // operations against the same _binder.md file using a synchronization barrier
 // that guarantees all reads happen before any write (worst-case race scenario).
 //
-// Assertion: all N target entries appear in the final binder.
-//
-// This test FAILS in the RED phase because the current implementation has no
-// locking; the last writer wins and N-1 entries are silently discarded.
+// Assertion: all N target entries appear in the final binder, preserved by
+// writeBinderAtomicMergeImpl's exclusive lock and union-merge strategy.
 func TestConcurrentAddChild_AllEntriesPreserved(t *testing.T) {
 	const n = 5
 
@@ -103,7 +96,7 @@ func TestConcurrentAddChild_AllEntriesPreserved(t *testing.T) {
 			// Each goroutine independently writes back its single-entry version.
 			// Without locking, each write overwrites the previous goroutine's
 			// work — last writer wins.
-			if werr := writeFileAtomicImpl(binderPath, ".binder", modified); werr != nil {
+			if werr := writeBinderAtomicMergeImpl(binderPath, modified); werr != nil {
 				errs[idx] = fmt.Errorf("goroutine %d write: %w", idx, werr)
 			}
 		}(i)

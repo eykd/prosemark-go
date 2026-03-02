@@ -324,17 +324,6 @@ func (w *fileAddChildIO) WriteBinderAtomic(ctx context.Context, path string, dat
 	return w.WriteBinderAtomicImpl(ctx, path, data)
 }
 
-// writeFileAtomicImpl writes data to path atomically via a temp file and rename.
-// tmpPrefix is the leading label used for the temp file name (e.g. ".binder" or ".node").
-// For binder files (".binder"), writes are serialized per-path and merged with
-// the current on-disk content to prevent lost updates from concurrent writes.
-func writeFileAtomicImpl(path, tmpPrefix string, data []byte) error {
-	if tmpPrefix == ".binder" {
-		return writeBinderAtomicMergeImpl(path, data)
-	}
-	return writeFileAtomicDirectImpl(path, tmpPrefix, data)
-}
-
 // writeBinderAtomicMergeImpl acquires the per-file binder lock, reads the current
 // on-disk content, merges the incoming data (union of lines), and writes atomically.
 // This prevents lost updates when concurrent writes start from the same stale snapshot.
@@ -415,7 +404,7 @@ func (w *fileAddChildIO) WriteNodeFileAtomic(path string, content []byte) error 
 
 // WriteNodeFileAtomicImpl performs the atomic write of a new node file.
 func (w *fileAddChildIO) WriteNodeFileAtomicImpl(path string, content []byte) error {
-	return writeFileAtomicImpl(path, ".node", content)
+	return writeFileAtomicDirectImpl(path, ".node", content)
 }
 
 // DeleteFile removes the file at path (used for rollback in --new mode).
