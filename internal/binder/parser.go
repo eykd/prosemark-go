@@ -342,7 +342,7 @@ func pass1Scan(lines []string) pass1Data {
 // Returns ("", "", nil) if no link can be resolved.
 func parseLink(content string, refDefs map[string]RefDef, wikiIndex map[string][]wikilinkEntry, binderDir string, lineNum, column int) (target, title string, diags []Diagnostic) {
 	if m := inlineLinkRE.FindStringSubmatch(content); m != nil {
-		target, title = m[2], m[1]
+		target, title = m[2], unescapeTitle(m[1])
 		if title == "" {
 			title = stemFromPath(target)
 		}
@@ -371,6 +371,15 @@ func parseLink(content string, refDefs map[string]RefDef, wikiIndex map[string][
 		}
 	}
 	return
+}
+
+// unescapeTitle converts storage-form bracket escapes back to display form.
+// Binder files store titles with \[ and \] to avoid breaking markdown link syntax.
+// Parse must return the display form so that titles round-trip correctly.
+func unescapeTitle(title string) string {
+	title = strings.ReplaceAll(title, `\[`, "[")
+	title = strings.ReplaceAll(title, `\]`, "]")
+	return title
 }
 
 // findFirstMdLink scans content for the first inline .md link after a non-md link.
