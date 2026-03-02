@@ -367,6 +367,91 @@ func TestSerializeFrontmatter(t *testing.T) {
 	}
 }
 
+// TestSerializeFrontmatter_RoundTrip verifies that SerializeFrontmatter output
+// can be round-tripped through ParseFrontmatter without data loss or parse
+// errors. This is the key invariant required after the YAML quoting fix:
+// titles and synopses containing YAML flow-syntax characters ([ ] { } #)
+// must be properly quoted so the serialized block is valid YAML and the
+// original string values are recovered exactly on parse.
+//
+// All table cases below FAIL before the fix because SerializeFrontmatter
+// writes unquoted values:
+//   - "[Prologue]" → "title: [Prologue]" → yaml.v3 decodes as !!seq → type error
+//   - "{Author}" → "title: {Author}" → yaml.v3 decodes as !!map → type error
+//   - "Act 1 # intro" → "title: Act 1 # intro" → comment stripped → wrong value
+func TestSerializeFrontmatter_RoundTrip(t *testing.T) {
+	const (
+		validID = "0192f0c1-3e7a-7000-8000-5a4b3c2d1e0f"
+		validTS = "2026-02-28T15:04:05Z"
+	)
+
+	tests := []struct {
+		name string
+		fm   node.Frontmatter
+	}{
+		{
+			name: "title with square brackets",
+			fm: node.Frontmatter{
+				ID:      validID,
+				Title:   "[Prologue]",
+				Created: validTS,
+				Updated: validTS,
+			},
+		},
+		{
+			name: "title with curly braces",
+			fm: node.Frontmatter{
+				ID:      validID,
+				Title:   "{Author Notes}",
+				Created: validTS,
+				Updated: validTS,
+			},
+		},
+		{
+			name: "title with hash character",
+			fm: node.Frontmatter{
+				ID:      validID,
+				Title:   "Act 1 # Opening",
+				Created: validTS,
+				Updated: validTS,
+			},
+		},
+		{
+			name: "synopsis with hash comment marker",
+			fm: node.Frontmatter{
+				ID:       validID,
+				Synopsis: "Hello # World",
+				Created:  validTS,
+				Updated:  validTS,
+			},
+		},
+		{
+			name: "synopsis with square brackets",
+			fm: node.Frontmatter{
+				ID:       validID,
+				Synopsis: "[Draft] needs revision",
+				Created:  validTS,
+				Updated:  validTS,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			serialized := node.SerializeFrontmatter(tt.fm)
+			got, _, err := node.ParseFrontmatter(serialized)
+			if err != nil {
+				t.Fatalf("ParseFrontmatter(SerializeFrontmatter(%+v)) unexpected error = %v\nserializedOutput:\n%s",
+					tt.fm, err, serialized)
+			}
+			if got != tt.fm {
+				t.Errorf("round-trip mismatch:\n  got  %+v\n  want %+v\nserializedOutput:\n%s",
+					got, tt.fm, serialized)
+			}
+		})
+	}
+}
+
 // TestValidateNode verifies that ValidateNode returns the correct AuditDiagnostics
 // for AUD004 (id≠filename stem), AUD005 (missing/invalid RFC3339Z fields),
 // and AUD006 (empty/whitespace-only body, warning).
