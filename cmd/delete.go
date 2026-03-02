@@ -113,7 +113,7 @@ func newDefaultDeleteIO() *fileDeleteIO {
 
 // ReadBinder reads the binder file at path.
 func (w *fileDeleteIO) ReadBinder(_ context.Context, path string) ([]byte, error) {
-	return os.ReadFile(path)
+	return readBinderSizeLimitedImpl(path)
 }
 
 // ScanProject scans the project directory for .md files.

@@ -135,7 +135,7 @@ func newDefaultMoveIO() *fileMoveIO {
 
 // ReadBinder reads the binder file at path.
 func (w *fileMoveIO) ReadBinder(_ context.Context, path string) ([]byte, error) {
-	return os.ReadFile(path)
+	return readBinderSizeLimitedImpl(path)
 }
 
 // ScanProject scans the project directory for .md files.

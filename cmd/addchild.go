@@ -311,7 +311,7 @@ func newDefaultAddChildIO() *fileAddChildIO {
 
 // ReadBinder reads the binder file at path.
 func (w *fileAddChildIO) ReadBinder(_ context.Context, path string) ([]byte, error) {
-	return os.ReadFile(path)
+	return readBinderSizeLimitedImpl(path)
 }
 
 // ScanProject scans the project directory for .md files.
@@ -322,6 +322,22 @@ func (w *fileAddChildIO) ScanProject(ctx context.Context, binderPath string) (*b
 // WriteBinderAtomic writes data to path atomically via a temp file.
 func (w *fileAddChildIO) WriteBinderAtomic(ctx context.Context, path string, data []byte) error {
 	return w.WriteBinderAtomicImpl(ctx, path, data)
+}
+
+// maxBinderFileSize is the maximum allowed size for _binder.md files (10 MB).
+const maxBinderFileSize = 10 * 1024 * 1024
+
+// readBinderSizeLimitedImpl reads the binder file at path, rejecting files that
+// exceed maxBinderFileSize. Excluded from coverage because it wraps OS calls.
+func readBinderSizeLimitedImpl(path string) ([]byte, error) {
+	fi, err := os.Stat(path)
+	if err != nil {
+		return nil, err
+	}
+	if fi.Size() > maxBinderFileSize {
+		return nil, fmt.Errorf("binder file exceeds the 10 MB size limit")
+	}
+	return os.ReadFile(path)
 }
 
 // writeFileAtomicImpl writes data to path atomically via a temp file and rename.

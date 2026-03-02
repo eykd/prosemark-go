@@ -97,7 +97,7 @@ func newDefaultParseReader() *fileParseReader {
 }
 
 func (r *fileParseReader) ReadBinder(_ context.Context, path string) ([]byte, error) {
-	return os.ReadFile(path)
+	return readBinderSizeLimitedImpl(path)
 }
 
 // ScanProject scans the project directory for .md files.
