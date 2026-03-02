@@ -288,7 +288,7 @@ func runNewMode(ctx context.Context, cmd *cobra.Command, io NewNodeAddChildIO, b
 
 	if editMode {
 		editor := os.Getenv("EDITOR")
-		if editor == "" {
+		if strings.TrimSpace(editor) == "" {
 			return fmt.Errorf("$EDITOR is not set")
 		}
 		if err := io.OpenEditor(editor, nodePath); err != nil {
