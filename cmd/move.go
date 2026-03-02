@@ -60,6 +60,23 @@ func newMoveCmdWithGetCWD(io MoveIO, getwd func() (string, error)) *cobra.Comman
 				return emitOPE009AndError(cmd, jsonMode, err)
 			}
 
+			positionFlagsSet := 0
+			if first {
+				positionFlagsSet++
+			}
+			if cmd.Flags().Changed("at") {
+				positionFlagsSet++
+			}
+			if before != "" {
+				positionFlagsSet++
+			}
+			if after != "" {
+				positionFlagsSet++
+			}
+			if positionFlagsSet > 1 {
+				return fmt.Errorf("only one of --first, --at, --before, --after may be specified (%s)", binder.CodeConflictingFlags)
+			}
+
 			position := "last"
 			if first {
 				position = "first"
