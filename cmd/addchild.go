@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -388,15 +387,7 @@ func (w *fileAddChildIO) OpenEditor(editor, path string) error {
 
 // OpenEditorImpl launches the editor process, splitting $EDITOR with strings.Fields.
 func (w *fileAddChildIO) OpenEditorImpl(editor, path string) error {
-	parts := strings.Fields(editor)
-	if len(parts) == 0 {
-		return fmt.Errorf("EDITOR is empty")
-	}
-	c := exec.Command(parts[0], append(parts[1:], path)...)
-	c.Stdin = os.Stdin
-	c.Stdout = os.Stdout
-	c.Stderr = os.Stderr
-	return c.Run()
+	return openEditorImpl(editor, path)
 }
 
 // ReadNodeFile reads the node file at path.

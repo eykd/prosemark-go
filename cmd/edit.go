@@ -192,6 +192,12 @@ func (f fileEditIO) OpenEditor(editor, path string) error {
 
 // OpenEditorImpl launches the editor process, splitting $EDITOR with strings.Fields.
 func (f fileEditIO) OpenEditorImpl(editor, path string) error {
+	return openEditorImpl(editor, path)
+}
+
+// openEditorImpl launches the editor process, splitting editor on whitespace.
+// The first token is the executable; remaining tokens are prepended to path as args.
+func openEditorImpl(editor, path string) error {
 	parts := strings.Fields(editor)
 	if len(parts) == 0 {
 		return fmt.Errorf("EDITOR is empty")
