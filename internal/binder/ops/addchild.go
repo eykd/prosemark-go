@@ -32,13 +32,7 @@ func AddChild(ctx context.Context, src []byte, project *binder.Project, params b
 		}), err
 	}
 
-	// Normalize wikilink bracket syntax: [[foo.md]] → foo.md
-	if strings.HasPrefix(params.Target, "[[") && strings.HasSuffix(params.Target, "]]") {
-		params.Target = params.Target[2 : len(params.Target)-2]
-	}
-
-	// Normalize "./" prefix: treat "./a.md" as equivalent to "a.md".
-	params.Target = strings.TrimPrefix(params.Target, "./")
+	params.Target = normalizeTargetInput(params.Target)
 
 	// Validate target path (OPE004, OPE005) before touching the selector.
 	if diag := validateOpTarget(params.Target); diag != nil {
@@ -214,6 +208,16 @@ func addChildEvalParentSelector(selector string, root *binder.Node, lines []stri
 		}}
 	}
 	return matches, nil
+}
+
+// normalizeTargetInput strips wikilink bracket syntax ([[...]]) and leading "./"
+// from a raw target string so that "./a.md", "[[a.md]]", and "a.md" all
+// produce the same canonical target before validation and storage.
+func normalizeTargetInput(target string) string {
+	if strings.HasPrefix(target, "[[") && strings.HasSuffix(target, "]]") {
+		target = target[2 : len(target)-2]
+	}
+	return strings.TrimPrefix(target, "./")
 }
 
 // percentDecodeOpTarget URL-decodes a target path for storage in the binder.
