@@ -54,21 +54,13 @@ func (r *binderLockRegistry) lock(ctx context.Context, path string) (func() erro
 // globalBinderLocks is the package-level registry for binder file locks.
 var globalBinderLocks = newBinderLockRegistry()
 
-// LockBinder acquires an exclusive per-file lock for the binder at path.
-// The returned function releases the lock. ctx cancellation aborts the wait.
-func (w *fileAddChildIO) LockBinder(ctx context.Context, path string) (func() error, error) {
-	return globalBinderLocks.lock(ctx, path)
-}
+// binderLocker provides LockBinder backed by the global lock registry.
+// Embed this in file-IO structs to satisfy the LockBinder contract without repetition.
+type binderLocker struct{}
 
 // LockBinder acquires an exclusive per-file lock for the binder at path.
 // The returned function releases the lock. ctx cancellation aborts the wait.
-func (w *fileDeleteIO) LockBinder(ctx context.Context, path string) (func() error, error) {
-	return globalBinderLocks.lock(ctx, path)
-}
-
-// LockBinder acquires an exclusive per-file lock for the binder at path.
-// The returned function releases the lock. ctx cancellation aborts the wait.
-func (w *fileMoveIO) LockBinder(ctx context.Context, path string) (func() error, error) {
+func (binderLocker) LockBinder(ctx context.Context, path string) (func() error, error) {
 	return globalBinderLocks.lock(ctx, path)
 }
 

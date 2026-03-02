@@ -105,7 +105,7 @@ func newDeleteCmdWithGetCWD(io DeleteIO, getwd func() (string, error)) *cobra.Co
 }
 
 // fileDeleteIO implements DeleteIO using OS file I/O.
-type fileDeleteIO struct{}
+type fileDeleteIO struct{ binderLocker }
 
 func newDefaultDeleteIO() *fileDeleteIO {
 	return &fileDeleteIO{}
@@ -128,10 +128,5 @@ func (w *fileDeleteIO) WriteBinderAtomic(ctx context.Context, path string, data 
 
 // WriteBinderAtomicImpl performs the atomic write via OS temp file rename.
 func (w *fileDeleteIO) WriteBinderAtomicImpl(_ context.Context, path string, data []byte) error {
-	if fi, statErr := os.Stat(path); statErr == nil {
-		if fi.Mode().Perm()&0200 == 0 {
-			return fmt.Errorf("binder file is read-only")
-		}
-	}
-	return writeBinderDirectImpl(path, data)
+	return writeBinderCheckedImpl(path, data)
 }

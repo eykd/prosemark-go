@@ -303,7 +303,7 @@ func runNewMode(ctx context.Context, cmd *cobra.Command, io NewNodeAddChildIO, b
 }
 
 // fileAddChildIO implements NewNodeAddChildIO using OS file I/O.
-type fileAddChildIO struct{}
+type fileAddChildIO struct{ binderLocker }
 
 func newDefaultAddChildIO() *fileAddChildIO {
 	return &fileAddChildIO{}
@@ -384,14 +384,20 @@ func writeFileAtomicDirectImpl(path, tmpPrefix string, data []byte) error {
 	return nil
 }
 
-// WriteBinderAtomicImpl performs the atomic write via OS temp file rename.
-func (w *fileAddChildIO) WriteBinderAtomicImpl(_ context.Context, path string, data []byte) error {
+// writeBinderCheckedImpl checks that path is writable (if it exists) then
+// writes data atomically. Shared by all file-IO WriteBinderAtomicImpl methods.
+func writeBinderCheckedImpl(path string, data []byte) error {
 	if fi, statErr := os.Stat(path); statErr == nil {
 		if fi.Mode().Perm()&0200 == 0 {
 			return fmt.Errorf("binder file is read-only")
 		}
 	}
 	return writeBinderDirectImpl(path, data)
+}
+
+// WriteBinderAtomicImpl performs the atomic write via OS temp file rename.
+func (w *fileAddChildIO) WriteBinderAtomicImpl(_ context.Context, path string, data []byte) error {
+	return writeBinderCheckedImpl(path, data)
 }
 
 // WriteNodeFileAtomic writes content to path atomically (for --new mode).
