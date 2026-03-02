@@ -78,15 +78,36 @@ func SerializeFrontmatter(fm Frontmatter) []byte {
 	buf.WriteString("---\n")
 	buf.WriteString("id: " + fm.ID + "\n")
 	if fm.Title != "" {
-		buf.WriteString("title: " + fm.Title + "\n")
+		buf.WriteString("title: " + yamlScalar(fm.Title) + "\n")
 	}
 	if fm.Synopsis != "" {
-		buf.WriteString("synopsis: " + fm.Synopsis + "\n")
+		buf.WriteString("synopsis: " + yamlScalar(fm.Synopsis) + "\n")
 	}
 	buf.WriteString("created: " + fm.Created + "\n")
 	buf.WriteString("updated: " + fm.Updated + "\n")
 	buf.WriteString("---\n")
 	return buf.Bytes()
+}
+
+// yamlScalar returns s as a YAML plain scalar when safe, or as a single-quoted
+// scalar when s contains YAML flow-syntax characters or an inline comment marker.
+// In YAML single-quoted style, the only escape sequence is ” for a literal '.
+func yamlScalar(s string) string {
+	if !yamlNeedsQuoting(s) {
+		return s
+	}
+	return "'" + strings.ReplaceAll(s, "'", "''") + "'"
+}
+
+// yamlNeedsQuoting reports whether s must be quoted when used as an inline YAML
+// scalar value. In block context, quoting is required when the value starts with
+// a flow indicator ([ or {) or contains an inline comment marker (space + #).
+func yamlNeedsQuoting(s string) bool {
+	switch s[0] {
+	case '[', '{':
+		return true
+	}
+	return strings.Contains(s, " #")
 }
 
 // ValidateNode checks the given node for AUD004, AUD005, and AUD006 violations.
