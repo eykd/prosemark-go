@@ -42,7 +42,7 @@ func newEditCmdWithGetCWD(io EditIO, getwd func() (string, error)) *cobra.Comman
 			nodeID := args[0]
 
 			editor := os.Getenv("EDITOR")
-			if editor == "" {
+			if len(strings.Fields(editor)) == 0 {
 				return fmt.Errorf("$EDITOR is not set")
 			}
 
