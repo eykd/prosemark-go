@@ -155,5 +155,5 @@ func (w *fileMoveIO) WriteBinderAtomicImpl(_ context.Context, path string, data 
 			return fmt.Errorf("binder file is read-only")
 		}
 	}
-	return writeFileAtomicImpl(path, ".binder", data)
+	return writeBinderDirectImpl(path, data)
 }

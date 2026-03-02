@@ -133,5 +133,5 @@ func (w *fileDeleteIO) WriteBinderAtomicImpl(_ context.Context, path string, dat
 			return fmt.Errorf("binder file is read-only")
 		}
 	}
-	return writeFileAtomicImpl(path, ".binder", data)
+	return writeBinderDirectImpl(path, data)
 }

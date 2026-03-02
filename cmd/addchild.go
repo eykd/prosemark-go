@@ -326,7 +326,42 @@ func (w *fileAddChildIO) WriteBinderAtomic(ctx context.Context, path string, dat
 
 // writeFileAtomicImpl writes data to path atomically via a temp file and rename.
 // tmpPrefix is the leading label used for the temp file name (e.g. ".binder" or ".node").
+// For binder files (".binder"), writes are serialized per-path and merged with
+// the current on-disk content to prevent lost updates from concurrent writes.
 func writeFileAtomicImpl(path, tmpPrefix string, data []byte) error {
+	if tmpPrefix == ".binder" {
+		return writeBinderAtomicMergeImpl(path, data)
+	}
+	return writeFileAtomicDirectImpl(path, tmpPrefix, data)
+}
+
+// writeBinderAtomicMergeImpl acquires the per-file binder lock, reads the current
+// on-disk content, merges the incoming data (union of lines), and writes atomically.
+// This prevents lost updates when concurrent writes start from the same stale snapshot.
+func writeBinderAtomicMergeImpl(path string, data []byte) error {
+	unlock, err := globalBinderLocks.lock(context.Background(), path)
+	if err != nil {
+		return fmt.Errorf("acquiring binder lock: %w", err)
+	}
+	defer func() { _ = unlock() }()
+
+	current, readErr := os.ReadFile(path)
+	if readErr != nil && !os.IsNotExist(readErr) {
+		return fmt.Errorf("reading current binder: %w", readErr)
+	}
+	merged := mergeBinderLines(current, data)
+	return writeFileAtomicDirectImpl(path, ".binder", merged)
+}
+
+// writeBinderDirectImpl writes binder data to path atomically without merging.
+// Commands use this to ensure the exact post-operation content is written,
+// regardless of any concurrent writes that may have occurred.
+func writeBinderDirectImpl(path string, data []byte) error {
+	return writeFileAtomicDirectImpl(path, ".binder", data)
+}
+
+// writeFileAtomicDirectImpl writes data to path atomically via a temp file and rename.
+func writeFileAtomicDirectImpl(path, tmpPrefix string, data []byte) error {
 	dir := filepath.Dir(path)
 	tmp, err := os.CreateTemp(dir, tmpPrefix+"-*.tmp")
 	if err != nil {
@@ -356,7 +391,7 @@ func (w *fileAddChildIO) WriteBinderAtomicImpl(_ context.Context, path string, d
 			return fmt.Errorf("binder file is read-only")
 		}
 	}
-	return writeFileAtomicImpl(path, ".binder", data)
+	return writeBinderDirectImpl(path, data)
 }
 
 // WriteNodeFileAtomic writes content to path atomically (for --new mode).
