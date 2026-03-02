@@ -345,6 +345,12 @@ func writeBinderAtomicMergeImpl(path string, data []byte) error {
 	}
 	defer func() { _ = unlock() }()
 
+	if fi, statErr := os.Stat(path); statErr == nil {
+		if fi.Mode().Perm()&0200 == 0 {
+			return fmt.Errorf("binder file is read-only")
+		}
+	}
+
 	current, readErr := os.ReadFile(path)
 	if readErr != nil && !os.IsNotExist(readErr) {
 		return fmt.Errorf("reading current binder: %w", readErr)
@@ -395,9 +401,11 @@ func writeBinderCheckedImpl(path string, data []byte) error {
 	return writeBinderDirectImpl(path, data)
 }
 
-// WriteBinderAtomicImpl performs the atomic write via OS temp file rename.
-func (w *fileAddChildIO) WriteBinderAtomicImpl(_ context.Context, path string, data []byte) error {
-	return writeBinderCheckedImpl(path, data)
+// WriteBinderAtomicImpl acquires the per-file binder lock, merges incoming data
+// with current on-disk content, and writes atomically. This prevents lost updates
+// when concurrent commands start from the same stale snapshot.
+func (w *fileAddChildIO) WriteBinderAtomicImpl(ctx context.Context, path string, data []byte) error {
+	return writeBinderAtomicMergeImpl(path, data)
 }
 
 // WriteNodeFileAtomic writes content to path atomically (for --new mode).
