@@ -34,6 +34,16 @@ func rootRunE(cmd *cobra.Command, _ []string) error {
 	return cmd.Help()
 }
 
+// resolveBinderPathFromCmd validates the --project flag and resolves the binder path.
+// It returns an error if the flag was explicitly set to an empty string.
+func resolveBinderPathFromCmd(cmd *cobra.Command, getwd func() (string, error)) (string, error) {
+	project, _ := cmd.Flags().GetString("project")
+	if cmd.Flags().Changed("project") && project == "" {
+		return "", fmt.Errorf("--project flag cannot be empty")
+	}
+	return resolveBinderPath(project, getwd)
+}
+
 // resolveBinderPath derives the binder path from a project directory.
 // If project is empty, getwd is called to determine the current directory.
 func resolveBinderPath(project string, getwd func() (string, error)) (string, error) {

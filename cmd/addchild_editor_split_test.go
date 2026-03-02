@@ -9,6 +9,82 @@ import (
 	"github.com/eykd/prosemark-go/internal/binder"
 )
 
+// TestNewAddChildCmd_NewMode_WhitespaceVariantsRejected verifies that all
+// common Unicode whitespace variants in $EDITOR are treated as "not
+// configured". The check must use strings.Fields semantics (or equivalent)
+// so that tab, newline, carriage-return, and mixed whitespace are all
+// rejected, not just the empty string.
+//
+// This would FAIL if the implementation used `editor == ""` instead of a
+// whitespace-aware check (strings.TrimSpace or len(strings.Fields)).
+func TestNewAddChildCmd_NewMode_WhitespaceVariantsRejected(t *testing.T) {
+	whitespaceInputs := []struct {
+		name   string
+		editor string
+	}{
+		{"tab only", "\t"},
+		{"newline only", "\n"},
+		{"carriage return only", "\r"},
+		{"mixed whitespace", "\t   \n"},
+		{"three spaces", "   "},
+	}
+
+	for _, ws := range whitespaceInputs {
+		ws := ws
+		t.Run(ws.name, func(t *testing.T) {
+			t.Setenv("EDITOR", ws.editor)
+			mock := &mockAddChildIOWithNew{
+				mockAddChildIO: mockAddChildIO{
+					binderBytes: emptyBinder(),
+					project:     &binder.Project{Files: []string{}, BinderDir: "."},
+				},
+			}
+			c := NewAddChildCmd(mock)
+			out := new(bytes.Buffer)
+			errOut := new(bytes.Buffer)
+			c.SetOut(out)
+			c.SetErr(errOut)
+			c.SetArgs([]string{"--new", "--title", "Chapter", "--edit", "--parent", ".", "--project", "."})
+
+			err := c.Execute()
+			if err == nil {
+				t.Errorf("expected error when $EDITOR=%q, got nil", ws.editor)
+			}
+			// Node must be persisted (same behaviour as unset $EDITOR, US2/9).
+			if len(mock.nodeWrittenContents) == 0 {
+				t.Error("expected node file to be written even when EDITOR is whitespace-only")
+			}
+			// OpenEditor must NOT be called when the editor string has no tokens.
+			if len(mock.editorCalls) > 0 {
+				t.Errorf("expected OpenEditor NOT to be called for EDITOR=%q, got calls: %v",
+					ws.editor, mock.editorCalls)
+			}
+		})
+	}
+}
+
+// TestFileAddChildIO_OpenEditorImpl_WhitespaceOnlyReturnsError verifies that
+// the shared openEditorImpl safety net — used by both fileAddChildIO and
+// fileEditIO — rejects a whitespace-only editor string at the Impl level.
+// This is the inner guard: len(strings.Fields("   ")) == 0.
+//
+// The outer command-level check prevents whitespace from reaching this point
+// during normal use, but this test ensures the Impl-level guard is intact.
+func TestFileAddChildIO_OpenEditorImpl_WhitespaceOnlyReturnsError(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "test.md")
+	if err := os.WriteFile(path, []byte("draft"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	fio := newDefaultAddChildIO()
+	// Calling OpenEditorImpl directly with whitespace bypasses the command-level
+	// check and exercises the inner guard: strings.Fields("   ") = [] → error.
+	if err := fio.OpenEditorImpl("   ", path); err == nil {
+		t.Fatal("expected error when OpenEditorImpl called with whitespace-only editor, got nil")
+	}
+}
+
 // TestFileAddChildIO_OpenEditor_MultiWordEditor verifies that OpenEditorImpl
 // splits a multi-word $EDITOR value on spaces, executing only the first token
 // as the command name. The original buggy implementation called

@@ -102,6 +102,45 @@ func TestFileEditIO_OpenEditor(t *testing.T) {
 	}
 }
 
+// TestFileEditIO_OpenEditor_MultiWordEditor verifies that a multi-word $EDITOR
+// value (e.g. "true --extra-arg") is split on whitespace before exec so that
+// "true" is the executable and "--extra-arg" is an argument, not part of the
+// binary name. The original buggy addchild.go implementation called
+// exec.Command(editor, path) which would fail for multi-word editors; this
+// test ensures edit.go's shared openEditorImpl path has equivalent behaviour.
+func TestFileEditIO_OpenEditor_MultiWordEditor(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "test.md")
+	if err := os.WriteFile(path, []byte("draft"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	fio := fileEditIO{}
+	// "true --extra-arg" must be split into ["true", "--extra-arg"]; the
+	// buggy pattern exec.Command("true --extra-arg", path) fails because no
+	// binary named "true --extra-arg" exists on $PATH.
+	if err := fio.OpenEditor("true --extra-arg", path); err != nil {
+		t.Fatalf("multi-word editor should succeed when split on spaces: %v", err)
+	}
+}
+
+// TestFileEditIO_OpenEditorImpl_WhitespaceOnlyReturnsError verifies that the
+// shared openEditorImpl safety net rejects a whitespace-only editor string.
+// This is the inner guard: len(strings.Fields("   ")) == 0 → error.
+// Symmetric with TestFileAddChildIO_OpenEditorImpl_WhitespaceOnlyReturnsError.
+func TestFileEditIO_OpenEditorImpl_WhitespaceOnlyReturnsError(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "test.md")
+	if err := os.WriteFile(path, []byte("draft"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	fio := fileEditIO{}
+	if err := fio.OpenEditorImpl("   ", path); err == nil {
+		t.Fatal("expected error when OpenEditorImpl called with whitespace-only editor, got nil")
+	}
+}
+
 // TestNewEditCmd_BinderParseError covers the error branch after binder.Parse when
 // binderBytes contains invalid UTF-8.
 func TestNewEditCmd_BinderParseError(t *testing.T) {

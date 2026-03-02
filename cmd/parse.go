@@ -36,11 +36,7 @@ func newParseCmdWithGetCWD(reader ParseReader, getwd func() (string, error)) *co
 		Args:         cobra.NoArgs,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			project, _ := cmd.Flags().GetString("project")
-			if cmd.Flags().Changed("project") && project == "" {
-				return fmt.Errorf("--project flag cannot be empty")
-			}
-			binderPath, err := resolveBinderPath(project, getwd)
+			binderPath, err := resolveBinderPathFromCmd(cmd, getwd)
 			if err != nil {
 				return err
 			}

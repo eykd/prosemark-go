@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 
 	"github.com/spf13/cobra"
 
@@ -44,11 +43,7 @@ func newMoveCmdWithGetCWD(io MoveIO, getwd func() (string, error)) *cobra.Comman
 		Args:         cobra.NoArgs,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			project, _ := cmd.Flags().GetString("project")
-			if cmd.Flags().Changed("project") && project == "" {
-				return fmt.Errorf("--project flag cannot be empty")
-			}
-			binderPath, err := resolveBinderPath(project, getwd)
+			binderPath, err := resolveBinderPathFromCmd(cmd, getwd)
 			if err != nil {
 				return err
 			}
@@ -89,14 +84,6 @@ func newMoveCmdWithGetCWD(io MoveIO, getwd func() (string, error)) *cobra.Comman
 
 			changed := !bytes.Equal(binderBytes, modifiedBytes)
 
-			hasError := false
-			for _, d := range diags {
-				if d.Severity == "error" {
-					hasError = true
-					break
-				}
-			}
-
 			if jsonMode {
 				out := binder.OpResult{Version: "1", Changed: changed, Diagnostics: diags}
 				if err := json.NewEncoder(cmd.OutOrStdout()).Encode(out); err != nil {
@@ -106,7 +93,7 @@ func newMoveCmdWithGetCWD(io MoveIO, getwd func() (string, error)) *cobra.Comman
 				printDiagnostics(cmd, diags)
 			}
 
-			if hasError {
+			if hasDiagnosticError(diags) {
 				return fmt.Errorf("move has errors")
 			}
 
@@ -168,24 +155,5 @@ func (w *fileMoveIO) WriteBinderAtomicImpl(_ context.Context, path string, data 
 			return fmt.Errorf("binder file is read-only")
 		}
 	}
-	dir := filepath.Dir(path)
-	tmp, err := os.CreateTemp(dir, ".binder-*.tmp")
-	if err != nil {
-		return fmt.Errorf("creating temp file: %w", err)
-	}
-	tmpName := tmp.Name()
-	if _, err = tmp.Write(data); err != nil {
-		_ = tmp.Close()
-		_ = os.Remove(tmpName)
-		return fmt.Errorf("writing temp file: %w", err)
-	}
-	if err = tmp.Close(); err != nil {
-		_ = os.Remove(tmpName)
-		return fmt.Errorf("closing temp file: %w", err)
-	}
-	if err = os.Rename(tmpName, path); err != nil {
-		_ = os.Remove(tmpName)
-		return fmt.Errorf("renaming temp file: %w", err)
-	}
-	return nil
+	return writeFileAtomicImpl(path, ".binder", data)
 }

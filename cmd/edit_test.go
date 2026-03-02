@@ -474,6 +474,33 @@ func TestNewEditCmd_EditorShellSplit(t *testing.T) {
 	}
 }
 
+// TestNewEditCmd_WhitespaceOnlyEditorRejected verifies that $EDITOR values
+// consisting entirely of whitespace are treated as "not configured" and
+// rejected before OpenEditor is called. edit.go currently uses `editor == ""`
+// which does not trim whitespace; strings.Fields would split "   " into no
+// tokens, making the exec impossible. The check must happen at the RunE level
+// so that OpenEditor is never invoked with an unrunnable value.
+func TestNewEditCmd_WhitespaceOnlyEditorRejected(t *testing.T) {
+	t.Setenv("EDITOR", "   ") // whitespace-only; passes editor == "" but has no tokens
+	mock := &mockEditIO{
+		binderBytes:   editBinderWithNode(),
+		nodeFileBytes: validEditNodeContent(),
+	}
+	c := NewEditCmd(mock)
+	c.SetOut(new(bytes.Buffer))
+	c.SetErr(new(bytes.Buffer))
+	c.SetArgs([]string{editTestNodeUUID, "--project", "."})
+
+	err := c.Execute()
+	if err == nil {
+		t.Error("expected error when $EDITOR is whitespace-only, got nil")
+	}
+	// OpenEditor must NOT be called when the editor string has no tokens.
+	if len(mock.editorCalls) > 0 {
+		t.Errorf("expected OpenEditor NOT to be called for whitespace-only EDITOR, got calls: %v", mock.editorCalls)
+	}
+}
+
 // TestNewEditCmd_WriteAtomicFailAfterEdit verifies that a WriteNodeFileAtomic
 // failure after a successful editor exit is reported as an error.
 func TestNewEditCmd_WriteAtomicFailAfterEdit(t *testing.T) {
