@@ -140,3 +140,61 @@ func TestCollectBinderRefs_NoPanic_CancelledContext(t *testing.T) {
 	cancel()
 	_, _ = node.CollectBinderRefs(ctx, binderWithRefs(testDoctorUUID1+".md"))
 }
+
+// TestCollectBinderRefs_BinderParseDiagnosticsIncluded verifies that parse-level
+// binder diagnostics (BNDW*) are propagated through CollectBinderRefs so the
+// doctor command can surface them to users.
+func TestCollectBinderRefs_BinderParseDiagnosticsIncluded(t *testing.T) {
+	binderWithPragma := []byte("<!-- prosemark-binder:v1 -->\n- [Title](" + testDoctorUUID1 + ".md)\n")
+
+	tests := []struct {
+		name      string
+		binderSrc []byte
+		wantCodes []node.AuditCode
+		wantNone  []node.AuditCode
+	}{
+		{
+			name:      "binder without pragma emits BNDW001",
+			binderSrc: binderWithRefs(testDoctorUUID1 + ".md"), // no pragma
+			wantCodes: []node.AuditCode{node.BNDW001},
+		},
+		{
+			name:      "binder with pragma does not emit BNDW001",
+			binderSrc: binderWithPragma,
+			wantNone:  []node.AuditCode{node.BNDW001},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, diags := node.CollectBinderRefs(context.Background(), tt.binderSrc)
+			codes := diagCodesOf(diags)
+			for _, want := range tt.wantCodes {
+				if _, ok := codes[want]; !ok {
+					t.Errorf("CollectBinderRefs() missing expected code %q; got %v", want, diags)
+				}
+			}
+			for _, none := range tt.wantNone {
+				if _, ok := codes[none]; ok {
+					t.Errorf("CollectBinderRefs() produced unexpected code %q; got %v", none, diags)
+				}
+			}
+		})
+	}
+}
+
+// TestCollectBinderRefs_BNDW001_IsWarning verifies that BNDW001 (missing pragma)
+// is surfaced with warning severity so doctor exits 0 for pragma-only issues.
+func TestCollectBinderRefs_BNDW001_IsWarning(t *testing.T) {
+	// Binder without pragma: binder.Parse will emit BNDW001.
+	_, diags := node.CollectBinderRefs(context.Background(), binderWithRefs(testDoctorUUID1+".md"))
+	for _, d := range diags {
+		if d.Code == node.BNDW001 {
+			if d.Severity != node.SeverityWarning {
+				t.Errorf("BNDW001 severity = %q, want %q", d.Severity, node.SeverityWarning)
+			}
+			return
+		}
+	}
+	t.Errorf("expected BNDW001 diagnostic in output; got %v", diags)
+}

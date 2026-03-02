@@ -658,3 +658,69 @@ func TestNewDoctorCmd_JSONEncodeError(t *testing.T) {
 		t.Error("expected error when JSON encoding fails, got nil")
 	}
 }
+
+// ─── Binder parse diagnostics (BNDW*) ────────────────────────────────────────
+
+// TestNewDoctorCmd_BinderParseWarnings verifies that binder-level parse diagnostics
+// (BNDW*) are surfaced by doctor so users get a complete integrity picture in one
+// command rather than having to run both 'pmk parse' and 'pmk doctor'.
+func TestNewDoctorCmd_BinderParseWarnings(t *testing.T) {
+	tests := []struct {
+		name        string
+		args        []string
+		binderBytes []byte
+		nodeFiles   map[string]nodeFileEntry
+		wantErr     bool
+		wantInOut   string
+		wantNoneOut string
+	}{
+		{
+			// BNDW001: binder has no pragma → warning reported, exit 0.
+			name:        "BNDW001: binder missing pragma is reported as warning",
+			args:        []string{"--project", "."},
+			binderBytes: []byte("- [Node](" + doctorTestNodeUUID + ".md)\n"), // no pragma
+			nodeFiles: map[string]nodeFileEntry{
+				doctorTestNodeUUID + ".md": {content: validDoctorNodeContent(doctorTestNodeUUID), exists: true},
+			},
+			wantErr:   false, // BNDW001 is warning severity → exit 0
+			wantInOut: "BNDW001",
+		},
+		{
+			// Binder with valid pragma → no BNDW001 in output.
+			name:        "binder with pragma produces no BNDW001 in output",
+			args:        []string{"--project", "."},
+			binderBytes: doctorBinderWithNode(doctorTestNodeUUID), // has pragma
+			nodeFiles: map[string]nodeFileEntry{
+				doctorTestNodeUUID + ".md": {content: validDoctorNodeContent(doctorTestNodeUUID), exists: true},
+			},
+			wantErr:     false,
+			wantNoneOut: "BNDW001",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock := &mockDoctorIO{
+				binderBytes: tt.binderBytes,
+				nodeFiles:   tt.nodeFiles,
+			}
+			c := NewDoctorCmd(mock)
+			out := new(bytes.Buffer)
+			c.SetOut(out)
+			c.SetErr(new(bytes.Buffer))
+			c.SetArgs(tt.args)
+
+			err := c.Execute()
+
+			if (err != nil) != tt.wantErr {
+				t.Errorf("error = %v, wantErr %v (stdout=%q)", err, tt.wantErr, out)
+			}
+			if tt.wantInOut != "" && !strings.Contains(out.String(), tt.wantInOut) {
+				t.Errorf("stdout = %q, want to contain %q", out.String(), tt.wantInOut)
+			}
+			if tt.wantNoneOut != "" && strings.Contains(out.String(), tt.wantNoneOut) {
+				t.Errorf("stdout = %q, must NOT contain %q", out.String(), tt.wantNoneOut)
+			}
+		})
+	}
+}

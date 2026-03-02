@@ -48,6 +48,8 @@ const (
 	AUD007 AuditCode = "AUD007"
 	// AUDW001 is a warning indicating a non-UUID filename linked in binder (backward-compatibility warning for Feature 001 projects).
 	AUDW001 AuditCode = "AUDW001"
+	// BNDW001 is a warning propagated from the binder parser indicating the binder file is missing its pragma comment.
+	BNDW001 AuditCode = "BNDW001"
 )
 
 // AuditSeverity classifies the impact level of an audit diagnostic.
