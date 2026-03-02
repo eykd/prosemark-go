@@ -674,6 +674,108 @@ func TestAddChild_PreEncodedSpaceTarget_RoundTrips(t *testing.T) {
 	}
 }
 
+// ──────────────────────────────────────────────────────────────────────────────
+// Dot-slash prefix normalization (BUG: prosemark-go-c7q)
+// ──────────────────────────────────────────────────────────────────────────────
+
+// TestAddChild_DotSlashTarget_StoredAsBareFilename verifies that a target
+// supplied with a "./" prefix is normalized to the bare filename before
+// storage. "./a.md" and "a.md" must produce identical binder output.
+func TestAddChild_DotSlashTarget_StoredAsBareFilename(t *testing.T) {
+	src := binderSrc()
+	params := binder.AddChildParams{
+		ParentSelector: ".",
+		Target:         "./a.md",
+		Title:          "A",
+		Position:       "last",
+	}
+
+	out, diags, err := AddChild(context.Background(), src, nil, params)
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if hasDiagCode(diags, "error") {
+		t.Errorf("unexpected error diagnostic: %v", diags)
+	}
+	// Normalized form must appear in the binder; the raw ./ prefix must not.
+	if !bytes.Contains(out, []byte("(a.md)")) {
+		t.Errorf("expected normalized target '(a.md)' in output:\n%s", out)
+	}
+	if bytes.Contains(out, []byte("(./a.md)")) {
+		t.Errorf("./ prefix must be stripped; still present in output:\n%s", out)
+	}
+}
+
+// TestAddChild_DotSlashThenBarePath_Idempotent verifies that adding "./a.md"
+// and then "a.md" skips the second operation (OPW002). Both forms refer to the
+// same file so the second add must be treated as a duplicate.
+func TestAddChild_DotSlashThenBarePath_Idempotent(t *testing.T) {
+	src := binderSrc()
+
+	out1, _, err := AddChild(context.Background(), src, nil, binder.AddChildParams{
+		ParentSelector: ".",
+		Target:         "./a.md",
+		Title:          "A",
+		Position:       "last",
+	})
+	if err != nil {
+		t.Fatalf("first AddChild error: %v", err)
+	}
+
+	out2, diags2, err := AddChild(context.Background(), out1, nil, binder.AddChildParams{
+		ParentSelector: ".",
+		Target:         "a.md",
+		Title:          "A",
+		Position:       "last",
+	})
+	if err != nil {
+		t.Fatalf("second AddChild error: %v", err)
+	}
+
+	if !hasDiagCode(diags2, binder.CodeDuplicateSkipped) {
+		t.Errorf("expected OPW002 when adding 'a.md' after './a.md', got: %v", diags2)
+	}
+	// Only one "a.md" entry must appear in the output.
+	if bytes.Count(out2, []byte("a.md")) != 1 {
+		t.Errorf("expected exactly one 'a.md' entry in output after idempotent add:\n%s", out2)
+	}
+}
+
+// TestAddChild_BarePathThenDotSlash_Idempotent verifies that adding "a.md"
+// and then "./a.md" skips the second operation (OPW002).
+func TestAddChild_BarePathThenDotSlash_Idempotent(t *testing.T) {
+	src := binderSrc()
+
+	out1, _, err := AddChild(context.Background(), src, nil, binder.AddChildParams{
+		ParentSelector: ".",
+		Target:         "a.md",
+		Title:          "A",
+		Position:       "last",
+	})
+	if err != nil {
+		t.Fatalf("first AddChild error: %v", err)
+	}
+
+	out2, diags2, err := AddChild(context.Background(), out1, nil, binder.AddChildParams{
+		ParentSelector: ".",
+		Target:         "./a.md",
+		Title:          "A",
+		Position:       "last",
+	})
+	if err != nil {
+		t.Fatalf("second AddChild error: %v", err)
+	}
+
+	if !hasDiagCode(diags2, binder.CodeDuplicateSkipped) {
+		t.Errorf("expected OPW002 when adding './a.md' after 'a.md', got: %v", diags2)
+	}
+	// Only one "a.md" entry must appear in the output.
+	if bytes.Count(out2, []byte("a.md")) != 1 {
+		t.Errorf("expected exactly one 'a.md' entry in output after idempotent add:\n%s", out2)
+	}
+}
+
 // TestAddChild_ColonInTarget_ReturnsOPE004 verifies that a colon in the target
 // is rejected with OPE004 and leaves the binder unchanged.
 func TestAddChild_ColonInTarget_ReturnsOPE004(t *testing.T) {

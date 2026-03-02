@@ -478,6 +478,45 @@ func TestDelete_PathSelector_WithSlash(t *testing.T) {
 	}
 }
 
+// ──────────────────────────────────────────────────────────────────────────────
+// Dot-slash prefix normalization (BUG: prosemark-go-c7q)
+// ──────────────────────────────────────────────────────────────────────────────
+
+// TestDelete_BareFilenameSelector_AfterDotSlashAdd_Succeeds verifies that
+// after adding a target with a "./" prefix, deleting via the bare filename
+// selector succeeds. Prior to the fix, the stored target was "./a.md" and
+// --selector=a.md emitted OPE001 (no match).
+func TestDelete_BareFilenameSelector_AfterDotSlashAdd_Succeeds(t *testing.T) {
+	src := binderSrc()
+
+	// Add entry using ./a.md prefix.
+	added, _, err := AddChild(context.Background(), src, nil, binder.AddChildParams{
+		ParentSelector: ".",
+		Target:         "./a.md",
+		Title:          "A",
+		Position:       "last",
+	})
+	if err != nil {
+		t.Fatalf("AddChild error: %v", err)
+	}
+
+	// Delete using bare filename selector.
+	out, diags, err := Delete(context.Background(), added, nil, binder.DeleteParams{
+		Selector: "a.md",
+		Yes:      true,
+	})
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if hasDiagCode(diags, binder.CodeSelectorNoMatch) {
+		t.Errorf("got OPE001: selector 'a.md' should match node added as './a.md': %v", diags)
+	}
+	if bytes.Contains(out, []byte("a.md")) {
+		t.Errorf("node not removed from output:\n%s", out)
+	}
+}
+
 // TestDelete_ParseError_OPE009 verifies that when the underlying parser
 // returns an error, Delete propagates it and emits an OPE009 diagnostic
 // without mutating the source bytes.

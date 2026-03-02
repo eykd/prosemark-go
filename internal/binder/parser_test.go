@@ -1171,6 +1171,28 @@ func TestParse_MissingTargetFile_NoProjectContext_NoDiagnostic(t *testing.T) {
 	}
 }
 
+// TestParse_DotSlashTarget_ProjectHasBareFilename_NoBNDW004 verifies that a
+// binder entry stored as "./a.md" does NOT trigger BNDW004 when the project
+// lists the file as "a.md". The "./" prefix must be normalised before the
+// project-file lookup so that both forms resolve to the same file.
+func TestParse_DotSlashTarget_ProjectHasBareFilename_NoBNDW004(t *testing.T) {
+	project := &binder.Project{
+		Files: []string{"a.md"},
+	}
+	// Binder stores the target with a "./" prefix (as written by the buggy add).
+	src := []byte("<!-- prosemark-binder:v1 -->\n- [A](./a.md)\n")
+
+	_, diags, err := binder.Parse(context.Background(), src, project)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, d := range diags {
+		if d.Code == binder.CodeMissingTargetFile {
+			t.Errorf("unexpected BNDW004 for './a.md' when project lists 'a.md': %+v", d)
+		}
+	}
+}
+
 // TestParse_InvalidUTF8_ReturnsError verifies that Parse returns a fatal error
 // when the source bytes contain invalid UTF-8 content.
 func TestParse_InvalidUTF8_ReturnsError(t *testing.T) {
