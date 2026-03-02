@@ -4,12 +4,29 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 
 	"github.com/spf13/cobra"
 
 	"github.com/eykd/prosemark-go/internal/binder"
 )
+
+// maxBinderFileSize is the maximum allowed size for _binder.md files (10 MB).
+const maxBinderFileSize = 10 * 1024 * 1024
+
+// readBinderSizeLimitedImpl reads the binder file at path, rejecting files that
+// exceed maxBinderFileSize. Excluded from coverage because it wraps OS calls.
+func readBinderSizeLimitedImpl(path string) ([]byte, error) {
+	fi, err := os.Stat(path)
+	if err != nil {
+		return nil, err
+	}
+	if fi.Size() > maxBinderFileSize {
+		return nil, fmt.Errorf("binder file exceeds the 10 MB size limit")
+	}
+	return os.ReadFile(path)
+}
 
 // NewRootCmd creates the root pmk command with all subcommands registered.
 func NewRootCmd() *cobra.Command {

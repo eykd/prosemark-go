@@ -324,22 +324,6 @@ func (w *fileAddChildIO) WriteBinderAtomic(ctx context.Context, path string, dat
 	return w.WriteBinderAtomicImpl(ctx, path, data)
 }
 
-// maxBinderFileSize is the maximum allowed size for _binder.md files (10 MB).
-const maxBinderFileSize = 10 * 1024 * 1024
-
-// readBinderSizeLimitedImpl reads the binder file at path, rejecting files that
-// exceed maxBinderFileSize. Excluded from coverage because it wraps OS calls.
-func readBinderSizeLimitedImpl(path string) ([]byte, error) {
-	fi, err := os.Stat(path)
-	if err != nil {
-		return nil, err
-	}
-	if fi.Size() > maxBinderFileSize {
-		return nil, fmt.Errorf("binder file exceeds the 10 MB size limit")
-	}
-	return os.ReadFile(path)
-}
-
 // writeFileAtomicImpl writes data to path atomically via a temp file and rename.
 // tmpPrefix is the leading label used for the temp file name (e.g. ".binder" or ".node").
 func writeFileAtomicImpl(path, tmpPrefix string, data []byte) error {
