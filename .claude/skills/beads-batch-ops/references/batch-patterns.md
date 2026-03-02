@@ -32,14 +32,24 @@ echo "✅ Created 4 authentication tasks"
 
 ### Creating Task Hierarchies (Epic + Children)
 
+> **ralph.sh epic naming convention**: `ralph.sh` matches epics to branches by stripping
+> the numeric prefix from the branch name and converting hyphens to spaces, then doing a
+> substring match against epic titles. For branch `003-smoke-test-bugs`, the feature slug
+> is `smoke-test-bugs` → `smoke test bugs`. The epic title **must contain this exact slug**
+> (case-insensitive). Use `"NNN: <feature-slug-with-spaces>"` as the title format.
+> Example: branch `003-smoke-test-bugs` → epic title `"003: smoke test bugs"`.
+
 ```bash
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Create epic first, capture ID
-epic_id=$(npx bd create --title "User Authentication Feature" \
+# Create epic first — use --silent to get just the ID (--format json is not supported)
+# IMPORTANT: epic title must contain the branch feature slug (hyphens→spaces) for ralph.sh
+# Branch 003-my-feature → title must contain "my feature"
+epic_id=$(bd create --title "003: my feature" \
   --description "Complete auth system with JWT, password hashing, and middleware" \
-  --format json | jq -r '.id')
+  --type epic \
+  --silent)
 
 echo "Created epic: $epic_id"
 
@@ -265,7 +275,7 @@ npx bd list --format json | jq -r '
 ## Best Practices
 
 1. **Always use `set -euo pipefail`** at the start of batch scripts to fail fast on errors
-2. **Capture IDs when needed** - Use `--format json` with `jq -r '.id'` to extract task IDs for dependent operations
+2. **Capture IDs when needed** - Use `--silent` to get just the ID from `bd create` (`--format json` is not a valid flag for `bd create`). For list commands, use `--json` flag.
 3. **Validate before operating** - Check task state before bulk updates to avoid errors
 4. **Provide progress feedback** - Echo status messages so users see progress in long-running scripts
 5. **Use arrays for static data** - Define multiple similar tasks in Bash arrays for easy iteration

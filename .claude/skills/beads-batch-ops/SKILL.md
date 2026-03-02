@@ -39,14 +39,19 @@ echo "✅ Created 3 tasks"
 
 ### Pattern 2: Create Epic with Children
 
+> **ralph.sh naming rule**: Epic title must contain the branch feature slug (hyphens→spaces).
+> Branch `003-my-feature` → epic title must contain `"my feature"`.
+> Recommended format: `"NNN: my feature"`.
+
 ```bash
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Create epic, capture ID
-epic_id=$(npx bd create --title "User Authentication" \
+# Create epic, capture ID with --silent (NOT --format json — that flag doesn't exist)
+epic_id=$(bd create --title "001: user authentication" \
   --description "Complete auth system" \
-  --format json | jq -r '.id')
+  --type epic \
+  --silent)
 
 # Create children under epic
 npx bd create --title "Implement JWT" --parent "$epic_id" --description "Token generation"
