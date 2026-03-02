@@ -64,10 +64,12 @@ func (binderLocker) LockBinder(ctx context.Context, path string) (func() error, 
 	return globalBinderLocks.lock(ctx, path)
 }
 
-// mergeBinderLines returns the union of distinct lines from current and incoming.
-// Lines from current appear first, followed by any new lines from incoming.
+// mergeBinderLines returns the union of distinct lines from incoming and current.
+// Lines from incoming appear first (preserving the caller's computed insertion
+// order), followed by any lines from current that are absent from incoming.
 // This allows concurrent add-child writes that start from the same stale snapshot
-// to each contribute their entry without overwriting each other.
+// to each contribute their entry without overwriting each other, while also
+// preserving position-sensitive insertions (--first, --at, --before, --after).
 func mergeBinderLines(current, incoming []byte) []byte {
 	currentLines := splitLines(current)
 	incomingLines := splitLines(incoming)
@@ -75,13 +77,13 @@ func mergeBinderLines(current, incoming []byte) []byte {
 	seen := make(map[string]bool, len(currentLines)+len(incomingLines))
 	result := make([]string, 0, len(currentLines)+len(incomingLines))
 
-	for _, line := range currentLines {
+	for _, line := range incomingLines {
 		if !seen[line] {
 			seen[line] = true
 			result = append(result, line)
 		}
 	}
-	for _, line := range incomingLines {
+	for _, line := range currentLines {
 		if !seen[line] {
 			seen[line] = true
 			result = append(result, line)
