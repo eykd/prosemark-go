@@ -119,7 +119,7 @@ func AddChild(ctx context.Context, src []byte, project *binder.Project, params b
 // validateOpTarget checks OPE004 (absolute path, path escapes root, illegal chars,
 // non-.md extension) and OPE005 (target is binder).
 func validateOpTarget(target string) *binder.Diagnostic {
-	if strings.HasPrefix(target, "/") {
+	if isAbsolutePath(target) {
 		return &binder.Diagnostic{
 			Severity: "error",
 			Code:     binder.CodeInvalidTargetPath,
@@ -170,6 +170,11 @@ func hasIllegalPathChars(path string) bool {
 		}
 	}
 	return false
+}
+
+// isAbsolutePath reports whether path is an absolute (non-relative) path.
+func isAbsolutePath(path string) bool {
+	return strings.HasPrefix(path, "/")
 }
 
 // opEscapesRoot reports whether path escapes the project root via "..".
