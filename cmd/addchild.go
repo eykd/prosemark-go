@@ -46,6 +46,10 @@ type NewNodeAddChildIO interface {
 // Override in tests to inject specific values or simulate errors.
 var nodeIDGenerator = nodeIDv7Impl
 
+// nowUTCFunc returns the current UTC time as a string for frontmatter timestamps.
+// Override in tests to inject specific values or simulate clock behavior.
+var nowUTCFunc = node.NowUTC
+
 // nodeIDv7Impl calls uuid.NewV7 to produce a UUIDv7-based node filename.
 // Excluded from coverage because it wraps an external entropy source.
 func nodeIDv7Impl() (string, error) {
@@ -216,7 +220,7 @@ func runNewMode(ctx context.Context, cmd *cobra.Command, io NewNodeAddChildIO, b
 	uuidStem := strings.TrimSuffix(params.Target, ".md")
 	binderDir := filepath.Dir(binderPath)
 	nodePath := filepath.Join(binderDir, params.Target)
-	now := node.NowUTC()
+	now := nowUTCFunc()
 	fm := node.Frontmatter{
 		ID:       uuidStem,
 		Title:    params.Title,
@@ -274,7 +278,7 @@ func runNewMode(ctx context.Context, cmd *cobra.Command, io NewNodeAddChildIO, b
 		if parseErr != nil {
 			return fmt.Errorf("parsing node file after edit: %w", parseErr)
 		}
-		parsedFM.Updated = node.NowUTC()
+		parsedFM.Updated = nowUTCFunc()
 		refreshed := append(node.SerializeFrontmatter(parsedFM), body...)
 		if writeErr := io.WriteNodeFileAtomic(nodePath, refreshed); writeErr != nil {
 			return fmt.Errorf("refreshing node file after edit: %w", writeErr)
