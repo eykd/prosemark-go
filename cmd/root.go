@@ -112,3 +112,26 @@ func printDiagnostics(cmd *cobra.Command, diags []binder.Diagnostic) {
 		fmt.Fprintf(cmd.ErrOrStderr(), "%s: %s (%s)\n", d.Severity, d.Message, d.Code)
 	}
 }
+
+// checkConflictingPositionFlags returns an error if more than one of the
+// mutually-exclusive positioning flags (--first, --at, --before, --after)
+// is set. Both add and move commands share this validation.
+func checkConflictingPositionFlags(cmd *cobra.Command, first bool, before, after string) error {
+	positionFlagsSet := 0
+	if first {
+		positionFlagsSet++
+	}
+	if cmd.Flags().Changed("at") {
+		positionFlagsSet++
+	}
+	if before != "" {
+		positionFlagsSet++
+	}
+	if after != "" {
+		positionFlagsSet++
+	}
+	if positionFlagsSet > 1 {
+		return fmt.Errorf("only one of --first, --at, --before, --after may be specified (%s)", binder.CodeConflictingFlags)
+	}
+	return nil
+}

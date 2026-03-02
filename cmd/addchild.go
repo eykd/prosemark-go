@@ -103,21 +103,8 @@ func newAddChildCmdWithGetCWD(io NewNodeAddChildIO, getwd func() (string, error)
 				return emitOPE009AndError(cmd, jsonMode, err)
 			}
 
-			positionFlagsSet := 0
-			if first {
-				positionFlagsSet++
-			}
-			if cmd.Flags().Changed("at") {
-				positionFlagsSet++
-			}
-			if before != "" {
-				positionFlagsSet++
-			}
-			if after != "" {
-				positionFlagsSet++
-			}
-			if positionFlagsSet > 1 {
-				return fmt.Errorf("only one of --first, --at, --before, --after may be specified (%s)", binder.CodeConflictingFlags)
+			if err := checkConflictingPositionFlags(cmd, first, before, after); err != nil {
+				return err
 			}
 
 			position := "last"
