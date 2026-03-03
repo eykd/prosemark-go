@@ -52,9 +52,10 @@ Coverage exemptions (per `.claude/skills/go-tdd/references/coverage.md`):
 
 After changes to `main.go`, `cmd/root.go`, or command wiring, run `just smoke` to verify errors are visible to users. This is also enforced in pre-commit.
 
-After cloning, install git hooks:
+After cloning, install git hooks and pinned tools:
 ```bash
 lefthook install
+just install-tools   # installs ./bin/bd (beads CLI, pinned to v0.56.1)
 ```
 
 ## Code Standards

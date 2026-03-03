@@ -63,6 +63,10 @@ fmt-check:
 # Run all quality gates
 check: fmt-check vet lint test-cover-check
 
+# Install pinned development tools into ./bin/
+install-tools:
+    GOBIN="$(pwd)/bin" go install github.com/steveyegge/beads/cmd/bd@v0.56.1
+
 # Build the binary
 build:
     go build -o bin/pmk .
