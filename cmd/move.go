@@ -81,7 +81,7 @@ func newMoveCmdWithGetCWD(io MoveIO, getwd func() (string, error)) *cobra.Comman
 				params.At = &at
 			}
 
-			modifiedBytes, diags, _ := ops.Move(ctx, binderBytes, proj, params)
+			modifiedBytes, diags := ops.Move(ctx, binderBytes, proj, params)
 			if diags == nil {
 				diags = []binder.Diagnostic{}
 			}

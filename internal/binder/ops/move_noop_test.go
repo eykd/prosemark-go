@@ -43,11 +43,7 @@ func TestMove_NoOp_SoleChildToSameParent(t *testing.T) {
 		Yes:                       true,
 	}
 
-	out, diags, err := Move(context.Background(), src, nil, params)
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	out, diags := Move(context.Background(), src, nil, params)
 	// A no-op move must not produce any diagnostic — specifically no OPW004.
 	if hasDiagCode(diags, binder.CodeEmptySublistPruned) {
 		t.Errorf("no-op move must not emit OPW004 (empty sublist pruned), got: %v", diags)
@@ -116,10 +112,7 @@ func TestMove_NoOp_TableDriven(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, diags, err := Move(context.Background(), tt.src, nil, tt.params)
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
+			_, diags := Move(context.Background(), tt.src, nil, tt.params)
 			if hasDiagCode(diags, tt.wantCode) {
 				t.Errorf("no-op move must not emit %s, got diags: %v", tt.wantCode, diags)
 			}

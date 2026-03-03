@@ -86,9 +86,9 @@ func TestConcurrentAddChild_AllEntriesPreserved(t *testing.T) {
 				Target:         targets[idx],
 				Position:       "last",
 			}
-			modified, diags, opErr := ops.AddChild(context.Background(), data, proj, params)
-			if opErr != nil || hasDiagnosticError(diags) {
-				errs[idx] = fmt.Errorf("goroutine %d ops.AddChild: err=%v diags=%v", idx, opErr, diags)
+			modified, diags := ops.AddChild(context.Background(), data, proj, params)
+			if hasDiagnosticError(diags) {
+				errs[idx] = fmt.Errorf("goroutine %d ops.AddChild: diags=%v", idx, diags)
 				return
 			}
 
@@ -107,7 +107,7 @@ func TestConcurrentAddChild_AllEntriesPreserved(t *testing.T) {
 	// Report any unexpected I/O or operation errors.
 	for idx, err := range errs {
 		if err != nil {
-			t.Errorf("goroutine %d: %v", idx, err)
+			t.Errorf("goroutine %d: unexpected error: %v", idx, err)
 		}
 	}
 

@@ -23,16 +23,17 @@ var moveOpsCheckboxRE = regexp.MustCompile(`^\[[xX ]\]\s+`)
 var moveParseBinderFn = binder.Parse
 
 // Move relocates the source node (and its subtree) under the destination parent.
-// Returns the modified bytes, diagnostics, and any fatal error. Source bytes are
-// unchanged on error (atomic abort semantics).
-func Move(ctx context.Context, src []byte, project *binder.Project, params binder.MoveParams) ([]byte, []binder.Diagnostic, error) {
+// Returns the modified bytes and diagnostics. Source bytes are unchanged on error
+// (atomic abort semantics). Parse errors are surfaced as diagnostics, not as a
+// returned error.
+func Move(ctx context.Context, src []byte, project *binder.Project, params binder.MoveParams) ([]byte, []binder.Diagnostic) {
 	// Require --yes confirmation (OPE009).
 	if !params.Yes {
 		return src, []binder.Diagnostic{{
 			Severity: "error",
 			Code:     binder.CodeIOOrParseFailure,
 			Message:  "move requires --yes confirmation",
-		}}, nil
+		}}
 	}
 
 	// Parse the source.
@@ -42,13 +43,13 @@ func Move(ctx context.Context, src []byte, project *binder.Project, params binde
 			Severity: "error",
 			Code:     binder.CodeIOOrParseFailure,
 			Message:  fmt.Sprintf("parse error: %v", err),
-		}), err
+		})
 	}
 
 	// Find source nodes.
 	sourceNodes, selDiags := moveEvalSourceSelector(params.SourceSelector, result.Root, result.Lines)
 	if len(sourceNodes) == 0 {
-		return src, append(parseDiags, selDiags...), nil
+		return src, append(parseDiags, selDiags...)
 	}
 
 	var allDiags []binder.Diagnostic
@@ -58,7 +59,7 @@ func Move(ctx context.Context, src []byte, project *binder.Project, params binde
 	// Find destination parent.
 	destNode, destDiags := moveEvalDestSelector(params.DestinationParentSelector, result.Root)
 	if destNode == nil {
-		return src, append(allDiags, destDiags...), nil
+		return src, append(allDiags, destDiags...)
 	}
 	allDiags = append(allDiags, destDiags...)
 
@@ -69,7 +70,7 @@ func Move(ctx context.Context, src []byte, project *binder.Project, params binde
 				Severity: "error",
 				Code:     binder.CodeCycleDetected,
 				Message:  "destination is a descendant of source: cycle detected",
-			}), nil
+			})
 		}
 	}
 
@@ -100,10 +101,10 @@ func Move(ctx context.Context, src []byte, project *binder.Project, params binde
 	// because that's what the user sees when specifying --before/--after/--at.
 	moveInsertIdx, diagErr := moveResolveInsertionIndex(destNode, sourceNodes, params)
 	if diagErr != nil {
-		return src, append(allDiags, *diagErr), nil
+		return src, append(allDiags, *diagErr)
 	}
 	targetIndentStr, targetMarker := inferMarkerAndIndent(destNode, moveInsertIdx)
-	return moveRebuildDocument(result, sourceNodes, destNode, moveInsertIdx, targetIndentStr, targetMarker), allDiags, nil
+	return moveRebuildDocument(result, sourceNodes, destNode, moveInsertIdx, targetIndentStr, targetMarker), allDiags
 }
 
 // moveResolveInsertionIndex returns the 0-based index in destNode.Children at

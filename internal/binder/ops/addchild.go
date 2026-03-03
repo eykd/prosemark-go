@@ -19,30 +19,30 @@ var opsInlineLinkRE = regexp.MustCompile(`\[([^\]]*)\]\(([^)\s"]+)`)
 var parseBinderFn = binder.Parse
 
 // AddChild inserts a new child node into the binder at the specified position under
-// the parent selected by params.ParentSelector. Returns the modified binder bytes,
-// diagnostics, and any fatal error. On validation or logical error the returned
-// bytes are equal to src (no mutation).
-func AddChild(ctx context.Context, src []byte, project *binder.Project, params binder.AddChildParams) ([]byte, []binder.Diagnostic, error) {
+// the parent selected by params.ParentSelector. Returns the modified binder bytes
+// and diagnostics. On validation or logical error the returned bytes are equal to
+// src (no mutation). Parse errors are surfaced as diagnostics, not as a returned error.
+func AddChild(ctx context.Context, src []byte, project *binder.Project, params binder.AddChildParams) ([]byte, []binder.Diagnostic) {
 	result, parseDiags, err := parseBinderFn(ctx, src, project)
 	if err != nil {
 		return src, append(parseDiags, binder.Diagnostic{
 			Severity: "error",
 			Code:     binder.CodeIOOrParseFailure,
 			Message:  fmt.Sprintf("parse error: %v", err),
-		}), err
+		})
 	}
 
 	params.Target = normalizeTargetInput(params.Target)
 
 	// Validate target path (OPE004, OPE005) before touching the selector.
 	if diag := validateOpTarget(params.Target); diag != nil {
-		return src, append(parseDiags, *diag), nil
+		return src, append(parseDiags, *diag)
 	}
 
 	// Evaluate the parent selector (supports deep tree search for non-colon selectors).
 	parents, selDiags := addChildEvalParentSelector(params.ParentSelector, result.Root, result.Lines)
 	if len(parents) == 0 {
-		return src, append(parseDiags, selDiags...), nil
+		return src, append(parseDiags, selDiags...)
 	}
 
 	var allDiags []binder.Diagnostic
@@ -91,7 +91,7 @@ func AddChild(ctx context.Context, src []byte, project *binder.Project, params b
 		// Resolve insertion index among parent's children.
 		insertIdx, diagErr := resolveInsertionIndex(parent, params)
 		if diagErr != nil {
-			return src, append(allDiags, *diagErr), nil
+			return src, append(allDiags, *diagErr)
 		}
 
 		// Build the new list-item line.
@@ -113,7 +113,7 @@ func AddChild(ctx context.Context, src []byte, project *binder.Project, params b
 		result.LineEnds = sliceInsert(result.LineEnds, lineIdx, lineEnd)
 	}
 
-	return binder.Serialize(result), allDiags, nil
+	return binder.Serialize(result), allDiags
 }
 
 // validateOpTarget checks OPE004 (absolute path, path escapes root, illegal chars,

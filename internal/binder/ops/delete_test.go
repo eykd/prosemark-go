@@ -45,11 +45,7 @@ func TestDelete_LeafNode_Removed(t *testing.T) {
 		Yes:      true,
 	}
 
-	out, diags, err := Delete(context.Background(), src, nil, params)
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	out, diags := Delete(context.Background(), src, nil, params)
 	if hasDiagCode(diags, "error") {
 		t.Errorf("unexpected error diagnostic: %v", diags)
 	}
@@ -77,11 +73,7 @@ func TestDelete_NodeWithChildren_RemovesEntireSubtree(t *testing.T) {
 		Yes:      true,
 	}
 
-	out, diags, err := Delete(context.Background(), src, nil, params)
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	out, diags := Delete(context.Background(), src, nil, params)
 	if hasDiagCode(diags, "error") {
 		t.Errorf("unexpected error diagnostic: %v", diags)
 	}
@@ -112,11 +104,7 @@ func TestDelete_NodeWithChildren_EmitsCascadeDeleteWarning(t *testing.T) {
 		Yes:      true,
 	}
 
-	_, diags, err := Delete(context.Background(), src, nil, params)
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	_, diags := Delete(context.Background(), src, nil, params)
 	if !hasDiagCode(diags, binder.CodeCascadeDelete) {
 		t.Errorf("expected OPW005 (cascade delete warning), got: %v", diags)
 	}
@@ -142,11 +130,7 @@ func TestDelete_ConsecutiveBlankLines_Collapsed(t *testing.T) {
 		Yes:      true,
 	}
 
-	out, diags, err := Delete(context.Background(), src, nil, params)
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	out, diags := Delete(context.Background(), src, nil, params)
 	if hasDiagCode(diags, "error") {
 		t.Errorf("unexpected error diagnostic: %v", diags)
 	}
@@ -174,11 +158,7 @@ func TestDelete_LastTopLevelNode_TrailingBlanksRemoved(t *testing.T) {
 		Yes:      true,
 	}
 
-	out, diags, err := Delete(context.Background(), src, nil, params)
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	out, diags := Delete(context.Background(), src, nil, params)
 	if hasDiagCode(diags, "error") {
 		t.Errorf("unexpected error diagnostic: %v", diags)
 	}
@@ -210,11 +190,7 @@ func TestDelete_EmptySublist_Pruned_OPW004(t *testing.T) {
 		Yes:      true,
 	}
 
-	out, diags, err := Delete(context.Background(), src, nil, params)
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	out, diags := Delete(context.Background(), src, nil, params)
 	if !hasDiagCode(diags, binder.CodeEmptySublistPruned) {
 		t.Errorf("expected OPW004 (empty sublist pruned), got: %v", diags)
 	}
@@ -246,11 +222,7 @@ func TestDelete_InlineProse_OPW003(t *testing.T) {
 		Yes:      true,
 	}
 
-	out, diags, err := Delete(context.Background(), src, nil, params)
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	out, diags := Delete(context.Background(), src, nil, params)
 	if !hasDiagCode(diags, binder.CodeNonStructuralDestroyed) {
 		t.Errorf("expected OPW003 (non-structural content destroyed), got: %v", diags)
 	}
@@ -281,11 +253,7 @@ func TestDelete_ReferenceDefinition_Preserved(t *testing.T) {
 		Yes:      true,
 	}
 
-	out, diags, err := Delete(context.Background(), src, nil, params)
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	out, diags := Delete(context.Background(), src, nil, params)
 	if hasDiagCode(diags, "error") {
 		t.Errorf("unexpected error diagnostic: %v", diags)
 	}
@@ -349,7 +317,7 @@ func TestDelete_ErrorCodesAbortMutation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			out, diags, _ := Delete(context.Background(), tt.src, nil, tt.params)
+			out, diags := Delete(context.Background(), tt.src, nil, tt.params)
 
 			if !hasDiagCode(diags, tt.wantCode) {
 				t.Errorf("expected diagnostic %s, got: %v", tt.wantCode, diags)
@@ -380,11 +348,7 @@ func TestDelete_MultiMatch_OPW001_DeletesAll(t *testing.T) {
 		Yes:      true,
 	}
 
-	out, diags, err := Delete(context.Background(), src, nil, params)
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	out, diags := Delete(context.Background(), src, nil, params)
 	if !hasDiagCode(diags, binder.CodeMultiMatch) {
 		t.Errorf("expected OPW001 (multi-match), got: %v", diags)
 	}
@@ -414,11 +378,7 @@ func TestDelete_ColonSelector_DelegatesToEvalSelector(t *testing.T) {
 		Yes:      true,
 	}
 
-	out, _, err := Delete(context.Background(), src, nil, params)
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	out, _ := Delete(context.Background(), src, nil, params)
 	if bytes.Contains(out, []byte("alpha.md")) {
 		t.Errorf("alpha.md should be deleted:\n%s", out)
 	}
@@ -436,7 +396,7 @@ func TestDelete_OPE002_ProjectAmbiguousBareStem(t *testing.T) {
 		Yes:      true,
 	}
 
-	_, diags, _ := Delete(context.Background(), src, proj, params)
+	_, diags := Delete(context.Background(), src, proj, params)
 
 	if !hasDiagCode(diags, binder.CodeAmbiguousBareStem) {
 		t.Errorf("expected OPE002 (ambiguous bare stem), got: %v", diags)
@@ -452,7 +412,7 @@ func TestDelete_OPE006_NodeInCodeFence(t *testing.T) {
 		Yes:      true,
 	}
 
-	_, diags, _ := Delete(context.Background(), src, nil, params)
+	_, diags := Delete(context.Background(), src, nil, params)
 
 	if !hasDiagCode(diags, binder.CodeNodeInCodeFence) {
 		t.Errorf("expected OPE006 (node in code fence), got: %v", diags)
@@ -468,11 +428,7 @@ func TestDelete_PathSelector_WithSlash(t *testing.T) {
 		Yes:      true,
 	}
 
-	out, _, err := Delete(context.Background(), src, nil, params)
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	out, _ := Delete(context.Background(), src, nil, params)
 	if bytes.Contains(out, []byte("subfolder/ch.md")) {
 		t.Errorf("subfolder/ch.md should be deleted:\n%s", out)
 	}
@@ -490,25 +446,18 @@ func TestDelete_BareFilenameSelector_AfterDotSlashAdd_Succeeds(t *testing.T) {
 	src := binderSrc()
 
 	// Add entry using ./a.md prefix.
-	added, _, err := AddChild(context.Background(), src, nil, binder.AddChildParams{
+	added, _ := AddChild(context.Background(), src, nil, binder.AddChildParams{
 		ParentSelector: ".",
 		Target:         "./a.md",
 		Title:          "A",
 		Position:       "last",
 	})
-	if err != nil {
-		t.Fatalf("AddChild error: %v", err)
-	}
 
 	// Delete using bare filename selector.
-	out, diags, err := Delete(context.Background(), added, nil, binder.DeleteParams{
+	out, diags := Delete(context.Background(), added, nil, binder.DeleteParams{
 		Selector: "a.md",
 		Yes:      true,
 	})
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
 	if hasDiagCode(diags, binder.CodeSelectorNoMatch) {
 		t.Errorf("got OPE001: selector 'a.md' should match node added as './a.md': %v", diags)
 	}
@@ -530,14 +479,10 @@ func TestDelete_ParseError_OPE009(t *testing.T) {
 	}
 
 	src := binderSrc("- [Alpha](alpha.md)")
-	out, diags, err := Delete(context.Background(), src, nil, binder.DeleteParams{
+	out, diags := Delete(context.Background(), src, nil, binder.DeleteParams{
 		Selector: "alpha",
 		Yes:      true,
 	})
-
-	if err != testErr {
-		t.Errorf("expected testErr, got %v", err)
-	}
 	if !hasDiagCode(diags, binder.CodeIOOrParseFailure) {
 		t.Errorf("expected OPE009 diagnostic, got: %v", diags)
 	}

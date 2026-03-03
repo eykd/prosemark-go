@@ -49,11 +49,7 @@ func TestAddChild_AppendLast_Default(t *testing.T) {
 		Position:       "last",
 	}
 
-	out, diags, err := AddChild(context.Background(), src, nil, params)
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	out, diags := AddChild(context.Background(), src, nil, params)
 	if hasDiagCode(diags, "error") {
 		t.Errorf("unexpected error diagnostic: %v", diags)
 	}
@@ -81,11 +77,7 @@ func TestAddChild_PrependFirst(t *testing.T) {
 		Position:       "first",
 	}
 
-	out, diags, err := AddChild(context.Background(), src, nil, params)
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	out, diags := AddChild(context.Background(), src, nil, params)
 	if hasDiagCode(diags, "error") {
 		t.Errorf("unexpected error diagnostic: %v", diags)
 	}
@@ -115,11 +107,7 @@ func TestAddChild_InsertAtIndex(t *testing.T) {
 		At:             &at,
 	}
 
-	out, diags, err := AddChild(context.Background(), src, nil, params)
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	out, diags := AddChild(context.Background(), src, nil, params)
 	if hasDiagCode(diags, "error") {
 		t.Errorf("unexpected error diagnostic: %v", diags)
 	}
@@ -149,11 +137,7 @@ func TestAddChild_BeforeSibling(t *testing.T) {
 		Before:         "beta",
 	}
 
-	out, diags, err := AddChild(context.Background(), src, nil, params)
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	out, diags := AddChild(context.Background(), src, nil, params)
 	if hasDiagCode(diags, "error") {
 		t.Errorf("unexpected error diagnostic: %v", diags)
 	}
@@ -183,11 +167,7 @@ func TestAddChild_AfterSibling(t *testing.T) {
 		After:          "alpha",
 	}
 
-	out, diags, err := AddChild(context.Background(), src, nil, params)
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	out, diags := AddChild(context.Background(), src, nil, params)
 	if hasDiagCode(diags, "error") {
 		t.Errorf("unexpected error diagnostic: %v", diags)
 	}
@@ -219,11 +199,7 @@ func TestAddChild_IdempotencySkip_OPW002(t *testing.T) {
 		Force:          false,
 	}
 
-	out, diags, err := AddChild(context.Background(), src, nil, params)
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	out, diags := AddChild(context.Background(), src, nil, params)
 	if !hasDiagCode(diags, binder.CodeDuplicateSkipped) {
 		t.Errorf("expected OPW002 diagnostic, got: %v", diags)
 	}
@@ -244,11 +220,7 @@ func TestAddChild_Force_AllowsDuplicate(t *testing.T) {
 		Force:          true,
 	}
 
-	out, diags, err := AddChild(context.Background(), src, nil, params)
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	out, diags := AddChild(context.Background(), src, nil, params)
 	if hasDiagCode(diags, "error") {
 		t.Errorf("unexpected error diagnostic: %v", diags)
 	}
@@ -278,11 +250,7 @@ func TestAddChild_OrderedList_MaxPlusOne_PeriodStyle(t *testing.T) {
 		Position:       "last",
 	}
 
-	out, diags, err := AddChild(context.Background(), src, nil, params)
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	out, diags := AddChild(context.Background(), src, nil, params)
 	if hasDiagCode(diags, "error") {
 		t.Errorf("unexpected error diagnostic: %v", diags)
 	}
@@ -306,11 +274,7 @@ func TestAddChild_OrderedList_MaxPlusOne_ParenStyle(t *testing.T) {
 		Position:       "last",
 	}
 
-	out, diags, err := AddChild(context.Background(), src, nil, params)
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	out, diags := AddChild(context.Background(), src, nil, params)
 	if hasDiagCode(diags, "error") {
 		t.Errorf("unexpected error diagnostic: %v", diags)
 	}
@@ -330,11 +294,7 @@ func TestAddChild_TabIndentationInherited(t *testing.T) {
 		Position:       "last",
 	}
 
-	out, diags, err := AddChild(context.Background(), src, nil, params)
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	out, diags := AddChild(context.Background(), src, nil, params)
 	if hasDiagCode(diags, "error") {
 		t.Errorf("unexpected error diagnostic: %v", diags)
 	}
@@ -359,11 +319,7 @@ func TestAddChild_TitleBracketEscape(t *testing.T) {
 		Position:       "last",
 	}
 
-	out, diags, err := AddChild(context.Background(), src, nil, params)
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	out, diags := AddChild(context.Background(), src, nil, params)
 	if hasDiagCode(diags, "error") {
 		t.Errorf("unexpected error diagnostic: %v", diags)
 	}
@@ -387,11 +343,7 @@ func TestAddChild_EmptyTitle_UsesTargetStem(t *testing.T) {
 		Position:       "last",
 	}
 
-	out, diags, err := AddChild(context.Background(), src, nil, params)
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	out, diags := AddChild(context.Background(), src, nil, params)
 	if hasDiagCode(diags, "error") {
 		t.Errorf("unexpected error diagnostic: %v", diags)
 	}
@@ -418,11 +370,7 @@ func TestAddChild_FirstChild_LineEndingFallback_LF(t *testing.T) {
 		Position:       "last",
 	}
 
-	out, diags, err := AddChild(context.Background(), src, nil, params)
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	out, diags := AddChild(context.Background(), src, nil, params)
 	if hasDiagCode(diags, "error") {
 		t.Errorf("unexpected error diagnostic: %v", diags)
 	}
@@ -593,7 +541,7 @@ func TestAddChild_ErrorCodesAbortMutation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			out, diags, _ := AddChild(context.Background(), tt.src, nil, tt.params)
+			out, diags := AddChild(context.Background(), tt.src, nil, tt.params)
 
 			if !hasDiagCode(diags, tt.wantCode) {
 				t.Errorf("expected diagnostic %s, got: %v", tt.wantCode, diags)
@@ -623,11 +571,7 @@ func TestAddChild_SpaceInTarget_RoundTrips(t *testing.T) {
 		Position:       "last",
 	}
 
-	out, diags, err := AddChild(context.Background(), src, nil, params)
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	out, diags := AddChild(context.Background(), src, nil, params)
 	if hasDiagCode(diags, "error") {
 		t.Errorf("unexpected error diagnostic: %v", diags)
 	}
@@ -663,11 +607,7 @@ func TestAddChild_PreEncodedSpaceTarget_RoundTrips(t *testing.T) {
 		Position:       "last",
 	}
 
-	out, diags, err := AddChild(context.Background(), src, nil, params)
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	out, diags := AddChild(context.Background(), src, nil, params)
 	if hasDiagCode(diags, "error") {
 		t.Errorf("unexpected error diagnostic: %v", diags)
 	}
@@ -701,11 +641,7 @@ func TestAddChild_DotSlashTarget_StoredAsBareFilename(t *testing.T) {
 		Position:       "last",
 	}
 
-	out, diags, err := AddChild(context.Background(), src, nil, params)
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	out, diags := AddChild(context.Background(), src, nil, params)
 	if hasDiagCode(diags, "error") {
 		t.Errorf("unexpected error diagnostic: %v", diags)
 	}
@@ -724,25 +660,19 @@ func TestAddChild_DotSlashTarget_StoredAsBareFilename(t *testing.T) {
 func TestAddChild_DotSlashThenBarePath_Idempotent(t *testing.T) {
 	src := binderSrc()
 
-	out1, _, err := AddChild(context.Background(), src, nil, binder.AddChildParams{
+	out1, _ := AddChild(context.Background(), src, nil, binder.AddChildParams{
 		ParentSelector: ".",
 		Target:         "./a.md",
 		Title:          "A",
 		Position:       "last",
 	})
-	if err != nil {
-		t.Fatalf("first AddChild error: %v", err)
-	}
 
-	out2, diags2, err := AddChild(context.Background(), out1, nil, binder.AddChildParams{
+	out2, diags2 := AddChild(context.Background(), out1, nil, binder.AddChildParams{
 		ParentSelector: ".",
 		Target:         "a.md",
 		Title:          "A",
 		Position:       "last",
 	})
-	if err != nil {
-		t.Fatalf("second AddChild error: %v", err)
-	}
 
 	if !hasDiagCode(diags2, binder.CodeDuplicateSkipped) {
 		t.Errorf("expected OPW002 when adding 'a.md' after './a.md', got: %v", diags2)
@@ -758,25 +688,19 @@ func TestAddChild_DotSlashThenBarePath_Idempotent(t *testing.T) {
 func TestAddChild_BarePathThenDotSlash_Idempotent(t *testing.T) {
 	src := binderSrc()
 
-	out1, _, err := AddChild(context.Background(), src, nil, binder.AddChildParams{
+	out1, _ := AddChild(context.Background(), src, nil, binder.AddChildParams{
 		ParentSelector: ".",
 		Target:         "a.md",
 		Title:          "A",
 		Position:       "last",
 	})
-	if err != nil {
-		t.Fatalf("first AddChild error: %v", err)
-	}
 
-	out2, diags2, err := AddChild(context.Background(), out1, nil, binder.AddChildParams{
+	out2, diags2 := AddChild(context.Background(), out1, nil, binder.AddChildParams{
 		ParentSelector: ".",
 		Target:         "./a.md",
 		Title:          "A",
 		Position:       "last",
 	})
-	if err != nil {
-		t.Fatalf("second AddChild error: %v", err)
-	}
 
 	if !hasDiagCode(diags2, binder.CodeDuplicateSkipped) {
 		t.Errorf("expected OPW002 when adding './a.md' after 'a.md', got: %v", diags2)
@@ -798,11 +722,7 @@ func TestAddChild_ColonInTarget_ReturnsOPE004(t *testing.T) {
 		Position:       "last",
 	}
 
-	out, diags, err := AddChild(context.Background(), src, nil, params)
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	out, diags := AddChild(context.Background(), src, nil, params)
 	if !hasDiagCode(diags, binder.CodeInvalidTargetPath) {
 		t.Errorf("expected OPE004, got: %v", diags)
 	}
@@ -826,7 +746,7 @@ func TestAddChild_OPW001_MultiMatchAppliesAll(t *testing.T) {
 		Position:       "last",
 	}
 
-	out, diags, _ := AddChild(context.Background(), src, nil, params)
+	out, diags := AddChild(context.Background(), src, nil, params)
 
 	if !hasDiagCode(diags, binder.CodeMultiMatch) {
 		t.Errorf("expected OPW001 (multi-match), got: %v", diags)
@@ -849,7 +769,7 @@ func TestAddChild_PercentDecodeError_UsesOriginalTarget(t *testing.T) {
 		Position:       "last",
 	}
 
-	out, _, _ := AddChild(context.Background(), src, nil, params)
+	out, _ := AddChild(context.Background(), src, nil, params)
 
 	if !bytes.Contains(out, []byte("%ZZfoo.md")) {
 		t.Errorf("expected original (non-decoded) target in output, got:\n%s", out)
@@ -867,7 +787,7 @@ func TestAddChild_TabIndent_FirstChild(t *testing.T) {
 		Position:       "last",
 	}
 
-	out, _, _ := AddChild(context.Background(), src, nil, params)
+	out, _ := AddChild(context.Background(), src, nil, params)
 
 	if !bytes.Contains(out, []byte("\t\t- [New](new.md)")) {
 		t.Errorf("expected double-tab indented new child, got:\n%s", out)
@@ -886,7 +806,7 @@ func TestAddChild_OrderedList_InsertFirst_MaxOrdinalPlusOne(t *testing.T) {
 		Position:       "first", // insertIdx = 0 → uses maxOrdinal+1
 	}
 
-	out, _, _ := AddChild(context.Background(), src, nil, params)
+	out, _ := AddChild(context.Background(), src, nil, params)
 
 	// maxOrdinal([1), 2)]) = 2; new marker = "3)"
 	if !bytes.Contains(out, []byte("3) [Ch New](ch-new.md)")) {
@@ -910,11 +830,7 @@ func TestAddChild_WikilinkTarget_StripsAndInserts(t *testing.T) {
 		Position:       "last",
 	}
 
-	out, diags, err := AddChild(context.Background(), src, nil, params)
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	out, diags := AddChild(context.Background(), src, nil, params)
 	if hasDiagCode(diags, "error") {
 		t.Errorf("unexpected error diagnostic: %v", diags)
 	}
@@ -939,10 +855,7 @@ func TestAddChild_BracketTitleRoundTrip(t *testing.T) {
 		Position:       "last",
 	}
 
-	out, diags, err := AddChild(context.Background(), src, proj, params)
-	if err != nil {
-		t.Fatalf("unexpected error from AddChild: %v", err)
-	}
+	out, diags := AddChild(context.Background(), src, proj, params)
 	for _, d := range diags {
 		if d.Severity == "error" {
 			t.Errorf("unexpected error diagnostic: %+v", d)
@@ -971,21 +884,15 @@ func TestAddChild_BracketTitle_DoubleRoundTrip(t *testing.T) {
 	proj := &binder.Project{Files: []string{"alpha.md", "beta.md"}, BinderDir: "."}
 
 	// First add: user provides the display title with brackets.
-	out1, _, err := AddChild(context.Background(), binderSrc(), proj, binder.AddChildParams{
+	out1, _ := AddChild(context.Background(), binderSrc(), proj, binder.AddChildParams{
 		ParentSelector: ".",
 		Target:         "alpha.md",
 		Title:          "[Brackets] Test",
 		Position:       "last",
 	})
-	if err != nil {
-		t.Fatalf("first AddChild error: %v", err)
-	}
 
 	// Parse to get the title as returned to the caller (e.g. via JSON output).
-	result1, _, err := binder.Parse(context.Background(), out1, proj)
-	if err != nil {
-		t.Fatalf("first parse error: %v", err)
-	}
+	result1, _, _ := binder.Parse(context.Background(), out1, proj)
 	if len(result1.Root.Children) != 1 {
 		t.Fatalf("expected 1 child after first add, got %d", len(result1.Root.Children))
 	}
@@ -997,22 +904,16 @@ func TestAddChild_BracketTitle_DoubleRoundTrip(t *testing.T) {
 	}
 
 	// Second add: user re-uses the title returned by parse (common workflow).
-	out2, _, err := AddChild(context.Background(), out1, proj, binder.AddChildParams{
+	out2, _ := AddChild(context.Background(), out1, proj, binder.AddChildParams{
 		ParentSelector: ".",
 		Target:         "beta.md",
 		Title:          parsedTitle,
 		Position:       "last",
 	})
-	if err != nil {
-		t.Fatalf("second AddChild error: %v", err)
-	}
 
 	// Both nodes must survive the second parse. If double-escaping occurred,
 	// the second node becomes a zombie and silently disappears.
-	result2, _, err := binder.Parse(context.Background(), out2, proj)
-	if err != nil {
-		t.Fatalf("second parse error: %v", err)
-	}
+	result2, _, _ := binder.Parse(context.Background(), out2, proj)
 	if len(result2.Root.Children) != 2 {
 		t.Fatalf("expected 2 children after second add+parse, got %d; double-escape zombie bug", len(result2.Root.Children))
 	}

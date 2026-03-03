@@ -60,7 +60,7 @@ func newDeleteCmdWithGetCWD(io DeleteIO, getwd func() (string, error)) *cobra.Co
 				Yes:      yes,
 			}
 
-			modifiedBytes, diags, _ := ops.Delete(ctx, binderBytes, proj, params) //nolint:errcheck
+			modifiedBytes, diags := ops.Delete(ctx, binderBytes, proj, params)
 			if diags == nil {
 				diags = []binder.Diagnostic{}
 			}

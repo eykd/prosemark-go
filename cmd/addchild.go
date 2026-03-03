@@ -143,7 +143,7 @@ func newAddChildCmdWithGetCWD(io NewNodeAddChildIO, getwd func() (string, error)
 				return runNewMode(ctx, cmd, io, binderPath, binderBytes, proj, params, synopsis, editMode)
 			}
 
-			modifiedBytes, diags, _ := ops.AddChild(ctx, binderBytes, proj, params) //nolint:errcheck
+			modifiedBytes, diags := ops.AddChild(ctx, binderBytes, proj, params)
 			if diags == nil {
 				diags = []binder.Diagnostic{}
 			}
@@ -249,7 +249,7 @@ func runNewMode(ctx context.Context, cmd *cobra.Command, io NewNodeAddChildIO, b
 		return fmt.Errorf("creating node file: %w", err)
 	}
 
-	modifiedBytes, diags, _ := ops.AddChild(ctx, binderBytes, proj, params) //nolint:errcheck
+	modifiedBytes, diags := ops.AddChild(ctx, binderBytes, proj, params)
 	if diags == nil {
 		diags = []binder.Diagnostic{}
 	}
