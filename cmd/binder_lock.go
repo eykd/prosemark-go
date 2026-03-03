@@ -64,28 +64,35 @@ func (binderLocker) LockBinder(ctx context.Context, path string) (func() error, 
 	return globalBinderLocks.lock(ctx, path)
 }
 
-// mergeBinderLines returns the union of distinct lines from incoming and current.
-// Lines from incoming appear first (preserving the caller's computed insertion
-// order), followed by any lines from current that are absent from incoming.
-// This allows concurrent add-child writes that start from the same stale snapshot
-// to each contribute their entry without overwriting each other, while also
-// preserving position-sensitive insertions (--first, --at, --before, --after).
+// mergeBinderLines merges concurrent add-child writes that started from the
+// same stale snapshot. Lines from incoming appear first (preserving the
+// caller's computed insertion order), followed by any lines from current that
+// are not already accounted for by incoming (counted by multiplicity).
+//
+// Using multiset counts instead of a simple seen-set means that structurally
+// identical lines (e.g. two "- [Chapter](chapter.md)" nodes, or the same
+// child appended to multiple matched parents) are both preserved rather than
+// collapsed into one.
 func mergeBinderLines(current, incoming []byte) []byte {
 	currentLines := splitLines(current)
 	incomingLines := splitLines(incoming)
 
-	seen := make(map[string]bool, len(currentLines)+len(incomingLines))
-	result := make([]string, 0, len(currentLines)+len(incomingLines))
-
+	// Count occurrences of each line in incoming.
+	incomingCount := make(map[string]int, len(incomingLines))
 	for _, line := range incomingLines {
-		if !seen[line] {
-			seen[line] = true
-			result = append(result, line)
-		}
+		incomingCount[line]++
 	}
+
+	// Start with all incoming lines in order.
+	result := make([]string, len(incomingLines))
+	copy(result, incomingLines)
+
+	// Append lines from current that are not sufficiently covered by incoming.
+	// These represent entries added by concurrent commands after our snapshot.
+	currentSeen := make(map[string]int, len(currentLines))
 	for _, line := range currentLines {
-		if !seen[line] {
-			seen[line] = true
+		currentSeen[line]++
+		if currentSeen[line] > incomingCount[line] {
 			result = append(result, line)
 		}
 	}
