@@ -86,7 +86,8 @@ func Move(ctx context.Context, src []byte, project *binder.Project, params binde
 	}
 
 	// OPW004: warn if any non-root parent loses its sole child.
-	if moveAnyParentLosesAllChildren(result.Root, sourceNodes) {
+	// Skip when the destination IS the parent (same-parent move is a no-op).
+	if moveAnyParentLosesAllChildren(result.Root, sourceNodes, destNode) {
 		allDiags = append(allDiags, binder.Diagnostic{
 			Severity: "warning",
 			Code:     binder.CodeEmptySublistPruned,
@@ -343,11 +344,12 @@ func moveIsDescendant(ancestor, target *binder.Node) bool {
 }
 
 // moveAnyParentLosesAllChildren reports whether any non-root parent would lose
-// its only child due to the move.
-func moveAnyParentLosesAllChildren(root *binder.Node, sourceNodes []*binder.Node) bool {
+// its only child due to the move. Parents that equal destNode are excluded
+// because those nodes are being moved back to their current parent (no-op).
+func moveAnyParentLosesAllChildren(root *binder.Node, sourceNodes []*binder.Node, destNode *binder.Node) bool {
 	for _, srcNode := range sourceNodes {
 		parent := deleteFindParentNode(root, srcNode)
-		if parent != nil && parent.Type != "root" && len(parent.Children) == 1 {
+		if parent != nil && parent.Type != "root" && len(parent.Children) == 1 && parent != destNode {
 			return true
 		}
 	}
