@@ -107,6 +107,10 @@ func newAddChildCmdWithGetCWD(io NewNodeAddChildIO, getwd func() (string, error)
 				return err
 			}
 
+			if synopsis != "" && !newMode {
+				return fmt.Errorf("--synopsis requires --new: synopsis frontmatter can only be written when creating a new node file")
+			}
+
 			position := "last"
 			if first {
 				position = "first"

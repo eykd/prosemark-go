@@ -1057,6 +1057,56 @@ func TestNewAddChildCmd_NewMode_EditRefreshesUpdated(t *testing.T) {
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
+// Synopsis without --new flag (prosemark-go-eq0)
+// ──────────────────────────────────────────────────────────────────────────────
+
+// TestNewAddChildCmd_SynopsisWithoutNewReturnsError verifies that --synopsis
+// without --new returns an error and does not modify the binder. When --new is
+// absent the command adds an existing file reference and cannot write synopsis
+// frontmatter, so providing --synopsis is always a user mistake that must be
+// surfaced rather than silently discarded.
+func TestNewAddChildCmd_SynopsisWithoutNewReturnsError(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{
+			name: "synopsis with target but no --new",
+			args: []string{"--parent", ".", "--target", "chapter-two.md", "--synopsis", "A brief description.", "--project", "."},
+		},
+		{
+			name: "synopsis with title but no --new",
+			args: []string{"--parent", ".", "--target", "chapter-two.md", "--title", "Chapter Two", "--synopsis", "A brief description.", "--project", "."},
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			mock := &mockAddChildIO{
+				binderBytes: acBinder(),
+				project:     &binder.Project{Files: []string{"chapter-two.md"}, BinderDir: "."},
+			}
+			c := NewAddChildCmd(mock)
+			out := new(bytes.Buffer)
+			c.SetOut(out)
+			c.SetErr(new(bytes.Buffer))
+			c.SetArgs(tt.args)
+
+			if err := c.Execute(); err == nil {
+				t.Error("expected error when --synopsis is provided without --new")
+			}
+			if out.Len() > 0 {
+				t.Errorf("expected no stdout on error, got: %q", out.String())
+			}
+			if mock.writtenPath != "" {
+				t.Errorf("binder must not be written when --synopsis used without --new, was written to %q", mock.writtenPath)
+			}
+		})
+	}
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
 // Absolute path rejection (prosemark-go-irm)
 // ──────────────────────────────────────────────────────────────────────────────
 
