@@ -98,7 +98,7 @@ func Move(ctx context.Context, src []byte, project *binder.Project, params binde
 	// Resolve the insertion index among destNode's children (excluding sourceNodes).
 	// We build a view of destNode's children after the source nodes are removed,
 	// because that's what the user sees when specifying --before/--after/--at.
-	moveInsertIdx, diagErr := moveresolveInsertionIndex(destNode, sourceNodes, params)
+	moveInsertIdx, diagErr := moveResolveInsertionIndex(destNode, sourceNodes, params)
 	if diagErr != nil {
 		return src, append(allDiags, *diagErr), nil
 	}
@@ -106,11 +106,11 @@ func Move(ctx context.Context, src []byte, project *binder.Project, params binde
 	return moveRebuildDocument(result, sourceNodes, destNode, moveInsertIdx, targetIndentStr, targetMarker), allDiags, nil
 }
 
-// moveresolveInsertionIndex returns the 0-based index in destNode.Children at
+// moveResolveInsertionIndex returns the 0-based index in destNode.Children at
 // which to insert the moved nodes. The sourceNodes are excluded from the child
 // list when evaluating --before/--after/--at positions (because they will be
 // removed before insertion). Returns an error diagnostic on invalid input.
-func moveresolveInsertionIndex(destNode *binder.Node, sourceNodes []*binder.Node, params binder.MoveParams) (int, *binder.Diagnostic) {
+func moveResolveInsertionIndex(destNode *binder.Node, sourceNodes []*binder.Node, params binder.MoveParams) (int, *binder.Diagnostic) {
 	// Build the post-removal child list and a parallel slice of their full indices.
 	sourceSet := make(map[*binder.Node]bool, len(sourceNodes))
 	for _, s := range sourceNodes {

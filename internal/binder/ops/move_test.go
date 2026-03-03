@@ -698,7 +698,7 @@ func TestMove_After_InsertAfterSibling(t *testing.T) {
 
 // TestMove_After_LastSibling verifies that --after=<last-child> inserts the
 // source node at the end of the destination's children (after the last one).
-// This exercises the ri >= len(remaining) branch in moveresolveInsertionIndex.
+// This exercises the ri >= len(remaining) branch in moveResolveInsertionIndex.
 func TestMove_After_LastSibling(t *testing.T) {
 	// ch1, ch2, ch3, ch4 at root; move ch1 after ch4 → ch2, ch3, ch4, ch1.
 	src := []byte("<!-- prosemark-binder:v1 -->\n\n" +
