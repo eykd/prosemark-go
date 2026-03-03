@@ -113,7 +113,7 @@ func newDoctorCmdWithGetCWD(io DoctorIO, getwd func() (string, error)) *cobra.Co
 				}
 			} else {
 				for _, d := range diags {
-					fmt.Fprintf(cmd.OutOrStdout(), "%s %-7s %s\n",
+					fmt.Fprintf(cmd.ErrOrStderr(), "%s %-7s %s\n",
 						string(d.Code),
 						string(d.Severity),
 						sanitizePath(d.Message),

@@ -15,7 +15,7 @@ func TestNewDoctorCmd_ProjectConfigValidation(t *testing.T) {
 		name       string
 		nodeFiles  map[string]nodeFileEntry // ".prosemark.yml" entry controls config state
 		wantErr    bool                     // command returns error (exit 1)
-		wantCode   string                   // audit code that MUST appear in stdout
+		wantCode   string                   // audit code that MUST appear in stderr
 		wantNoCode string                   // audit code that must NOT appear in stdout
 	}{
 		{
@@ -66,17 +66,18 @@ func TestNewDoctorCmd_ProjectConfigValidation(t *testing.T) {
 			}
 			c := NewDoctorCmd(mock)
 			out := new(bytes.Buffer)
+			errOut := new(bytes.Buffer)
 			c.SetOut(out)
-			c.SetErr(new(bytes.Buffer))
+			c.SetErr(errOut)
 			c.SetArgs([]string{"--project", "."})
 
 			err := c.Execute()
 
 			if (err != nil) != tt.wantErr {
-				t.Errorf("error = %v, wantErr %v (stdout=%q)", err, tt.wantErr, out.String())
+				t.Errorf("error = %v, wantErr %v (stderr=%q)", err, tt.wantErr, errOut.String())
 			}
-			if tt.wantCode != "" && !strings.Contains(out.String(), tt.wantCode) {
-				t.Errorf("stdout = %q, expected to contain %q", out.String(), tt.wantCode)
+			if tt.wantCode != "" && !strings.Contains(errOut.String(), tt.wantCode) {
+				t.Errorf("stderr = %q, expected to contain %q", errOut.String(), tt.wantCode)
 			}
 			if tt.wantNoCode != "" && strings.Contains(out.String(), tt.wantNoCode) {
 				t.Errorf("stdout = %q, must NOT contain %q", out.String(), tt.wantNoCode)
