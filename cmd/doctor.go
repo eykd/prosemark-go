@@ -25,12 +25,17 @@ type DoctorIO interface {
 }
 
 // DoctorDiagnosticJSON is the JSON output type for a single doctor diagnostic.
-// Contains only code, message, and path — severity is excluded per
-// the doctor-diagnostic.json schema (additionalProperties: false).
 type DoctorDiagnosticJSON struct {
-	Code    string `json:"code"`
-	Message string `json:"message"`
-	Path    string `json:"path"`
+	Severity string `json:"severity"`
+	Code     string `json:"code"`
+	Message  string `json:"message"`
+	Path     string `json:"path"`
+}
+
+// doctorOutput is the wrapped JSON output for the doctor command.
+type doctorOutput struct {
+	Version     string                 `json:"version"`
+	Diagnostics []DoctorDiagnosticJSON `json:"diagnostics"`
 }
 
 // NewDoctorCmd creates the doctor subcommand using os.Getwd for the working directory.
@@ -96,12 +101,14 @@ func newDoctorCmdWithGetCWD(io DoctorIO, getwd func() (string, error)) *cobra.Co
 				jsonDiags := make([]DoctorDiagnosticJSON, len(diags))
 				for i, d := range diags {
 					jsonDiags[i] = DoctorDiagnosticJSON{
-						Code:    string(d.Code),
-						Message: d.Message,
-						Path:    d.Path,
+						Severity: string(d.Severity),
+						Code:     string(d.Code),
+						Message:  d.Message,
+						Path:     d.Path,
 					}
 				}
-				if err := json.NewEncoder(cmd.OutOrStdout()).Encode(jsonDiags); err != nil {
+				out := doctorOutput{Version: "1", Diagnostics: jsonDiags}
+				if err := json.NewEncoder(cmd.OutOrStdout()).Encode(out); err != nil {
 					return fmt.Errorf("encoding output: %w", err)
 				}
 			} else {
@@ -123,7 +130,7 @@ func newDoctorCmdWithGetCWD(io DoctorIO, getwd func() (string, error)) *cobra.Co
 	}
 
 	cmd.Flags().String("project", "", "project directory to audit (default: current directory)")
-	cmd.Flags().Bool("json", false, "output diagnostics as JSON array")
+	cmd.Flags().Bool("json", false, "output diagnostics as JSON")
 
 	return cmd
 }

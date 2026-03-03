@@ -384,8 +384,8 @@ func TestNewDoctorCmd_Scenarios(t *testing.T) {
 // ─── JSON output schema validation ──────────────────────────────────────────
 
 // TestNewDoctorCmd_JSONOutput_ContainsRequiredFields verifies --json mode outputs
-// a JSON array where each item has code, message, path but NOT severity
-// (per doctor-diagnostic.json schema with additionalProperties:false).
+// a wrapped object with version and diagnostics, where each diagnostic has
+// severity, code, message, and path.
 func TestNewDoctorCmd_JSONOutput_ContainsRequiredFields(t *testing.T) {
 	mock := &mockDoctorIO{
 		binderBytes: doctorBinderWithNode(doctorTestNodeUUID),
@@ -401,41 +401,30 @@ func TestNewDoctorCmd_JSONOutput_ContainsRequiredFields(t *testing.T) {
 
 	_ = c.Execute()
 
-	// Must be valid JSON array of DoctorDiagnosticJSON.
-	var results []DoctorDiagnosticJSON
-	if err := json.Unmarshal(out.Bytes(), &results); err != nil {
+	// Must be valid JSON wrapped object with version and diagnostics.
+	var result doctorOutput
+	if err := json.Unmarshal(out.Bytes(), &result); err != nil {
 		t.Fatalf("--json output is not valid JSON: %v\noutput: %q", err, out.String())
 	}
-	if len(results) == 0 {
+	if len(result.Diagnostics) == 0 {
 		t.Fatal("expected at least one diagnostic in JSON output")
 	}
-	for i, r := range results {
+	for i, r := range result.Diagnostics {
 		if r.Code == "" {
 			t.Errorf("results[%d] missing 'code' field", i)
 		}
 		if r.Message == "" {
 			t.Errorf("results[%d] missing 'message' field", i)
 		}
-		// r.Path may be empty string — but the field must exist (checked via raw map below).
-	}
-
-	// Severity must NOT appear in the JSON output per schema additionalProperties:false.
-	var rawResults []map[string]interface{}
-	if err := json.Unmarshal(out.Bytes(), &rawResults); err != nil {
-		t.Fatalf("raw unmarshal failed: %v", err)
-	}
-	for i, r := range rawResults {
-		if _, hasSeverity := r["severity"]; hasSeverity {
-			t.Errorf("results[%d] must not contain 'severity' field per schema", i)
+		if r.Severity == "" {
+			t.Errorf("results[%d] missing 'severity' field", i)
 		}
-		if _, hasPath := r["path"]; !hasPath {
-			t.Errorf("results[%d] missing 'path' field", i)
-		}
+		// r.Path may be empty string — field is present in the struct.
 	}
 }
 
 // TestNewDoctorCmd_JSONOutput_CleanProject verifies --json on a clean project
-// outputs a valid empty JSON array (not null, not absent).
+// outputs a wrapped object with an empty diagnostics array.
 func TestNewDoctorCmd_JSONOutput_CleanProject(t *testing.T) {
 	mock := &mockDoctorIO{
 		binderBytes: doctorBinderWithNode(doctorTestNodeUUID),
@@ -454,12 +443,12 @@ func TestNewDoctorCmd_JSONOutput_CleanProject(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	var results []DoctorDiagnosticJSON
-	if err := json.Unmarshal(out.Bytes(), &results); err != nil {
+	var result doctorOutput
+	if err := json.Unmarshal(out.Bytes(), &result); err != nil {
 		t.Fatalf("--json clean project output is not valid JSON: %v\noutput: %q", err, out.String())
 	}
-	if len(results) != 0 {
-		t.Errorf("expected empty JSON array for clean project, got %d diagnostics: %v", len(results), results)
+	if len(result.Diagnostics) != 0 {
+		t.Errorf("expected empty diagnostics for clean project, got %d: %v", len(result.Diagnostics), result.Diagnostics)
 	}
 }
 
@@ -484,19 +473,19 @@ func TestNewDoctorCmd_FileSizeLimit(t *testing.T) {
 
 	_ = c.Execute()
 
-	var results []DoctorDiagnosticJSON
-	if err := json.Unmarshal(out.Bytes(), &results); err != nil {
+	var result doctorOutput
+	if err := json.Unmarshal(out.Bytes(), &result); err != nil {
 		t.Fatalf("output not valid JSON: %v\noutput: %q", err, out.String())
 	}
 	found := false
-	for _, r := range results {
+	for _, r := range result.Diagnostics {
 		if r.Code == "AUD007" {
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Errorf("expected AUD007 for file exceeding 1MB size limit, got: %v", results)
+		t.Errorf("expected AUD007 for file exceeding 1MB size limit, got: %v", result.Diagnostics)
 	}
 }
 
