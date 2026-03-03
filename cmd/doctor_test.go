@@ -550,15 +550,20 @@ func TestNewDoctorCmd_SanitizesControlCharsInOutput(t *testing.T) {
 
 	c := NewDoctorCmd(mock)
 	out := new(bytes.Buffer)
+	errOut := new(bytes.Buffer)
 	c.SetOut(out)
-	c.SetErr(new(bytes.Buffer))
+	c.SetErr(errOut)
 	c.SetArgs([]string{"--project", "."})
 
 	_ = c.Execute()
 
-	outStr := out.String()
-	if strings.ContainsRune(outStr, '\x01') {
-		t.Errorf("stdout contains raw control char \\x01 — sanitizePath not applied: %q", outStr)
+	// stdout must be empty — plain-text diagnostics route to stderr.
+	if out.String() != "" {
+		t.Errorf("stdout = %q, want empty (plain-text diagnostics route to stderr)", out.String())
+	}
+	// stderr must not contain the raw control character — sanitizePath must be applied.
+	if strings.ContainsRune(errOut.String(), '\x01') {
+		t.Errorf("stderr contains raw control char \\x01 — sanitizePath not applied: %q", errOut.String())
 	}
 }
 
