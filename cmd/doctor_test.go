@@ -183,6 +183,7 @@ func TestNewDoctorCmd_Scenarios(t *testing.T) {
 			binderBytes: doctorBinderWithNode(doctorTestNodeUUID),
 			nodeFiles: map[string]nodeFileEntry{
 				doctorTestNodeUUID + ".md": {content: validDoctorNodeContent(doctorTestNodeUUID), exists: true},
+				".prosemark.yml":           {content: []byte("version: \"1\"\n"), exists: true},
 			},
 			wantErr: false,
 		},
@@ -195,7 +196,7 @@ func TestNewDoctorCmd_Scenarios(t *testing.T) {
 				doctorTestNodeUUID + ".md": {content: nil, exists: false},
 			},
 			wantErr:   true,
-			wantInOut: "AUD001",
+			wantInErr: "AUD001",
 		},
 		{
 			// US4/3: AUD002 orphaned UUID file (warning) → exit 0.
@@ -204,9 +205,11 @@ func TestNewDoctorCmd_Scenarios(t *testing.T) {
 			args:        []string{"--project", "."},
 			binderBytes: doctorBinderEmpty(),
 			uuidFiles:   []string{doctorTestNodeUUID + ".md"},
-			nodeFiles:   map[string]nodeFileEntry{},
-			wantErr:     false,
-			wantInOut:   "AUD002",
+			nodeFiles: map[string]nodeFileEntry{
+				".prosemark.yml": {content: []byte("version: \"1\"\n"), exists: true},
+			},
+			wantErr:   false,
+			wantInErr: "AUD002",
 		},
 		{
 			// US4/4: AUD003 duplicate binder reference → exit 1.
@@ -221,7 +224,7 @@ func TestNewDoctorCmd_Scenarios(t *testing.T) {
 				doctorTestNodeUUID + ".md": {content: validDoctorNodeContent(doctorTestNodeUUID), exists: true},
 			},
 			wantErr:   true,
-			wantInOut: "AUD003",
+			wantInErr: "AUD003",
 		},
 		{
 			// US4/5: AUD004 id/filename mismatch → exit 1.
@@ -232,7 +235,7 @@ func TestNewDoctorCmd_Scenarios(t *testing.T) {
 				doctorTestNodeUUID + ".md": {content: mismatchedIDDoctorNodeContent(), exists: true},
 			},
 			wantErr:   true,
-			wantInOut: "AUD004",
+			wantInErr: "AUD004",
 		},
 		{
 			// US4/6: AUD005 missing required field → exit 1.
@@ -243,7 +246,7 @@ func TestNewDoctorCmd_Scenarios(t *testing.T) {
 				doctorTestNodeUUID + ".md": {content: missingFieldDoctorNodeContent(doctorTestNodeUUID), exists: true},
 			},
 			wantErr:   true,
-			wantInOut: "AUD005",
+			wantInErr: "AUD005",
 		},
 		{
 			// US4/7: AUD006 empty body (warning) → exit 0.
@@ -252,9 +255,10 @@ func TestNewDoctorCmd_Scenarios(t *testing.T) {
 			binderBytes: doctorBinderWithNode(doctorTestNodeUUID),
 			nodeFiles: map[string]nodeFileEntry{
 				doctorTestNodeUUID + ".md": {content: emptyBodyDoctorNodeContent(doctorTestNodeUUID), exists: true},
+				".prosemark.yml":           {content: []byte("version: \"1\"\n"), exists: true},
 			},
 			wantErr:   false,
-			wantInOut: "AUD006",
+			wantInErr: "AUD006",
 		},
 		{
 			// US4/8: --json output produces structured diagnostic list with code, message, path.
@@ -279,9 +283,10 @@ func TestNewDoctorCmd_Scenarios(t *testing.T) {
 			nodeFiles: map[string]nodeFileEntry{
 				doctorTestNodeUUID + ".md":  {content: emptyBodyDoctorNodeContent(doctorTestNodeUUID), exists: true},
 				doctorTestNodeUUID2 + ".md": {content: emptyBodyDoctorNodeContent(doctorTestNodeUUID2), exists: true},
+				".prosemark.yml":            {content: []byte("version: \"1\"\n"), exists: true},
 			},
 			wantErr:   false,
-			wantInOut: "AUD006",
+			wantInErr: "AUD006",
 		},
 		{
 			// US4/10: only AUD002 warnings → exit 0.
@@ -289,9 +294,11 @@ func TestNewDoctorCmd_Scenarios(t *testing.T) {
 			args:        []string{"--project", "."},
 			binderBytes: doctorBinderEmpty(),
 			uuidFiles:   []string{doctorTestNodeUUID + ".md", doctorTestNodeUUID2 + ".md"},
-			nodeFiles:   map[string]nodeFileEntry{},
-			wantErr:     false,
-			wantInOut:   "AUD002",
+			nodeFiles: map[string]nodeFileEntry{
+				".prosemark.yml": {content: []byte("version: \"1\"\n"), exists: true},
+			},
+			wantErr:   false,
+			wantInErr: "AUD002",
 		},
 		{
 			// US4/11: AUDW001 non-UUID filename in binder (warning) → exit 0.
@@ -303,9 +310,10 @@ func TestNewDoctorCmd_Scenarios(t *testing.T) {
 			),
 			nodeFiles: map[string]nodeFileEntry{
 				"chapter-one.md": {content: []byte("Content here."), exists: true},
+				".prosemark.yml": {content: []byte("version: \"1\"\n"), exists: true},
 			},
 			wantErr:   false,
-			wantInOut: "AUDW001",
+			wantInErr: "AUDW001",
 		},
 		{
 			// US4/12: AUD007 unparseable YAML frontmatter → exit 1.
@@ -316,7 +324,7 @@ func TestNewDoctorCmd_Scenarios(t *testing.T) {
 				doctorTestNodeUUID + ".md": {content: invalidYAMLDoctorNodeContent(), exists: true},
 			},
 			wantErr:   true,
-			wantInOut: "AUD007",
+			wantInErr: "AUD007",
 		},
 		{
 			// Uninitialized project: binder ErrNotExist → distinct "project not initialized" message.
@@ -376,8 +384,8 @@ func TestNewDoctorCmd_Scenarios(t *testing.T) {
 // ─── JSON output schema validation ──────────────────────────────────────────
 
 // TestNewDoctorCmd_JSONOutput_ContainsRequiredFields verifies --json mode outputs
-// a JSON array where each item has code, message, path but NOT severity
-// (per doctor-diagnostic.json schema with additionalProperties:false).
+// a wrapped object with version and diagnostics, where each diagnostic has
+// severity, code, message, and path.
 func TestNewDoctorCmd_JSONOutput_ContainsRequiredFields(t *testing.T) {
 	mock := &mockDoctorIO{
 		binderBytes: doctorBinderWithNode(doctorTestNodeUUID),
@@ -393,46 +401,36 @@ func TestNewDoctorCmd_JSONOutput_ContainsRequiredFields(t *testing.T) {
 
 	_ = c.Execute()
 
-	// Must be valid JSON array of DoctorDiagnosticJSON.
-	var results []DoctorDiagnosticJSON
-	if err := json.Unmarshal(out.Bytes(), &results); err != nil {
+	// Must be valid JSON wrapped object with version and diagnostics.
+	var result doctorOutput
+	if err := json.Unmarshal(out.Bytes(), &result); err != nil {
 		t.Fatalf("--json output is not valid JSON: %v\noutput: %q", err, out.String())
 	}
-	if len(results) == 0 {
+	if len(result.Diagnostics) == 0 {
 		t.Fatal("expected at least one diagnostic in JSON output")
 	}
-	for i, r := range results {
+	for i, r := range result.Diagnostics {
 		if r.Code == "" {
 			t.Errorf("results[%d] missing 'code' field", i)
 		}
 		if r.Message == "" {
 			t.Errorf("results[%d] missing 'message' field", i)
 		}
-		// r.Path may be empty string — but the field must exist (checked via raw map below).
-	}
-
-	// Severity must NOT appear in the JSON output per schema additionalProperties:false.
-	var rawResults []map[string]interface{}
-	if err := json.Unmarshal(out.Bytes(), &rawResults); err != nil {
-		t.Fatalf("raw unmarshal failed: %v", err)
-	}
-	for i, r := range rawResults {
-		if _, hasSeverity := r["severity"]; hasSeverity {
-			t.Errorf("results[%d] must not contain 'severity' field per schema", i)
+		if r.Severity == "" {
+			t.Errorf("results[%d] missing 'severity' field", i)
 		}
-		if _, hasPath := r["path"]; !hasPath {
-			t.Errorf("results[%d] missing 'path' field", i)
-		}
+		// r.Path may be empty string — field is present in the struct.
 	}
 }
 
 // TestNewDoctorCmd_JSONOutput_CleanProject verifies --json on a clean project
-// outputs a valid empty JSON array (not null, not absent).
+// outputs a wrapped object with an empty diagnostics array.
 func TestNewDoctorCmd_JSONOutput_CleanProject(t *testing.T) {
 	mock := &mockDoctorIO{
 		binderBytes: doctorBinderWithNode(doctorTestNodeUUID),
 		nodeFiles: map[string]nodeFileEntry{
 			doctorTestNodeUUID + ".md": {content: validDoctorNodeContent(doctorTestNodeUUID), exists: true},
+			".prosemark.yml":           {content: []byte("version: \"1\"\n"), exists: true},
 		},
 	}
 	c := NewDoctorCmd(mock)
@@ -445,12 +443,12 @@ func TestNewDoctorCmd_JSONOutput_CleanProject(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	var results []DoctorDiagnosticJSON
-	if err := json.Unmarshal(out.Bytes(), &results); err != nil {
+	var result doctorOutput
+	if err := json.Unmarshal(out.Bytes(), &result); err != nil {
 		t.Fatalf("--json clean project output is not valid JSON: %v\noutput: %q", err, out.String())
 	}
-	if len(results) != 0 {
-		t.Errorf("expected empty JSON array for clean project, got %d diagnostics: %v", len(results), results)
+	if len(result.Diagnostics) != 0 {
+		t.Errorf("expected empty diagnostics for clean project, got %d: %v", len(result.Diagnostics), result.Diagnostics)
 	}
 }
 
@@ -475,19 +473,19 @@ func TestNewDoctorCmd_FileSizeLimit(t *testing.T) {
 
 	_ = c.Execute()
 
-	var results []DoctorDiagnosticJSON
-	if err := json.Unmarshal(out.Bytes(), &results); err != nil {
+	var result doctorOutput
+	if err := json.Unmarshal(out.Bytes(), &result); err != nil {
 		t.Fatalf("output not valid JSON: %v\noutput: %q", err, out.String())
 	}
 	found := false
-	for _, r := range results {
+	for _, r := range result.Diagnostics {
 		if r.Code == "AUD007" {
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Errorf("expected AUD007 for file exceeding 1MB size limit, got: %v", results)
+		t.Errorf("expected AUD007 for file exceeding 1MB size limit, got: %v", result.Diagnostics)
 	}
 }
 
@@ -510,8 +508,9 @@ func TestNewDoctorCmd_PathContainment(t *testing.T) {
 		return "/tmp/myproject", nil
 	})
 	out := new(bytes.Buffer)
+	errOut := new(bytes.Buffer)
 	c.SetOut(out)
-	c.SetErr(new(bytes.Buffer))
+	c.SetErr(errOut)
 	c.SetArgs([]string{})
 
 	_ = c.Execute()
@@ -525,9 +524,9 @@ func TestNewDoctorCmd_PathContainment(t *testing.T) {
 		_ = projectPrefix // used for clarity
 	}
 
-	// AUDW001 must appear in stdout for the traversal attempt.
-	if !strings.Contains(out.String(), "AUDW001") {
-		t.Errorf("expected AUDW001 for path traversal attempt, stdout: %q", out.String())
+	// AUDW001 must appear in stderr for the traversal attempt.
+	if !strings.Contains(errOut.String(), "AUDW001") {
+		t.Errorf("expected AUDW001 for path traversal attempt, stderr: %q", errOut.String())
 	}
 }
 
@@ -551,15 +550,20 @@ func TestNewDoctorCmd_SanitizesControlCharsInOutput(t *testing.T) {
 
 	c := NewDoctorCmd(mock)
 	out := new(bytes.Buffer)
+	errOut := new(bytes.Buffer)
 	c.SetOut(out)
-	c.SetErr(new(bytes.Buffer))
+	c.SetErr(errOut)
 	c.SetArgs([]string{"--project", "."})
 
 	_ = c.Execute()
 
-	outStr := out.String()
-	if strings.ContainsRune(outStr, '\x01') {
-		t.Errorf("stdout contains raw control char \\x01 — sanitizePath not applied: %q", outStr)
+	// stdout must be empty — plain-text diagnostics route to stderr.
+	if out.String() != "" {
+		t.Errorf("stdout = %q, want empty (plain-text diagnostics route to stderr)", out.String())
+	}
+	// stderr must not contain the raw control character — sanitizePath must be applied.
+	if strings.ContainsRune(errOut.String(), '\x01') {
+		t.Errorf("stderr contains raw control char \\x01 — sanitizePath not applied: %q", errOut.String())
 	}
 }
 
@@ -592,7 +596,9 @@ func TestNewDoctorCmd_WarningsOnlyExitsZero(t *testing.T) {
 	mock := &mockDoctorIO{
 		binderBytes: doctorBinderEmpty(),
 		uuidFiles:   []string{doctorTestNodeUUID + ".md"},
-		nodeFiles:   map[string]nodeFileEntry{},
+		nodeFiles: map[string]nodeFileEntry{
+			".prosemark.yml": {content: []byte("version: \"1\"\n"), exists: true},
+		},
 	}
 	c := NewDoctorCmd(mock)
 	c.SetOut(new(bytes.Buffer))
@@ -640,7 +646,7 @@ var _ DoctorIO = (*fileDoctorIO)(nil)
 // output is NOT silently discarded. The command must return an error when
 // json.Encode fails (e.g., stdout is closed or a pipe breaks).
 func TestNewDoctorCmd_JSONEncodeError(t *testing.T) {
-	// Clean project so hasErrorDiagnostic is false — the only error path is
+	// Clean project so hasAuditDiagnosticError is false — the only error path is
 	// the encode failure itself.
 	mock := &mockDoctorIO{
 		binderBytes: doctorBinderWithNode(doctorTestNodeUUID),
@@ -656,5 +662,183 @@ func TestNewDoctorCmd_JSONEncodeError(t *testing.T) {
 	err := c.Execute()
 	if err == nil {
 		t.Error("expected error when JSON encoding fails, got nil")
+	}
+}
+
+// ─── Binder parse diagnostics (BNDW*) ────────────────────────────────────────
+
+// TestNewDoctorCmd_BinderParseWarnings verifies that binder-level parse diagnostics
+// (BNDW*) are surfaced by doctor so users get a complete integrity picture in one
+// command rather than having to run both 'pmk parse' and 'pmk doctor'.
+func TestNewDoctorCmd_BinderParseWarnings(t *testing.T) {
+	tests := []struct {
+		name        string
+		args        []string
+		binderBytes []byte
+		nodeFiles   map[string]nodeFileEntry
+		wantErr     bool
+		wantInErr   string
+		wantNoneOut string
+	}{
+		{
+			// BNDW001: binder has no pragma → warning reported, exit 0.
+			name:        "BNDW001: binder missing pragma is reported as warning",
+			args:        []string{"--project", "."},
+			binderBytes: []byte("- [Node](" + doctorTestNodeUUID + ".md)\n"), // no pragma
+			nodeFiles: map[string]nodeFileEntry{
+				doctorTestNodeUUID + ".md": {content: validDoctorNodeContent(doctorTestNodeUUID), exists: true},
+				".prosemark.yml":           {content: []byte("version: \"1\"\n"), exists: true},
+			},
+			wantErr:   false, // BNDW001 is warning severity → exit 0
+			wantInErr: "BNDW001",
+		},
+		{
+			// Binder with valid pragma → no BNDW001 in output.
+			name:        "binder with pragma produces no BNDW001 in output",
+			args:        []string{"--project", "."},
+			binderBytes: doctorBinderWithNode(doctorTestNodeUUID), // has pragma
+			nodeFiles: map[string]nodeFileEntry{
+				doctorTestNodeUUID + ".md": {content: validDoctorNodeContent(doctorTestNodeUUID), exists: true},
+				".prosemark.yml":           {content: []byte("version: \"1\"\n"), exists: true},
+			},
+			wantErr:     false,
+			wantNoneOut: "BNDW001",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock := &mockDoctorIO{
+				binderBytes: tt.binderBytes,
+				nodeFiles:   tt.nodeFiles,
+			}
+			c := NewDoctorCmd(mock)
+			out := new(bytes.Buffer)
+			errOut := new(bytes.Buffer)
+			c.SetOut(out)
+			c.SetErr(errOut)
+			c.SetArgs(tt.args)
+
+			err := c.Execute()
+
+			if (err != nil) != tt.wantErr {
+				t.Errorf("error = %v, wantErr %v (stderr=%q)", err, tt.wantErr, errOut)
+			}
+			if tt.wantInErr != "" && !strings.Contains(errOut.String(), tt.wantInErr) {
+				t.Errorf("stderr = %q, want to contain %q", errOut.String(), tt.wantInErr)
+			}
+			if tt.wantNoneOut != "" && strings.Contains(out.String(), tt.wantNoneOut) {
+				t.Errorf("stdout = %q, must NOT contain %q", out.String(), tt.wantNoneOut)
+			}
+		})
+	}
+}
+
+// ─── Stderr routing for plain-text diagnostics ───────────────────────────────
+
+// TestNewDoctorCmd_PlainText_DiagnosticsRouteToStderr verifies that AUD*
+// diagnostic lines in plain-text mode are written to stderr, not stdout, to
+// match the convention used by all other pmk commands (add-child, delete, move).
+// Scriptable pipelines rely on stdout being clean for piping and stderr for
+// human-readable diagnostics.
+func TestNewDoctorCmd_PlainText_DiagnosticsRouteToStderr(t *testing.T) {
+	tests := []struct {
+		name     string
+		mock     *mockDoctorIO
+		wantCode string // diagnostic code expected in stderr
+	}{
+		{
+			name: "AUD001 error diagnostic routes to stderr",
+			mock: &mockDoctorIO{
+				binderBytes: doctorBinderWithNode(doctorTestNodeUUID),
+				nodeFiles: map[string]nodeFileEntry{
+					doctorTestNodeUUID + ".md": {content: nil, exists: false},
+				},
+			},
+			wantCode: "AUD001",
+		},
+		{
+			name: "AUD002 warning diagnostic routes to stderr",
+			mock: &mockDoctorIO{
+				binderBytes: doctorBinderEmpty(),
+				uuidFiles:   []string{doctorTestNodeUUID + ".md"},
+				nodeFiles: map[string]nodeFileEntry{
+					".prosemark.yml": {content: []byte("version: \"1\"\n"), exists: true},
+				},
+			},
+			wantCode: "AUD002",
+		},
+		{
+			name: "AUD003 error diagnostic routes to stderr",
+			mock: &mockDoctorIO{
+				binderBytes: []byte(
+					"<!-- prosemark-binder:v1 -->\n" +
+						"- [A](" + doctorTestNodeUUID + ".md)\n" +
+						"- [B](" + doctorTestNodeUUID + ".md)\n",
+				),
+				nodeFiles: map[string]nodeFileEntry{
+					doctorTestNodeUUID + ".md": {content: validDoctorNodeContent(doctorTestNodeUUID), exists: true},
+				},
+			},
+			wantCode: "AUD003",
+		},
+		{
+			name: "AUD006 warning diagnostic routes to stderr",
+			mock: &mockDoctorIO{
+				binderBytes: doctorBinderWithNode(doctorTestNodeUUID),
+				nodeFiles: map[string]nodeFileEntry{
+					doctorTestNodeUUID + ".md": {content: emptyBodyDoctorNodeContent(doctorTestNodeUUID), exists: true},
+					".prosemark.yml":           {content: []byte("version: \"1\"\n"), exists: true},
+				},
+			},
+			wantCode: "AUD006",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := NewDoctorCmd(tt.mock)
+			out := new(bytes.Buffer)
+			errOut := new(bytes.Buffer)
+			c.SetOut(out)
+			c.SetErr(errOut)
+			c.SetArgs([]string{"--project", "."})
+
+			_ = c.Execute()
+
+			// Diagnostic codes MUST appear in stderr.
+			if !strings.Contains(errOut.String(), tt.wantCode) {
+				t.Errorf("stderr = %q, want to contain %q (diagnostic should route to stderr)", errOut.String(), tt.wantCode)
+			}
+			// Diagnostic codes must NOT appear in stdout.
+			if strings.Contains(out.String(), tt.wantCode) {
+				t.Errorf("stdout = %q, must NOT contain %q (diagnostics should route to stderr, not stdout)", out.String(), tt.wantCode)
+			}
+		})
+	}
+}
+
+// TestNewDoctorCmd_PlainText_StdoutEmptyWhenDiagnosticsPresent verifies that
+// stdout is empty in plain-text mode regardless of whether diagnostics are
+// produced. All diagnostic output belongs on stderr; stdout must remain clean
+// for pipeline composition.
+func TestNewDoctorCmd_PlainText_StdoutEmptyWhenDiagnosticsPresent(t *testing.T) {
+	// AUD001 error: referenced file missing.
+	mock := &mockDoctorIO{
+		binderBytes: doctorBinderWithNode(doctorTestNodeUUID),
+		nodeFiles: map[string]nodeFileEntry{
+			doctorTestNodeUUID + ".md": {content: nil, exists: false},
+		},
+	}
+	c := NewDoctorCmd(mock)
+	out := new(bytes.Buffer)
+	c.SetOut(out)
+	c.SetErr(new(bytes.Buffer))
+	c.SetArgs([]string{"--project", "."})
+
+	_ = c.Execute()
+
+	if out.String() != "" {
+		t.Errorf("stdout = %q, want empty string (all plain-text doctor output should go to stderr)", out.String())
 	}
 }

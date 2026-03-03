@@ -168,7 +168,7 @@ func (f fileEditIO) WriteNodeFileAtomic(path string, content []byte) error {
 
 // WriteNodeFileAtomicImpl performs the atomic write via OS temp file rename.
 func (f fileEditIO) WriteNodeFileAtomicImpl(path string, content []byte) error {
-	return writeFileAtomicImpl(path, ".node", content)
+	return writeFileAtomicDirectImpl(path, ".node", content)
 }
 
 // CreateNotesFile creates a new empty notes file at path using O_CREATE|O_EXCL.

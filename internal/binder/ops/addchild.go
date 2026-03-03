@@ -19,33 +19,30 @@ var opsInlineLinkRE = regexp.MustCompile(`\[([^\]]*)\]\(([^)\s"]+)`)
 var parseBinderFn = binder.Parse
 
 // AddChild inserts a new child node into the binder at the specified position under
-// the parent selected by params.ParentSelector. Returns the modified binder bytes,
-// diagnostics, and any fatal error. On validation or logical error the returned
-// bytes are equal to src (no mutation).
-func AddChild(ctx context.Context, src []byte, project *binder.Project, params binder.AddChildParams) ([]byte, []binder.Diagnostic, error) {
+// the parent selected by params.ParentSelector. Returns the modified binder bytes
+// and diagnostics. On validation or logical error the returned bytes are equal to
+// src (no mutation). Parse errors are surfaced as diagnostics, not as a returned error.
+func AddChild(ctx context.Context, src []byte, project *binder.Project, params binder.AddChildParams) ([]byte, []binder.Diagnostic) {
 	result, parseDiags, err := parseBinderFn(ctx, src, project)
 	if err != nil {
 		return src, append(parseDiags, binder.Diagnostic{
 			Severity: "error",
 			Code:     binder.CodeIOOrParseFailure,
 			Message:  fmt.Sprintf("parse error: %v", err),
-		}), err
+		})
 	}
 
-	// Normalize wikilink bracket syntax: [[foo.md]] → foo.md
-	if strings.HasPrefix(params.Target, "[[") && strings.HasSuffix(params.Target, "]]") {
-		params.Target = params.Target[2 : len(params.Target)-2]
-	}
+	params.Target = normalizeTargetInput(params.Target)
 
 	// Validate target path (OPE004, OPE005) before touching the selector.
 	if diag := validateOpTarget(params.Target); diag != nil {
-		return src, append(parseDiags, *diag), nil
+		return src, append(parseDiags, *diag)
 	}
 
 	// Evaluate the parent selector (supports deep tree search for non-colon selectors).
 	parents, selDiags := addChildEvalParentSelector(params.ParentSelector, result.Root, result.Lines)
 	if len(parents) == 0 {
-		return src, append(parseDiags, selDiags...), nil
+		return src, append(parseDiags, selDiags...)
 	}
 
 	var allDiags []binder.Diagnostic
@@ -94,7 +91,7 @@ func AddChild(ctx context.Context, src []byte, project *binder.Project, params b
 		// Resolve insertion index among parent's children.
 		insertIdx, diagErr := resolveInsertionIndex(parent, params)
 		if diagErr != nil {
-			return src, append(allDiags, *diagErr), nil
+			return src, append(allDiags, *diagErr)
 		}
 
 		// Build the new list-item line.
@@ -116,12 +113,19 @@ func AddChild(ctx context.Context, src []byte, project *binder.Project, params b
 		result.LineEnds = sliceInsert(result.LineEnds, lineIdx, lineEnd)
 	}
 
-	return binder.Serialize(result), allDiags, nil
+	return binder.Serialize(result), allDiags
 }
 
-// validateOpTarget checks OPE004 (path escapes root, illegal chars, non-.md extension)
-// and OPE005 (target is binder).
+// validateOpTarget checks OPE004 (absolute path, path escapes root, illegal chars,
+// non-.md extension) and OPE005 (target is binder).
 func validateOpTarget(target string) *binder.Diagnostic {
+	if isAbsolutePath(target) {
+		return &binder.Diagnostic{
+			Severity: "error",
+			Code:     binder.CodeInvalidTargetPath,
+			Message:  "target path must be relative, not absolute",
+		}
+	}
 	if opEscapesRoot(target) {
 		return &binder.Diagnostic{
 			Severity: "error",
@@ -168,6 +172,11 @@ func hasIllegalPathChars(path string) bool {
 	return false
 }
 
+// isAbsolutePath reports whether path is an absolute (non-relative) path.
+func isAbsolutePath(path string) bool {
+	return strings.HasPrefix(path, "/")
+}
+
 // opEscapesRoot reports whether path escapes the project root via "..".
 func opEscapesRoot(path string) bool {
 	return path == ".." || strings.HasPrefix(path, "../")
@@ -211,6 +220,16 @@ func addChildEvalParentSelector(selector string, root *binder.Node, lines []stri
 		}}
 	}
 	return matches, nil
+}
+
+// normalizeTargetInput strips wikilink bracket syntax ([[...]]) and leading "./"
+// from a raw target string so that "./a.md", "[[a.md]]", and "a.md" all
+// produce the same canonical target before validation and storage.
+func normalizeTargetInput(target string) string {
+	if strings.HasPrefix(target, "[[") && strings.HasSuffix(target, "]]") {
+		target = target[2 : len(target)-2]
+	}
+	return strings.TrimPrefix(target, "./")
 }
 
 // percentDecodeOpTarget URL-decodes a target path for storage in the binder.

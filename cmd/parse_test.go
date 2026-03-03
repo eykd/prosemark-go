@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/eykd/prosemark-go/internal/binder"
@@ -219,5 +220,42 @@ func TestNewParseCmd_ReturnsOPE009OnInvalidUTF8(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("expected OPE009 error diagnostic for invalid UTF-8, got: %v", diags)
+	}
+}
+
+// TestNewParseCmd_ParseErrorPropagatedInReturnedError verifies that when
+// binder.Parse returns a non-nil error the error surfaced to the caller
+// (returned by Execute) includes the underlying parse failure message, not
+// just the generic "binder has parse errors" sentinel.  This ensures the
+// error is truly propagated rather than replaced by an opaque summary.
+func TestNewParseCmd_ParseErrorPropagatedInReturnedError(t *testing.T) {
+	tests := []struct {
+		name        string
+		binderBytes []byte
+		wantSubstr  string
+	}{
+		{
+			name:        "invalid UTF-8",
+			binderBytes: []byte("<!-- prosemark-binder:v1 -->\n\xff\xfe"),
+			wantSubstr:  "invalid UTF-8",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			reader := &mockParseReader{binderBytes: tt.binderBytes}
+			c := NewParseCmd(reader)
+			c.SetOut(new(bytes.Buffer))
+			c.SetErr(new(bytes.Buffer))
+			c.SetArgs([]string{"--project", "."})
+
+			err := c.Execute()
+			if err == nil {
+				t.Fatal("expected non-nil error for invalid binder content")
+			}
+			if !strings.Contains(err.Error(), tt.wantSubstr) {
+				t.Errorf("Execute() error = %q, want it to contain %q (parse error should be propagated to caller)", err.Error(), tt.wantSubstr)
+			}
+		})
 	}
 }

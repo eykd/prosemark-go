@@ -30,16 +30,12 @@ func TestAddChild_ParseError_OPE009(t *testing.T) {
 	}
 
 	src := []byte("<!-- prosemark-binder:v1 -->\n\n- [Chapter One](chapter-one.md)\n")
-	out, diags, err := AddChild(context.Background(), src, nil, binder.AddChildParams{
+	out, diags := AddChild(context.Background(), src, nil, binder.AddChildParams{
 		ParentSelector: ".",
 		Target:         "chapter-two.md",
 		Title:          "Chapter Two",
 		Position:       "last",
 	})
-
-	if err != testErr {
-		t.Errorf("expected testErr, got %v", err)
-	}
 	if !hasDiagCode(diags, binder.CodeIOOrParseFailure) {
 		t.Errorf("expected OPE009 diagnostic, got: %v", diags)
 	}
@@ -90,11 +86,7 @@ func TestAddChild_TabIndentFirstChild(t *testing.T) {
 		Position:       "last",
 	}
 
-	out, diags, err := AddChild(context.Background(), src, nil, params)
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	out, diags := AddChild(context.Background(), src, nil, params)
 	if hasDiagCode(diags, "error") {
 		t.Errorf("unexpected error diagnostic: %v", diags)
 	}
@@ -196,11 +188,7 @@ func TestAddChild_CRLFLineEnding(t *testing.T) {
 		Position:       "last",
 	}
 
-	out, diags, err := AddChild(context.Background(), src, nil, params)
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	out, diags := AddChild(context.Background(), src, nil, params)
 	if hasDiagCode(diags, "error") {
 		t.Errorf("unexpected error diagnostic: %v", diags)
 	}
@@ -242,11 +230,7 @@ func TestAddChild_EmptyTitle_DirectoryTarget(t *testing.T) {
 		Position:       "last",
 	}
 
-	out, diags, err := AddChild(context.Background(), src, nil, params)
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	out, diags := AddChild(context.Background(), src, nil, params)
 	if hasDiagCode(diags, "error") {
 		t.Errorf("unexpected error diagnostic: %v", diags)
 	}

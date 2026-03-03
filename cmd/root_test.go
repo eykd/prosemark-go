@@ -191,8 +191,9 @@ func TestRootCmd_DoctorCmd_HumanReadable_SeverityColumnAligned(t *testing.T) {
 
 	root := NewRootCmd()
 	out := new(bytes.Buffer)
+	errOut := new(bytes.Buffer)
 	root.SetOut(out)
-	root.SetErr(new(bytes.Buffer))
+	root.SetErr(errOut)
 	root.SetArgs([]string{"doctor", "--project", dir})
 
 	_ = root.Execute()
@@ -200,11 +201,11 @@ func TestRootCmd_DoctorCmd_HumanReadable_SeverityColumnAligned(t *testing.T) {
 	// The contract specifies severity padded to 7 chars so messages align:
 	//   "AUD001 error   referenced..." ("error" + 2-char pad + 1 separator = 3 spaces)
 	//   "AUD006 warning node..."       ("warning" + 0-char pad + 1 separator = 1 space)
-	// Current implementation uses "%s %s %s\n" (single space) which does NOT align.
+	// Diagnostics route to stderr in plain-text mode.
 	want := "AUD001 error   " // "error" padded to 7 + separator space = 3 total spaces
-	if !strings.Contains(out.String(), want) {
+	if !strings.Contains(errOut.String(), want) {
 		t.Errorf("doctor human-readable output does not use column-aligned severity:\ngot:  %q\nwant to contain: %q\nhint: use \"%%s %%-7s %%s\\n\" format in doctor RunE",
-			out.String(), want)
+			errOut.String(), want)
 	}
 }
 

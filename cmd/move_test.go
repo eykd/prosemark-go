@@ -338,6 +338,56 @@ func TestNewMoveCmd_ScanProjectErrorWithJSON(t *testing.T) {
 	}
 }
 
+func TestNewMoveCmd_ConflictingPositionFlags(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{
+			name: "first and at conflict",
+			args: []string{"--source", "chapter-two.md", "--dest", ".", "--first", "--at", "0", "--yes", "--project", "."},
+		},
+		{
+			name: "first and before conflict",
+			args: []string{"--source", "chapter-two.md", "--dest", ".", "--first", "--before", "chapter-one.md", "--yes", "--project", "."},
+		},
+		{
+			name: "first and after conflict",
+			args: []string{"--source", "chapter-two.md", "--dest", ".", "--first", "--after", "chapter-one.md", "--yes", "--project", "."},
+		},
+		{
+			name: "before and after conflict",
+			args: []string{"--source", "chapter-two.md", "--dest", ".", "--before", "chapter-one.md", "--after", "chapter-one.md", "--yes", "--project", "."},
+		},
+		{
+			name: "at and before conflict",
+			args: []string{"--source", "chapter-two.md", "--dest", ".", "--at", "0", "--before", "chapter-one.md", "--yes", "--project", "."},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock := &mockMoveIO{
+				binderBytes: moveBinder(),
+				project:     &binder.Project{Files: []string{"chapter-one.md", "chapter-two.md"}, BinderDir: "."},
+			}
+			c := NewMoveCmd(mock)
+			c.SetOut(new(bytes.Buffer))
+			c.SetErr(new(bytes.Buffer))
+			c.SetArgs(tt.args)
+
+			err := c.Execute()
+			if err == nil {
+				t.Errorf("expected error for conflicting position flags (%s)", tt.name)
+				return
+			}
+			if !strings.Contains(err.Error(), binder.CodeConflictingFlags) {
+				t.Errorf("expected error to contain %s, got: %v", binder.CodeConflictingFlags, err)
+			}
+		})
+	}
+}
+
 func TestNewRootCmd_RegistersMoveSubcommand(t *testing.T) {
 	root := NewRootCmd()
 	var found bool

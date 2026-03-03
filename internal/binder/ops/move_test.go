@@ -31,11 +31,7 @@ func TestMove_LeafToNewParent(t *testing.T) {
 		Yes:                       true,
 	}
 
-	out, diags, err := Move(context.Background(), src, nil, params)
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	out, diags := Move(context.Background(), src, nil, params)
 	if hasDiagCode(diags, "error") {
 		t.Errorf("unexpected error diagnostic: %v", diags)
 	}
@@ -75,11 +71,7 @@ func TestMove_SubtreeToNewParent(t *testing.T) {
 		Yes:                       true,
 	}
 
-	out, diags, err := Move(context.Background(), src, nil, params)
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	out, diags := Move(context.Background(), src, nil, params)
 	if hasDiagCode(diags, "error") {
 		t.Errorf("unexpected error diagnostic: %v", diags)
 	}
@@ -121,11 +113,7 @@ func TestMove_ReorderSameParent(t *testing.T) {
 		Yes:                       true,
 	}
 
-	out, diags, err := Move(context.Background(), src, nil, params)
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	out, diags := Move(context.Background(), src, nil, params)
 	if hasDiagCode(diags, "error") {
 		t.Errorf("unexpected error diagnostic: %v", diags)
 	}
@@ -162,11 +150,7 @@ func TestMove_IndentationAdjusted(t *testing.T) {
 		Yes:                       true,
 	}
 
-	out, diags, err := Move(context.Background(), src, nil, params)
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	out, diags := Move(context.Background(), src, nil, params)
 	if hasDiagCode(diags, "error") {
 		t.Errorf("unexpected error diagnostic: %v", diags)
 	}
@@ -203,11 +187,7 @@ func TestMove_WikilinkSyntaxPreserved(t *testing.T) {
 		Yes:                       true,
 	}
 
-	out, diags, err := Move(context.Background(), src, nil, params)
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	out, diags := Move(context.Background(), src, nil, params)
 	if hasDiagCode(diags, "error") {
 		t.Errorf("unexpected error diagnostic: %v", diags)
 	}
@@ -239,11 +219,7 @@ func TestMove_ReferenceLinkSyntaxPreserved(t *testing.T) {
 		Yes:                       true,
 	}
 
-	out, diags, err := Move(context.Background(), src, nil, params)
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	out, diags := Move(context.Background(), src, nil, params)
 	if hasDiagCode(diags, "error") {
 		t.Errorf("unexpected error diagnostic: %v", diags)
 	}
@@ -276,11 +252,7 @@ func TestMove_TooltipPreserved(t *testing.T) {
 		Yes:                       true,
 	}
 
-	out, diags, err := Move(context.Background(), src, nil, params)
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	out, diags := Move(context.Background(), src, nil, params)
 	if hasDiagCode(diags, "error") {
 		t.Errorf("unexpected error diagnostic: %v", diags)
 	}
@@ -310,11 +282,7 @@ func TestMove_NonStructuralContent_OPW003(t *testing.T) {
 		Yes:                       true,
 	}
 
-	out, diags, err := Move(context.Background(), src, nil, params)
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	out, diags := Move(context.Background(), src, nil, params)
 	// OPW003 must be emitted for destroyed non-structural content.
 	if !hasDiagCode(diags, binder.CodeNonStructuralDestroyed) {
 		t.Errorf("expected OPW003 (non-structural content destroyed), got: %v", diags)
@@ -354,11 +322,7 @@ func TestMove_SubtreeMarkersPreserved(t *testing.T) {
 		Yes:                       true,
 	}
 
-	out, diags, err := Move(context.Background(), src, nil, params)
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	out, diags := Move(context.Background(), src, nil, params)
 	if hasDiagCode(diags, "error") {
 		t.Errorf("unexpected error diagnostic: %v", diags)
 	}
@@ -394,7 +358,7 @@ func TestMove_CycleDetected_OPE003(t *testing.T) {
 		Yes:                       true,
 	}
 
-	out, diags, _ := Move(context.Background(), src, nil, params)
+	out, diags := Move(context.Background(), src, nil, params)
 
 	if !hasDiagCode(diags, binder.CodeCycleDetected) {
 		t.Errorf("expected OPE003 (cycle detected), got: %v", diags)
@@ -421,7 +385,7 @@ func TestMove_DeepCycleDetected_OPE003(t *testing.T) {
 		Yes:                       true,
 	}
 
-	out, diags, _ := Move(context.Background(), src, nil, params)
+	out, diags := Move(context.Background(), src, nil, params)
 
 	if !hasDiagCode(diags, binder.CodeCycleDetected) {
 		t.Errorf("expected OPE003 (cycle detected) for deep chain, got: %v", diags)
@@ -487,7 +451,7 @@ func TestMove_ErrorCodesAbortMutation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			out, diags, _ := Move(context.Background(), tt.src, nil, tt.params)
+			out, diags := Move(context.Background(), tt.src, nil, tt.params)
 
 			if !hasDiagCode(diags, tt.wantCode) {
 				t.Errorf("expected diagnostic %s, got: %v", tt.wantCode, diags)
@@ -520,11 +484,7 @@ func TestMove_MultiMatch_OPW001_AllMoved(t *testing.T) {
 		Yes:                       true,
 	}
 
-	out, diags, err := Move(context.Background(), src, nil, params)
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	out, diags := Move(context.Background(), src, nil, params)
 	if !hasDiagCode(diags, binder.CodeMultiMatch) {
 		t.Errorf("expected OPW001 (multi-match), got: %v", diags)
 	}
@@ -554,11 +514,7 @@ func TestMove_At_InsertAtIndex(t *testing.T) {
 		Yes:                       true,
 	}
 
-	out, diags, err := Move(context.Background(), src, nil, params)
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	out, diags := Move(context.Background(), src, nil, params)
 	if hasDiagCode(diags, "error") {
 		t.Errorf("unexpected error diagnostic: %v", diags)
 	}
@@ -590,11 +546,7 @@ func TestMove_At_OutOfBounds_OPE008(t *testing.T) {
 		Yes:                       true,
 	}
 
-	out, diags, err := Move(context.Background(), src, nil, params)
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	out, diags := Move(context.Background(), src, nil, params)
 	if !hasDiagCode(diags, binder.CodeIndexOutOfBounds) {
 		t.Errorf("expected OPE008 for out-of-bounds --at, got: %v", diags)
 	}
@@ -618,11 +570,7 @@ func TestMove_Before_InsertBeforeSibling(t *testing.T) {
 		Yes:                       true,
 	}
 
-	out, diags, err := Move(context.Background(), src, nil, params)
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	out, diags := Move(context.Background(), src, nil, params)
 	if hasDiagCode(diags, "error") {
 		t.Errorf("unexpected error diagnostic: %v", diags)
 	}
@@ -651,7 +599,7 @@ func TestMove_Before_SiblingNotFound_OPE007(t *testing.T) {
 		Yes:                       true,
 	}
 
-	out, diags, _ := Move(context.Background(), src, nil, params)
+	out, diags := Move(context.Background(), src, nil, params)
 
 	if !hasDiagCode(diags, binder.CodeSiblingNotFound) {
 		t.Errorf("expected OPE007 for missing before-sibling, got: %v", diags)
@@ -676,11 +624,7 @@ func TestMove_After_InsertAfterSibling(t *testing.T) {
 		Yes:                       true,
 	}
 
-	out, diags, err := Move(context.Background(), src, nil, params)
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	out, diags := Move(context.Background(), src, nil, params)
 	if hasDiagCode(diags, "error") {
 		t.Errorf("unexpected error diagnostic: %v", diags)
 	}
@@ -698,7 +642,7 @@ func TestMove_After_InsertAfterSibling(t *testing.T) {
 
 // TestMove_After_LastSibling verifies that --after=<last-child> inserts the
 // source node at the end of the destination's children (after the last one).
-// This exercises the ri >= len(remaining) branch in moveresolveInsertionIndex.
+// This exercises the ri >= len(remaining) branch in moveResolveInsertionIndex.
 func TestMove_After_LastSibling(t *testing.T) {
 	// ch1, ch2, ch3, ch4 at root; move ch1 after ch4 → ch2, ch3, ch4, ch1.
 	src := []byte("<!-- prosemark-binder:v1 -->\n\n" +
@@ -713,11 +657,7 @@ func TestMove_After_LastSibling(t *testing.T) {
 		Yes:                       true,
 	}
 
-	out, diags, err := Move(context.Background(), src, nil, params)
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	out, diags := Move(context.Background(), src, nil, params)
 	if hasDiagCode(diags, "error") {
 		t.Errorf("unexpected error diagnostic: %v", diags)
 	}
@@ -746,7 +686,7 @@ func TestMove_After_SiblingNotFound_OPE007(t *testing.T) {
 		Yes:                       true,
 	}
 
-	out, diags, _ := Move(context.Background(), src, nil, params)
+	out, diags := Move(context.Background(), src, nil, params)
 
 	if !hasDiagCode(diags, binder.CodeSiblingNotFound) {
 		t.Errorf("expected OPE007 for missing after-sibling, got: %v", diags)
@@ -772,16 +712,12 @@ func TestMove_ParseError_OPE009(t *testing.T) {
 	}
 
 	src := binderSrc("- [Alpha](alpha.md)", "- [Beta](beta.md)")
-	out, diags, err := Move(context.Background(), src, nil, binder.MoveParams{
+	out, diags := Move(context.Background(), src, nil, binder.MoveParams{
 		SourceSelector:            "alpha",
 		DestinationParentSelector: "beta",
 		Position:                  "last",
 		Yes:                       true,
 	})
-
-	if err != testErr {
-		t.Errorf("expected testErr, got %v", err)
-	}
 	if !hasDiagCode(diags, binder.CodeIOOrParseFailure) {
 		t.Errorf("expected OPE009 diagnostic, got: %v", diags)
 	}

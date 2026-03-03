@@ -20,8 +20,8 @@ func hasDiagnosticError(diags []binder.Diagnostic) bool {
 	return false
 }
 
-// hasErrorDiagnostic reports whether any node.AuditDiagnostic in diags has error severity.
-func hasErrorDiagnostic(diags []node.AuditDiagnostic) bool {
+// hasAuditDiagnosticError reports whether any node.AuditDiagnostic in diags has error severity.
+func hasAuditDiagnosticError(diags []node.AuditDiagnostic) bool {
 	for _, d := range diags {
 		if hasSeverityError(string(d.Severity)) {
 			return true

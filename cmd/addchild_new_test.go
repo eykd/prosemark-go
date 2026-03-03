@@ -104,9 +104,6 @@ func TestNewAddChildCmd_NewMode_EditorError(t *testing.T) {
 	if mock.nodeWrittenPath == "" {
 		t.Error("expected node file to be created before editor failure")
 	}
-	if mock.deletedPath != "" {
-		t.Error("expected no rollback when editor fails (node is in valid state)")
-	}
 	if len(mock.editorCalls) == 0 {
 		t.Error("expected OpenEditor to be called")
 	}

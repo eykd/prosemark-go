@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 
 	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v3"
 
 	"github.com/eykd/prosemark-go/internal/node"
 )
@@ -24,12 +25,17 @@ type DoctorIO interface {
 }
 
 // DoctorDiagnosticJSON is the JSON output type for a single doctor diagnostic.
-// Contains only code, message, and path — severity is excluded per
-// the doctor-diagnostic.json schema (additionalProperties: false).
 type DoctorDiagnosticJSON struct {
-	Code    string `json:"code"`
-	Message string `json:"message"`
-	Path    string `json:"path"`
+	Severity string `json:"severity"`
+	Code     string `json:"code"`
+	Message  string `json:"message"`
+	Path     string `json:"path"`
+}
+
+// doctorOutput is the wrapped JSON output for the doctor command.
+type doctorOutput struct {
+	Version     string                 `json:"version"`
+	Diagnostics []DoctorDiagnosticJSON `json:"diagnostics"`
 }
 
 // NewDoctorCmd creates the doctor subcommand using os.Getwd for the working directory.
@@ -45,10 +51,9 @@ func newDoctorCmdWithGetCWD(io DoctorIO, getwd func() (string, error)) *cobra.Co
 		Args:         cobra.NoArgs,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			project, _ := cmd.Flags().GetString("project")
 			jsonMode, _ := cmd.Flags().GetBool("json")
 
-			binderPath, err := resolveBinderPath(project, getwd)
+			binderPath, err := resolveBinderPathFromCmd(cmd, getwd)
 			if err != nil {
 				return err
 			}
@@ -87,24 +92,28 @@ func newDoctorCmdWithGetCWD(io DoctorIO, getwd func() (string, error)) *cobra.Co
 				BinderRefDiags: refDiags,
 			}
 
+			configDiags := checkProjectConfig(io, projectDir)
 			diags := node.RunDoctor(cmd.Context(), data)
+			diags = append(diags, configDiags...)
 
 			// Emit diagnostics.
 			if jsonMode {
 				jsonDiags := make([]DoctorDiagnosticJSON, len(diags))
 				for i, d := range diags {
 					jsonDiags[i] = DoctorDiagnosticJSON{
-						Code:    string(d.Code),
-						Message: d.Message,
-						Path:    d.Path,
+						Severity: string(d.Severity),
+						Code:     string(d.Code),
+						Message:  d.Message,
+						Path:     d.Path,
 					}
 				}
-				if err := json.NewEncoder(cmd.OutOrStdout()).Encode(jsonDiags); err != nil {
+				out := doctorOutput{Version: "1", Diagnostics: jsonDiags}
+				if err := json.NewEncoder(cmd.OutOrStdout()).Encode(out); err != nil {
 					return fmt.Errorf("encoding output: %w", err)
 				}
 			} else {
 				for _, d := range diags {
-					fmt.Fprintf(cmd.OutOrStdout(), "%s %-7s %s\n",
+					fmt.Fprintf(cmd.ErrOrStderr(), "%s %-7s %s\n",
 						string(d.Code),
 						string(d.Severity),
 						sanitizePath(d.Message),
@@ -112,7 +121,7 @@ func newDoctorCmdWithGetCWD(io DoctorIO, getwd func() (string, error)) *cobra.Co
 				}
 			}
 
-			if hasErrorDiagnostic(diags) {
+			if hasAuditDiagnosticError(diags) {
 				return fmt.Errorf("project has integrity errors")
 			}
 
@@ -121,9 +130,36 @@ func newDoctorCmdWithGetCWD(io DoctorIO, getwd func() (string, error)) *cobra.Co
 	}
 
 	cmd.Flags().String("project", "", "project directory to audit (default: current directory)")
-	cmd.Flags().Bool("json", false, "output diagnostics as JSON array")
+	cmd.Flags().Bool("json", false, "output diagnostics as JSON")
 
 	return cmd
+}
+
+// checkProjectConfig validates .prosemark.yml existence and YAML integrity.
+// Returns an AUD008 error diagnostic if the file is missing, unreadable, or contains invalid YAML.
+func checkProjectConfig(io DoctorIO, projectDir string) []node.AuditDiagnostic {
+	configPath := filepath.Join(projectDir, ".prosemark.yml")
+	content, exists, err := io.ReadNodeFile(configPath)
+
+	var msg string
+	if err != nil || !exists {
+		msg = ".prosemark.yml is missing or unreadable"
+	} else {
+		var cfg interface{}
+		if err := yaml.Unmarshal(content, &cfg); err != nil {
+			msg = ".prosemark.yml contains invalid YAML"
+		}
+	}
+
+	if msg == "" {
+		return nil
+	}
+	return []node.AuditDiagnostic{{
+		Code:     node.AUD008,
+		Severity: node.SeverityError,
+		Message:  msg,
+		Path:     ".prosemark.yml",
+	}}
 }
 
 // doctorReadFile reads a binder-referenced file for doctor analysis.

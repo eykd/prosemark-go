@@ -18,16 +18,17 @@ var deleteParseBinderFn = binder.Parse
 var deleteInlineLinkRE = regexp.MustCompile(`\[[^\]]*\]\([^)]*\)`)
 
 // Delete removes the node selected by params.Selector and its entire subtree
-// from the binder source. Returns the modified bytes, diagnostics, and any
-// fatal error. Source bytes are unchanged on error (atomic abort semantics).
-func Delete(ctx context.Context, src []byte, project *binder.Project, params binder.DeleteParams) ([]byte, []binder.Diagnostic, error) {
+// from the binder source. Returns the modified bytes and diagnostics. Source
+// bytes are unchanged on error (atomic abort semantics). Parse errors are
+// surfaced as diagnostics, not as a returned error.
+func Delete(ctx context.Context, src []byte, project *binder.Project, params binder.DeleteParams) ([]byte, []binder.Diagnostic) {
 	// Require --yes confirmation (OPE009).
 	if !params.Yes {
 		return src, []binder.Diagnostic{{
 			Severity: "error",
 			Code:     binder.CodeIOOrParseFailure,
 			Message:  "delete requires --yes confirmation",
-		}}, nil
+		}}
 	}
 
 	// Parse the source.
@@ -37,7 +38,7 @@ func Delete(ctx context.Context, src []byte, project *binder.Project, params bin
 			Severity: "error",
 			Code:     binder.CodeIOOrParseFailure,
 			Message:  fmt.Sprintf("parse error: %v", err),
-		}), err
+		})
 	}
 
 	// Evaluate selector: supports path navigation (colon), index qualifiers ([N]),
@@ -45,7 +46,7 @@ func Delete(ctx context.Context, src []byte, project *binder.Project, params bin
 	nodes, selDiags := deleteEvalSelector(params.Selector, result.Root, result.Lines, project)
 	if len(nodes) == 0 {
 		// Fatal selector error (OPE001/OPE002/OPE006): return src unchanged.
-		return src, append(parseDiags, selDiags...), nil
+		return src, append(parseDiags, selDiags...)
 	}
 
 	// Collect diagnostics: parse warnings + selector warnings (OPW001).
@@ -108,7 +109,7 @@ func Delete(ctx context.Context, src []byte, project *binder.Project, params bin
 	// Strip trailing blank lines at EOF.
 	result.Lines, result.LineEnds = deleteStripTrailingBlanks(result.Lines, result.LineEnds)
 
-	return binder.Serialize(result), allDiags, nil
+	return binder.Serialize(result), allDiags
 }
 
 // deleteEvalSelector evaluates a selector for the delete operation.

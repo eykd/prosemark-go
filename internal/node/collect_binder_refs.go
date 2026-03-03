@@ -35,7 +35,15 @@ func CollectBinderRefs(ctx context.Context, binderSrc []byte) ([]string, []Audit
 	}
 
 	// Parse binder tree to collect valid (non-escaping) refs and detect duplicates.
-	parseResult, _, _ := binder.Parse(ctx, binderSrc, nil)
+	// Capture parse-level diagnostics (BNDW*) so the doctor command can surface them.
+	parseResult, parseDiags, _ := binder.Parse(ctx, binderSrc, nil)
+	for _, d := range parseDiags {
+		diags = append(diags, AuditDiagnostic{
+			Code:     AuditCode(d.Code),
+			Severity: AuditSeverity(d.Severity),
+			Message:  d.Message,
+		})
+	}
 
 	visited := make(map[string]bool)
 	duplicated := make(map[string]bool)

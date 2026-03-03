@@ -21,6 +21,7 @@ readonly MAX_RETRY_DELAY=300  # 5 minutes cap
 
 # Claude CLI timeout
 readonly CLAUDE_TIMEOUT=3600  # 60 minutes max per invocation
+readonly HEARTBEAT_INTERVAL=30  # seconds between progress heartbeats
 
 # TDD cycle configuration
 readonly TDD_STEP_RETRIES=3        # retries per step (semantic failures)
@@ -52,6 +53,7 @@ EXPLICIT_EPIC_ID=""  # Epic ID provided via --epic argument
 CURRENT_ITERATION=0
 START_TIME=0
 CLAUDE_PID=""
+HEARTBEAT_PID=""
 
 ##############################################################################
 # Logging infrastructure
@@ -88,8 +90,9 @@ log() {
     local level="$1"
     shift
     local message="$*"
-    local timestamp
+    local timestamp short_ts
     timestamp=$(date -Iseconds)
+    short_ts=$(date +%T)
 
     # Write to log file
     echo "[$timestamp] [$level] $message" >> "$LOG_FILE"
@@ -97,13 +100,13 @@ log() {
     # Also write to console for INFO/WARN/ERROR (always to stderr to avoid capture in command substitution)
     case "$level" in
         INFO)
-            echo "[ralph] $message" >&2
+            echo "[ralph] $short_ts $message" >&2
             ;;
         WARN)
-            echo "[ralph] WARNING: $message" >&2
+            echo "[ralph] $short_ts WARNING: $message" >&2
             ;;
         ERROR)
-            echo "[ralph] ERROR: $message" >&2
+            echo "[ralph] $short_ts ERROR: $message" >&2
             ;;
     esac
 }
@@ -237,7 +240,7 @@ check_claude_cli() {
 check_beads_init() {
     log DEBUG "Checking for beads initialization..."
     if [[ ! -d ".beads" ]]; then
-        log ERROR "Beads not initialized. Run 'npx bd init' to initialize beads."
+        log ERROR "Beads not initialized. Run './bin/bd init' to initialize beads."
         return 1
     fi
     log DEBUG "Beads initialized"
@@ -253,7 +256,7 @@ detect_task_source() {
     log DEBUG "Detecting task source mode for epic $epic_id..."
 
     # Query all tasks under the epic
-    all_tasks=$(npx bd list --parent "$epic_id" --json 2>/dev/null) || {
+    all_tasks=$(./bin/bd list --parent "$epic_id" --json 2>/dev/null) || {
         log DEBUG "Failed to query tasks, defaulting to generic mode"
         echo "generic"
         return 0
@@ -288,7 +291,7 @@ check_clarify_complete() {
 
     # Find the clarify task for this epic (title contains [sp:02-clarify])
     # Must use --status closed since we're checking for completed phase tasks
-    clarify_task=$(npx bd list --parent "$epic_id" --status closed --json 2>/dev/null | \
+    clarify_task=$(./bin/bd list --parent "$epic_id" --status closed --json 2>/dev/null | \
         jq -c 'first(.[] | select(.title | contains("[sp:02-clarify]"))) | {id, status}')
 
     if [[ -z "$clarify_task" ]]; then
@@ -323,7 +326,7 @@ check_tasks_generated() {
 
     # Find the tasks phase task for this epic (title contains [sp:05-tasks])
     # Must use --status closed since we're checking for completed phase tasks
-    tasks_task=$(npx bd list --parent "$epic_id" --status closed --json 2>/dev/null | \
+    tasks_task=$(./bin/bd list --parent "$epic_id" --status closed --json 2>/dev/null | \
         jq -c 'first(.[] | select(.title | contains("[sp:05-tasks]"))) | {id, status}')
 
     if [[ -z "$tasks_task" ]]; then
@@ -399,7 +402,7 @@ validate_prerequisites() {
         log INFO "Validating generic task workflow prerequisites..."
 
         # For generic mode, just verify epic has at least one task
-        all_tasks=$(npx bd list --parent "$epic_id" --json 2>/dev/null) || {
+        all_tasks=$(./bin/bd list --parent "$epic_id" --json 2>/dev/null) || {
             log ERROR "Failed to query tasks for epic $epic_id"
             return 1
         }
@@ -525,7 +528,7 @@ find_epic_id() {
     local feature_name="$1"
     local epics_json
 
-    epics_json=$(npx bd list --type epic --status open --json 2>/dev/null) || {
+    epics_json=$(./bin/bd list --type epic --status open --json 2>/dev/null) || {
         echo "Error: Failed to query beads for epics" >&2
         return 1
     }
@@ -554,7 +557,7 @@ validate_epic_exists() {
     log DEBUG "Validating epic: $epic_id"
 
     # Query beads for this epic ID
-    epic_data=$(npx bd list --type epic --json 2>/dev/null | \
+    epic_data=$(./bin/bd list --type epic --json 2>/dev/null | \
         jq -r --arg id "$epic_id" '.[] | select(.id == $id)') || {
         log ERROR "Failed to query beads for epics"
         return 1
@@ -627,13 +630,13 @@ get_in_progress_tasks() {
     local epic_id="$1"
     local in_progress_json
 
-    in_progress_json=$(npx bd list --status in-progress --parent "$epic_id" --json 2>/dev/null) || {
+    in_progress_json=$(./bin/bd list --status in-progress --parent "$epic_id" --json 2>/dev/null) || {
         echo "Error: Failed to query beads for in-progress tasks" >&2
         return 1
     }
 
     # Filter out the epic itself and event tasks
-    # (bd list --parent already returns only child tasks)
+    # (./bin/bd list --parent already returns only child tasks)
     echo "$in_progress_json" | jq --arg epic "$epic_id" \
         '[.[] | select(.id != $epic and .issue_type != "event")]'
 }
@@ -662,15 +665,26 @@ get_in_progress_task() {
 task_has_children() {
     local task_id="$1"
     local child_count
-    child_count=$(npx bd list --parent "$task_id" --limit 1 --json 2>/dev/null | jq 'length' 2>/dev/null) || return 1
+    child_count=$(./bin/bd list --parent "$task_id" --limit 1 --json 2>/dev/null | jq 'length' 2>/dev/null) || return 1
     [[ "$child_count" -gt 0 ]]
+}
+
+# Check if a task has any active (open or in-progress) children, excluding events
+task_has_active_children() {
+    local task_id="$1"
+    local open_count inprogress_count
+    open_count=$(./bin/bd list --parent "$task_id" --status open --json 2>/dev/null | \
+        jq '[.[] | select(.issue_type != "event")] | length' 2>/dev/null) || return 1
+    inprogress_count=$(./bin/bd list --parent "$task_id" --status in-progress --json 2>/dev/null | \
+        jq '[.[] | select(.issue_type != "event")] | length' 2>/dev/null) || return 1
+    [[ $(( open_count + inprogress_count )) -gt 0 ]]
 }
 
 # Check if all direct children of a task are closed
 all_children_closed() {
     local task_id="$1"
     local open_count
-    open_count=$(npx bd list --parent "$task_id" --status open --json 2>/dev/null | jq 'length' 2>/dev/null) || return 1
+    open_count=$(./bin/bd list --parent "$task_id" --status open --json 2>/dev/null | jq 'length' 2>/dev/null) || return 1
     [[ "$open_count" -eq 0 ]]
 }
 
@@ -692,7 +706,7 @@ auto_close_completed_parents() {
         # Check if parent has children and all are closed
         if task_has_children "$parent_id" && all_children_closed "$parent_id"; then
             log INFO "Auto-closing completed parent task: $parent_id"
-            npx bd close "$parent_id" 2>/dev/null || {
+            ./bin/bd close "$parent_id" 2>/dev/null || {
                 log WARN "Failed to auto-close parent task: $parent_id"
                 break
             }
@@ -704,52 +718,76 @@ auto_close_completed_parents() {
     done
 }
 
+# Recursively find the deepest active leaf task under a parent.
+# Prefers in-progress children (resume); falls back to first ready child.
+# At epic root ($EPIC_ID), also checks for globally-ready orphan tasks as a safety net.
+# Outputs the full task JSON object to stdout, or empty string if none found.
+find_leaf_task() {
+    local parent_id="$1"
+    local inprogress_children inprogress_task inprogress_child
+    local ready_children ready_task ready_child
+
+    # 1. Prefer any in-progress child (resume interrupted work)
+    inprogress_children=$(./bin/bd list --parent "$parent_id" --status in-progress --json 2>/dev/null | \
+        jq '[.[] | select(.issue_type != "event")]' 2>/dev/null) || inprogress_children="[]"
+    inprogress_task=$(echo "$inprogress_children" | jq -c 'first(.[])' 2>/dev/null) || inprogress_task=""
+    inprogress_child=$(echo "$inprogress_task" | jq -r '.id // empty' 2>/dev/null) || inprogress_child=""
+
+    if [[ -n "$inprogress_child" ]]; then
+        if task_has_active_children "$inprogress_child"; then
+            find_leaf_task "$inprogress_child"
+        else
+            echo "$inprogress_task"
+        fi
+        return 0
+    fi
+
+    # 2. Fall back to first ready child
+    ready_children=$(./bin/bd ready --parent "$parent_id" --limit 100 --json 2>/dev/null | \
+        jq '[.[] | select(.issue_type != "event" and .issue_type != "epic")]' 2>/dev/null) || ready_children="[]"
+    ready_task=$(echo "$ready_children" | jq -c 'first(.[])' 2>/dev/null) || ready_task=""
+    ready_child=$(echo "$ready_task" | jq -r '.id // empty' 2>/dev/null) || ready_child=""
+
+    if [[ -n "$ready_child" ]]; then
+        if task_has_active_children "$ready_child"; then
+            find_leaf_task "$ready_child"
+        else
+            echo "$ready_task"
+        fi
+        return 0
+    fi
+
+    # 3. At epic root level: scan for globally-ready orphan tasks (safety net)
+    if [[ "$parent_id" == "$EPIC_ID" ]]; then
+        local orphan_task orphan_id
+        orphan_task=$(./bin/bd ready --parent "$EPIC_ID" --limit 1 --json 2>/dev/null | \
+            jq -c 'first(.[] | select(.issue_type != "event" and .issue_type != "epic"))' 2>/dev/null) || orphan_task=""
+        orphan_id=$(echo "$orphan_task" | jq -r '.id // empty' 2>/dev/null) || orphan_id=""
+        if [[ -n "$orphan_id" ]]; then
+            log WARN "Using orphan ready task as fallback: $orphan_id"
+            echo "$orphan_task"
+            return 0
+        fi
+    fi
+
+    # No leaf found
+    echo ""
+    return 0
+}
+
 # Get ready tasks for the epic (returns JSON array)
 get_ready_tasks() {
     local epic_id="$1"
     local ready_json
 
-    ready_json=$(npx bd ready --parent "$epic_id" --limit 1000 --json 2>/dev/null) || {
+    ready_json=$(./bin/bd ready --parent "$epic_id" --limit 1000 --json 2>/dev/null) || {
         echo "Error: Failed to query beads for ready tasks" >&2
         return 1
     }
 
     # Filter out the epic itself and event tasks
-    local filtered
-    filtered=$(echo "$ready_json" | jq --arg epic "$epic_id" \
-        '[.[] | select(.id != $epic and .issue_type != "event")]')
-
-    # Filter out parent container tasks (tasks that have children).
-    # Parent tasks are not work items; ralph processes their children individually.
-    # Exception: sp:* phase tasks are container tasks by design — they are returned
-    # as-is so execute_spec_kit_phase_task can handle them.
-    local leaf_ids=()
-    local task_id task_title
-    while IFS= read -r task_id; do
-        [[ -z "$task_id" ]] && continue
-        task_title=$(echo "$filtered" | jq -r --arg id "$task_id" '.[] | select(.id == $id) | .title // ""')
-        if echo "$task_title" | grep -qP '\[sp:[0-9]{2}-'; then
-            log DEBUG "Keeping sp:* phase task as-is: $task_id"
-            leaf_ids+=("$task_id")
-        elif task_has_children "$task_id"; then
-            log DEBUG "Skipping parent container task: $task_id"
-        else
-            leaf_ids+=("$task_id")
-        fi
-    done < <(echo "$filtered" | jq -r '.[].id')
-
-    if [[ ${#leaf_ids[@]} -eq 0 ]]; then
-        echo "[]"
-        return 0
-    fi
-
-    # Rebuild JSON array with only leaf tasks
-    local id_array
-    id_array=$(printf '"%s",' "${leaf_ids[@]}")
-    id_array="[${id_array%,}]"
-
-    echo "$filtered" | jq --argjson ids "$id_array" \
-        '[.[] | select(.id | IN($ids[]))]'
+    echo "$ready_json" | jq --arg epic "$epic_id" \
+        '[.[] | select(.id != $epic and .issue_type != "event")]'
 }
 
 # Check if there are ready tasks remaining
@@ -777,13 +815,13 @@ get_open_tasks() {
     local epic_id="$1"
     local open_json
 
-    open_json=$(npx bd list --status open --parent "$epic_id" --json 2>/dev/null) || {
+    open_json=$(./bin/bd list --status open --parent "$epic_id" --json 2>/dev/null) || {
         echo "Error: Failed to query beads for open tasks" >&2
         return 1
     }
 
     # Filter out the epic itself and event tasks
-    # (bd list --parent already returns only child tasks)
+    # (./bin/bd list --parent already returns only child tasks)
     echo "$open_json" | jq --arg epic "$epic_id" \
         '[.[] | select(.id != $epic and .issue_type != "event")]'
 }
@@ -814,11 +852,11 @@ generate_focused_prompt() {
     task_status=$(echo "$task_json" | jq -r '.status // "unknown"')
 
     # Fetch full task details including comments
-    task_details=$(npx bd show "$task_id" --json 2>/dev/null) || task_details=""
+    task_details=$(./bin/bd show "$task_id" --json 2>/dev/null) || task_details=""
 
     # Extract and format comments if they exist
     if [[ -n "$task_details" ]]; then
-        # Normalize to object (handle both array and object responses from bd show)
+        # Normalize to object (handle both array and object responses from ./bin/bd show)
         comments_json=$(echo "$task_details" | jq -r '(if type == "array" then .[0] else . end) | .comments // []')
         comments_text=$(echo "$comments_json" | jq -r '.[] | "- \(.timestamp // "unknown"): \(.text // "")"' 2>/dev/null)
     else
@@ -871,10 +909,10 @@ Complete ONLY this task described above.
 Do NOT explore unrelated code or work on other tasks.
 
 ## Bead Lifecycle Management (REQUIRED)
-1. Start task: npx bd start $task_id
-2. Track progress: npx bd comment $task_id "status update message"
-3. Complete task: npx bd close $task_id
-4. If blocked: npx bd comment $task_id "BLOCKED: reason" (do NOT close)
+1. Start task: ./bin/bd start $task_id
+2. Track progress: ./bin/bd comment $task_id "status update message"
+3. Complete task: ./bin/bd close $task_id
+4. If blocked: ./bin/bd comment $task_id "BLOCKED: reason" (do NOT close)
 
 CRITICAL: You MUST close the bead when the task is complete.
 If you do not close it, ralph will run this task again.
@@ -916,7 +954,7 @@ Without a successful commit:
 
 ### Exact Commit Sequence (REQUIRED)
 
-1. **Close bead FIRST**: \`npx bd close $task_id\`
+1. **Close bead FIRST**: \`./bin/bd close $task_id\`
    - This updates .beads state which MUST be included in the commit
    - Marks task as complete in beads tracking
 
@@ -953,7 +991,7 @@ Without a successful commit:
 ### Success Criteria
 
 The task is ONLY complete when:
-1. ✓ Bead is closed (\`npx bd close $task_id\`)
+1. ✓ Bead is closed (\`./bin/bd close $task_id\`)
 2. ✓ All changes are committed (including .beads/)
 3. ✓ Pre-commit hooks passed (gofmt, go vet, staticcheck, 100% coverage)
 4. ✓ Commit succeeded (you saw success message)
@@ -1191,19 +1229,19 @@ You MUST write tests that FAIL. Do NOT write any implementation code.
 
 PROMPT_EOF
 
-    # bd start only on first cycle
+    # ./bin/bd start only on first cycle
     if [[ "$cycle" -eq 1 ]]; then
         cat <<PROMPT_EOF
 
 ### Bead Management
-1. Start task: \`npx bd start $task_id\`
-2. Comment progress: \`npx bd comment $task_id "RED: wrote failing tests for ..."\`
+1. Start task: \`./bin/bd start $task_id\`
+2. Comment progress: \`./bin/bd comment $task_id "RED: wrote failing tests for ..."\`
 PROMPT_EOF
     else
         cat <<PROMPT_EOF
 
 ### Bead Management
-- Comment progress: \`npx bd comment $task_id "RED cycle $cycle: wrote failing tests for ..."\`
+- Comment progress: \`./bin/bd comment $task_id "RED cycle $cycle: wrote failing tests for ..."\`
 - Do NOT start or close the bead (already started)
 PROMPT_EOF
     fi
@@ -1291,7 +1329,7 @@ Make all failing tests pass with the simplest possible implementation.
 7. Follow Go conventions and project structure
 
 ### Bead Management
-- Comment progress: \`npx bd comment $task_id "GREEN: implemented ..."\`
+- Comment progress: \`./bin/bd comment $task_id "GREEN: implemented ..."\`
 - Do NOT close the bead (REVIEW step decides completion)
 
 ### Commit Your Work (REQUIRED)
@@ -1375,7 +1413,7 @@ All tests are passing. Improve the code while keeping them green.
 6. If no improvements needed, do nothing (that's fine)
 
 ### Bead Management
-- Comment progress: \`npx bd comment $task_id "REFACTOR: improved ..."\`
+- Comment progress: \`./bin/bd comment $task_id "REFACTOR: improved ..."\`
 - Do NOT close the bead
 
 ### Commit If Changes Made
@@ -1573,7 +1611,7 @@ func Test_Some_scenario(t *testing.T) {
 6. These tests are expected to FAIL until the feature is built — that's OK
 
 ### Bead Management
-- Comment progress: \`npx bd comment $task_id "BIND: wrote acceptance test implementations for ..."\`
+- Comment progress: \`./bin/bd comment $task_id "BIND: wrote acceptance test implementations for ..."\`
 - Do NOT close the bead (acceptance check validates later)
 
 ### Do NOT Commit
@@ -1800,17 +1838,17 @@ execute_unit_tdd_cycle() {
             log WARN "Baseline tests failing - attempting auto-fix"
             if ! attempt_baseline_fix; then
                 log ERROR "Baseline auto-fix failed - marking task BLOCKED"
-                npx bd comment "$task_id" "BLOCKED: baseline tests failing (auto-fix failed after $BASELINE_FIX_MAX_ATTEMPTS attempts)" 2>/dev/null || true
+                ./bin/bd comment "$task_id" "BLOCKED: baseline tests failing (auto-fix failed after $BASELINE_FIX_MAX_ATTEMPTS attempts)" 2>/dev/null || true
                 return 1
             fi
             log INFO "Baseline tests fixed - continuing to RED step"
-            npx bd comment "$task_id" "Baseline tests were failing but auto-fixed" 2>/dev/null || true
+            ./bin/bd comment "$task_id" "Baseline tests were failing but auto-fixed" 2>/dev/null || true
         fi
 
         # --- RED: Write failing tests ---
         if ! execute_tdd_step "$STEP_RED" "$task_json" "$cycle" "$remaining_items"; then
             log ERROR "RED step failed for $task_id"
-            npx bd comment "$task_id" "BLOCKED: RED step failed after $TDD_STEP_RETRIES retries" 2>/dev/null || true
+            ./bin/bd comment "$task_id" "BLOCKED: RED step failed after $TDD_STEP_RETRIES retries" 2>/dev/null || true
             return 1
         fi
 
@@ -1819,7 +1857,7 @@ execute_unit_tdd_cycle() {
 
         if ! execute_tdd_step "$STEP_GREEN" "$task_json" "$cycle"; then
             log ERROR "GREEN step failed for $task_id"
-            npx bd comment "$task_id" "BLOCKED: GREEN step failed after $TDD_STEP_RETRIES retries" 2>/dev/null || true
+            ./bin/bd comment "$task_id" "BLOCKED: GREEN step failed after $TDD_STEP_RETRIES retries" 2>/dev/null || true
             return 1
         fi
 
@@ -1864,7 +1902,7 @@ Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>" 2>/dev/null || {
             log INFO "REVIEW says task is COMPLETE: $REVIEW_REASON"
 
             # Close the bead
-            npx bd close "$task_id" 2>/dev/null || {
+            ./bin/bd close "$task_id" 2>/dev/null || {
                 log WARN "Failed to close bead $task_id"
             }
 
@@ -1892,7 +1930,7 @@ Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>" 2>/dev/null || {
 
     # Exhausted all cycles
     log ERROR "Task $task_id exhausted $TDD_MAX_CYCLES TDD cycles - marking BLOCKED"
-    npx bd comment "$task_id" "BLOCKED: exhausted $TDD_MAX_CYCLES TDD cycles without completion. Last review: $REVIEW_REASON" 2>/dev/null || true
+    ./bin/bd comment "$task_id" "BLOCKED: exhausted $TDD_MAX_CYCLES TDD cycles without completion. Last review: $REVIEW_REASON" 2>/dev/null || true
 
     return 1
 }
@@ -1982,12 +2020,12 @@ execute_implement_phase() {
         if [[ "$task_count" -eq 0 ]]; then
             # No ready tasks — check if all children are already closed
             local open_count
-            open_count=$(npx bd list --parent "$implement_task_id" --status open \
+            open_count=$(./bin/bd list --parent "$implement_task_id" --status open \
                 --json 2>/dev/null | jq 'length // 0')
 
             if [[ "$open_count" == "0" ]]; then
                 log INFO "All implementation tasks complete — closing $implement_task_id"
-                npx bd close "$implement_task_id" 2>/dev/null || true
+                ./bin/bd close "$implement_task_id" 2>/dev/null || true
                 return "$EXIT_SUCCESS"
             else
                 log WARN "Implement phase has $open_count open task(s) but none ready (blocked)"
@@ -2058,7 +2096,7 @@ $task_description"
 
     if invoke_claude_with_retry "$prompt"; then
         log INFO "Spec-kit phase $phase_name completed successfully"
-        bd close "$task_id" 2>/dev/null || true
+        ./bin/bd close "$task_id" 2>/dev/null || true
         return "$EXIT_SUCCESS"
     else
         log ERROR "Spec-kit phase $phase_name failed"
@@ -2109,7 +2147,7 @@ execute_atdd_cycle() {
     # Initial acceptance check - if tests already pass, task is done
     if run_acceptance_check "$spec_file"; then
         log INFO "Acceptance tests already passing for $task_id - closing bead"
-        npx bd close "$task_id" 2>/dev/null || {
+        ./bin/bd close "$task_id" 2>/dev/null || {
             log WARN "Failed to close bead $task_id"
         }
         git add -A 2>/dev/null || true
@@ -2138,17 +2176,17 @@ Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>" 2>/dev/null || true
             log WARN "Baseline tests failing - attempting auto-fix"
             if ! attempt_baseline_fix; then
                 log ERROR "Baseline auto-fix failed - marking task BLOCKED"
-                npx bd comment "$task_id" "BLOCKED: baseline tests failing (auto-fix failed after $BASELINE_FIX_MAX_ATTEMPTS attempts)" 2>/dev/null || true
+                ./bin/bd comment "$task_id" "BLOCKED: baseline tests failing (auto-fix failed after $BASELINE_FIX_MAX_ATTEMPTS attempts)" 2>/dev/null || true
                 return 1
             fi
             log INFO "Baseline tests fixed - continuing to RED step"
-            npx bd comment "$task_id" "Baseline tests were failing but auto-fixed" 2>/dev/null || true
+            ./bin/bd comment "$task_id" "Baseline tests were failing but auto-fixed" 2>/dev/null || true
         fi
 
         # --- RED: Write smallest possible failing unit test ---
         if ! execute_tdd_step "$STEP_RED" "$task_json" "$cycle" "$remaining_items"; then
             log ERROR "RED step failed for $task_id"
-            npx bd comment "$task_id" "BLOCKED: RED step failed after $TDD_STEP_RETRIES retries" 2>/dev/null || true
+            ./bin/bd comment "$task_id" "BLOCKED: RED step failed after $TDD_STEP_RETRIES retries" 2>/dev/null || true
             return 1
         fi
 
@@ -2158,7 +2196,7 @@ Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>" 2>/dev/null || true
 
         if ! execute_tdd_step "$STEP_GREEN" "$task_json" "$cycle"; then
             log ERROR "GREEN step failed for $task_id"
-            npx bd comment "$task_id" "BLOCKED: GREEN step failed after $TDD_STEP_RETRIES retries" 2>/dev/null || true
+            ./bin/bd comment "$task_id" "BLOCKED: GREEN step failed after $TDD_STEP_RETRIES retries" 2>/dev/null || true
             return 1
         fi
 
@@ -2182,7 +2220,7 @@ Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>" 2>/dev/null || {
         # --- ACCEPTANCE CHECK after each inner cycle ---
         if run_acceptance_check "$spec_file"; then
             log INFO "Acceptance tests PASSING after cycle $cycle - task complete"
-            npx bd close "$task_id" 2>/dev/null || {
+            ./bin/bd close "$task_id" 2>/dev/null || {
                 log WARN "Failed to close bead $task_id"
             }
             git add -A 2>/dev/null || true
@@ -2199,7 +2237,7 @@ Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>" 2>/dev/null || true
 
     # Exhausted all inner cycles
     log ERROR "Task $task_id exhausted $ATDD_MAX_INNER_CYCLES ATDD inner cycles - marking BLOCKED"
-    npx bd comment "$task_id" "BLOCKED: exhausted $ATDD_MAX_INNER_CYCLES ATDD inner cycles without acceptance tests passing" 2>/dev/null || true
+    ./bin/bd comment "$task_id" "BLOCKED: exhausted $ATDD_MAX_INNER_CYCLES ATDD inner cycles without acceptance tests passing" 2>/dev/null || true
     rm -f "$ACCEPTANCE_OUTPUT_FILE"
     return 1
 }
@@ -2207,6 +2245,14 @@ Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>" 2>/dev/null || true
 ##############################################################################
 # Claude CLI invocation
 ##############################################################################
+
+# Kill the background heartbeat process if running
+stop_heartbeat() {
+    if [[ -n "$HEARTBEAT_PID" ]] && kill -0 "$HEARTBEAT_PID" 2>/dev/null; then
+        kill "$HEARTBEAT_PID" 2>/dev/null || true
+        HEARTBEAT_PID=""
+    fi
+}
 
 # Invoke Claude CLI with focused prompt
 # Returns the exit code from Claude
@@ -2238,15 +2284,30 @@ invoke_claude() {
         script -qc "claude -p \"\$(cat '$prompt_file')\" --output-format text" "$temp_output" &
     CLAUDE_PID=$!
 
+    # Start heartbeat: print elapsed time every HEARTBEAT_INTERVAL seconds
+    local invoke_start
+    invoke_start=$(date +%s)
+    (
+        while true; do
+            sleep "$HEARTBEAT_INTERVAL"
+            local elapsed=$(( $(date +%s) - invoke_start ))
+            log INFO "Claude running... ($(format_duration "$elapsed") elapsed)"
+        done
+    ) &
+    HEARTBEAT_PID=$!
+
     # Clean up prompt file when no longer needed (after claude reads it)
     ( sleep 5; rm -f "$prompt_file" ) &
 
     # Wait for the background process to complete
     if wait "$CLAUDE_PID"; then
         exit_code=0
-        log INFO "Claude completed successfully"
+        stop_heartbeat
+        local elapsed=$(( $(date +%s) - invoke_start ))
+        log INFO "Claude completed successfully in $(format_duration "$elapsed")"
     else
         exit_code=$?
+        stop_heartbeat
         if [[ "$exit_code" -eq 124 ]]; then
             log ERROR "Claude timed out after ${CLAUDE_TIMEOUT}s"
         elif [[ "$exit_code" -eq 130 ]]; then
@@ -2344,6 +2405,9 @@ run_loop() {
     log INFO "Starting automation loop (max $MAX_ITERATIONS iterations)"
     log_section "AUTOMATION LOOP START"
 
+    # Set global epic ID for find_leaf_task orphan detection
+    EPIC_ID="$epic_id"
+
     # Detect and log operational mode
     task_source=$(detect_task_source "$epic_id")
     if [[ "$task_source" == "spec-kit" ]]; then
@@ -2360,45 +2424,47 @@ run_loop() {
 
         log_section "ITERATION $iteration/$MAX_ITERATIONS"
 
-        # Check for in-progress tasks first (resume interrupted work)
-        log DEBUG "Checking for in-progress tasks..."
-        if has_in_progress_tasks "$epic_id"; then
+        # Find the deepest active leaf task (prefers in-progress; falls back to ready)
+        log DEBUG "Finding next leaf task..."
+        next_task=$(find_leaf_task "$epic_id")
+
+        if [[ -z "$next_task" ]]; then
+            # No task found - check for stuck open tasks
+            log DEBUG "No leaf task found. Checking for remaining open tasks..."
+            if has_open_tasks "$epic_id"; then
+                local open_tasks open_count
+                open_tasks=$(get_open_tasks "$epic_id")
+                open_count=$(echo "$open_tasks" | jq 'length')
+                log WARN "No ready tasks, but $open_count open task(s) remain (possibly P3 or blocked tasks)"
+                log_block "Remaining Open Tasks" "$(echo "$open_tasks" | jq -r '.[] | "\(.id): \(.title) [priority: \(.priority // "none")]"')"
+                log ERROR "Cannot complete epic with open tasks remaining"
+                echo "" >&2
+                echo "[ralph] ERROR: Epic has $open_count open task(s) that are not ready:" >&2
+                echo "$open_tasks" | jq -r '.[] | "  - \(.id): \(.title) [priority: \(.priority // "none"), status: \(.status)]"' >&2
+                echo "" >&2
+                echo "These tasks may be:" >&2
+                echo "  - Low priority (P3) tasks waiting to be started" >&2
+                echo "  - Tasks blocked by dependencies" >&2
+                echo "  - Tasks that need manual intervention" >&2
+                echo "" >&2
+                echo "Please review these tasks and either:" >&2
+                echo "  - Close them if they're no longer needed" >&2
+                echo "  - Unblock them and let ralph continue" >&2
+                echo "  - Complete them manually" >&2
+                return "$EXIT_FAILURE"
+            fi
+            log INFO "No more ready tasks and no open tasks. Feature complete!"
+            return "$EXIT_SUCCESS"
+        fi
+
+        # Derive is_resuming from leaf task status
+        local leaf_status
+        leaf_status=$(echo "$next_task" | jq -r '.status // "open"')
+        if [[ "$leaf_status" == "in-progress" ]]; then
             is_resuming=true
-            next_task=$(get_in_progress_task "$epic_id")
             log INFO "Resuming interrupted task"
         else
-            # No in-progress tasks, check for ready tasks
             is_resuming=false
-            log DEBUG "Checking for ready tasks..."
-            if ! has_ready_tasks "$epic_id"; then
-                # No ready tasks, but check if there are still open tasks (e.g., P3 tasks)
-                log DEBUG "No ready tasks found. Checking for remaining open tasks..."
-                if has_open_tasks "$epic_id"; then
-                    local open_tasks open_count
-                    open_tasks=$(get_open_tasks "$epic_id")
-                    open_count=$(echo "$open_tasks" | jq 'length')
-                    log WARN "No ready tasks, but $open_count open task(s) remain (possibly P3 or blocked tasks)"
-                    log_block "Remaining Open Tasks" "$(echo "$open_tasks" | jq -r '.[] | "\(.id): \(.title) [priority: \(.priority // "none")]"')"
-                    log ERROR "Cannot complete epic with open tasks remaining"
-                    echo "" >&2
-                    echo "[ralph] ERROR: Epic has $open_count open task(s) that are not ready:" >&2
-                    echo "$open_tasks" | jq -r '.[] | "  - \(.id): \(.title) [priority: \(.priority // "none"), status: \(.status)]"' >&2
-                    echo "" >&2
-                    echo "These tasks may be:" >&2
-                    echo "  - Low priority (P3) tasks waiting to be started" >&2
-                    echo "  - Tasks blocked by dependencies" >&2
-                    echo "  - Tasks that need manual intervention" >&2
-                    echo "" >&2
-                    echo "Please review these tasks and either:" >&2
-                    echo "  - Close them if they're no longer needed" >&2
-                    echo "  - Unblock them and let ralph continue" >&2
-                    echo "  - Complete them manually" >&2
-                    return "$EXIT_FAILURE"
-                fi
-                log INFO "No more ready tasks and no open tasks. Feature complete!"
-                return "$EXIT_SUCCESS"
-            fi
-            next_task=$(get_next_task "$epic_id")
         fi
 
         # Extract task info for logging
@@ -2415,6 +2481,15 @@ run_loop() {
         else
             log INFO "Iteration $iteration/$MAX_ITERATIONS"
             log INFO "Epic: $epic_id | Task: $task_id | $task_title"
+        fi
+
+        # Show first line of description as context hint
+        local desc_preview
+        desc_preview=$(echo "$task_description" | head -1 | \
+            sed -e 's/\x1b\[[0-9;]*[mGKH]//g' -e 's/\x1b\][^\x07]*\x07//g' -e 's/\x1b[^[]//' | \
+            cut -c1-120)
+        if [[ -n "$desc_preview" ]]; then
+            log INFO "  > $desc_preview"
         fi
 
         log_block "Task Details" "ID: $task_id
@@ -2525,6 +2600,7 @@ handle_sigint() {
         fi
     fi
 
+    stop_heartbeat
     show_summary "Interrupted by user"
     # EXIT trap will handle lock release
     exit "$EXIT_SIGINT"
@@ -2532,6 +2608,7 @@ handle_sigint() {
 
 # Cleanup handler (runs on EXIT)
 cleanup() {
+    stop_heartbeat
     release_lock
 }
 

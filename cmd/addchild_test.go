@@ -651,7 +651,6 @@ func TestNewAddChildCmd_NewMode_Scenarios(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			pf := tt.projectFiles
 			if pf == nil {
@@ -893,7 +892,6 @@ func TestIsUUIDFilename_RejectsNonV7UUID(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			got := node.IsUUIDFilename(tt.input)
 			if got != tt.wantMatch {
@@ -1053,5 +1051,95 @@ func TestNewAddChildCmd_NewMode_EditRefreshesUpdated(t *testing.T) {
 	refreshed := string(mock.nodeWrittenContents[1])
 	if !strings.Contains(refreshed, "updated:") {
 		t.Errorf("refreshed node file missing 'updated:' field\ncontent:\n%s", refreshed)
+	}
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Synopsis without --new flag (prosemark-go-eq0)
+// ──────────────────────────────────────────────────────────────────────────────
+
+// TestNewAddChildCmd_SynopsisWithoutNewReturnsError verifies that --synopsis
+// without --new returns an error and does not modify the binder. When --new is
+// absent the command adds an existing file reference and cannot write synopsis
+// frontmatter, so providing --synopsis is always a user mistake that must be
+// surfaced rather than silently discarded.
+func TestNewAddChildCmd_SynopsisWithoutNewReturnsError(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{
+			name: "synopsis with target but no --new",
+			args: []string{"--parent", ".", "--target", "chapter-two.md", "--synopsis", "A brief description.", "--project", "."},
+		},
+		{
+			name: "synopsis with title but no --new",
+			args: []string{"--parent", ".", "--target", "chapter-two.md", "--title", "Chapter Two", "--synopsis", "A brief description.", "--project", "."},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock := &mockAddChildIO{
+				binderBytes: acBinder(),
+				project:     &binder.Project{Files: []string{"chapter-two.md"}, BinderDir: "."},
+			}
+			c := NewAddChildCmd(mock)
+			out := new(bytes.Buffer)
+			c.SetOut(out)
+			c.SetErr(new(bytes.Buffer))
+			c.SetArgs(tt.args)
+
+			if err := c.Execute(); err == nil {
+				t.Error("expected error when --synopsis is provided without --new")
+			}
+			if out.Len() > 0 {
+				t.Errorf("expected no stdout on error, got: %q", out.String())
+			}
+			if mock.writtenPath != "" {
+				t.Errorf("binder must not be written when --synopsis used without --new, was written to %q", mock.writtenPath)
+			}
+		})
+	}
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Absolute path rejection (prosemark-go-irm)
+// ──────────────────────────────────────────────────────────────────────────────
+
+// TestNewAddChildCmd_AbsoluteTargetReturnsError verifies that --target with an
+// absolute path is rejected: the command must return a non-nil error and print
+// nothing to stdout.
+func TestNewAddChildCmd_AbsoluteTargetReturnsError(t *testing.T) {
+	tests := []struct {
+		name   string
+		target string
+	}{
+		{"unix_root_file", "/file.md"},
+		{"unix_deep_path", "/absolute/path/to/file.md"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock := &mockAddChildIO{
+				binderBytes: acBinder(),
+				project:     &binder.Project{Files: []string{}, BinderDir: "."},
+			}
+			c := NewAddChildCmd(mock)
+			out := new(bytes.Buffer)
+			errOut := new(bytes.Buffer)
+			c.SetOut(out)
+			c.SetErr(errOut)
+			c.SetArgs([]string{"--parent", ".", "--target", tt.target, "--project", "."})
+
+			err := c.Execute()
+
+			if err == nil {
+				t.Errorf("expected error for absolute target %q, got nil", tt.target)
+			}
+			if out.Len() > 0 {
+				t.Errorf("expected no stdout on error, got: %q", out.String())
+			}
+		})
 	}
 }

@@ -116,6 +116,9 @@ func TestNewDoctorCmd_ListUUIDFilesError(t *testing.T) {
 	mock := &mockDoctorIO{
 		binderBytes:  doctorBinderEmpty(),
 		uuidFilesErr: errors.New("disk error"),
+		nodeFiles: map[string]nodeFileEntry{
+			".prosemark.yml": {content: []byte("version: \"1\"\n"), exists: true},
+		},
 	}
 	c := NewDoctorCmd(mock)
 	c.SetOut(new(bytes.Buffer))

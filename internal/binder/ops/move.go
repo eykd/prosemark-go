@@ -23,16 +23,17 @@ var moveOpsCheckboxRE = regexp.MustCompile(`^\[[xX ]\]\s+`)
 var moveParseBinderFn = binder.Parse
 
 // Move relocates the source node (and its subtree) under the destination parent.
-// Returns the modified bytes, diagnostics, and any fatal error. Source bytes are
-// unchanged on error (atomic abort semantics).
-func Move(ctx context.Context, src []byte, project *binder.Project, params binder.MoveParams) ([]byte, []binder.Diagnostic, error) {
+// Returns the modified bytes and diagnostics. Source bytes are unchanged on error
+// (atomic abort semantics). Parse errors are surfaced as diagnostics, not as a
+// returned error.
+func Move(ctx context.Context, src []byte, project *binder.Project, params binder.MoveParams) ([]byte, []binder.Diagnostic) {
 	// Require --yes confirmation (OPE009).
 	if !params.Yes {
 		return src, []binder.Diagnostic{{
 			Severity: "error",
 			Code:     binder.CodeIOOrParseFailure,
 			Message:  "move requires --yes confirmation",
-		}}, nil
+		}}
 	}
 
 	// Parse the source.
@@ -42,13 +43,13 @@ func Move(ctx context.Context, src []byte, project *binder.Project, params binde
 			Severity: "error",
 			Code:     binder.CodeIOOrParseFailure,
 			Message:  fmt.Sprintf("parse error: %v", err),
-		}), err
+		})
 	}
 
 	// Find source nodes.
 	sourceNodes, selDiags := moveEvalSourceSelector(params.SourceSelector, result.Root, result.Lines)
 	if len(sourceNodes) == 0 {
-		return src, append(parseDiags, selDiags...), nil
+		return src, append(parseDiags, selDiags...)
 	}
 
 	var allDiags []binder.Diagnostic
@@ -58,7 +59,7 @@ func Move(ctx context.Context, src []byte, project *binder.Project, params binde
 	// Find destination parent.
 	destNode, destDiags := moveEvalDestSelector(params.DestinationParentSelector, result.Root)
 	if destNode == nil {
-		return src, append(allDiags, destDiags...), nil
+		return src, append(allDiags, destDiags...)
 	}
 	allDiags = append(allDiags, destDiags...)
 
@@ -69,7 +70,7 @@ func Move(ctx context.Context, src []byte, project *binder.Project, params binde
 				Severity: "error",
 				Code:     binder.CodeCycleDetected,
 				Message:  "destination is a descendant of source: cycle detected",
-			}), nil
+			})
 		}
 	}
 
@@ -86,7 +87,8 @@ func Move(ctx context.Context, src []byte, project *binder.Project, params binde
 	}
 
 	// OPW004: warn if any non-root parent loses its sole child.
-	if moveAnyParentLosesAllChildren(result.Root, sourceNodes) {
+	// Skip when the destination IS the parent (same-parent move is a no-op).
+	if moveAnyParentLosesAllChildren(result.Root, sourceNodes, destNode) {
 		allDiags = append(allDiags, binder.Diagnostic{
 			Severity: "warning",
 			Code:     binder.CodeEmptySublistPruned,
@@ -97,19 +99,19 @@ func Move(ctx context.Context, src []byte, project *binder.Project, params binde
 	// Resolve the insertion index among destNode's children (excluding sourceNodes).
 	// We build a view of destNode's children after the source nodes are removed,
 	// because that's what the user sees when specifying --before/--after/--at.
-	moveInsertIdx, diagErr := moveresolveInsertionIndex(destNode, sourceNodes, params)
+	moveInsertIdx, diagErr := moveResolveInsertionIndex(destNode, sourceNodes, params)
 	if diagErr != nil {
-		return src, append(allDiags, *diagErr), nil
+		return src, append(allDiags, *diagErr)
 	}
 	targetIndentStr, targetMarker := inferMarkerAndIndent(destNode, moveInsertIdx)
-	return moveRebuildDocument(result, sourceNodes, destNode, moveInsertIdx, targetIndentStr, targetMarker), allDiags, nil
+	return moveRebuildDocument(result, sourceNodes, destNode, moveInsertIdx, targetIndentStr, targetMarker), allDiags
 }
 
-// moveresolveInsertionIndex returns the 0-based index in destNode.Children at
+// moveResolveInsertionIndex returns the 0-based index in destNode.Children at
 // which to insert the moved nodes. The sourceNodes are excluded from the child
 // list when evaluating --before/--after/--at positions (because they will be
 // removed before insertion). Returns an error diagnostic on invalid input.
-func moveresolveInsertionIndex(destNode *binder.Node, sourceNodes []*binder.Node, params binder.MoveParams) (int, *binder.Diagnostic) {
+func moveResolveInsertionIndex(destNode *binder.Node, sourceNodes []*binder.Node, params binder.MoveParams) (int, *binder.Diagnostic) {
 	// Build the post-removal child list and a parallel slice of their full indices.
 	sourceSet := make(map[*binder.Node]bool, len(sourceNodes))
 	for _, s := range sourceNodes {
@@ -343,11 +345,12 @@ func moveIsDescendant(ancestor, target *binder.Node) bool {
 }
 
 // moveAnyParentLosesAllChildren reports whether any non-root parent would lose
-// its only child due to the move.
-func moveAnyParentLosesAllChildren(root *binder.Node, sourceNodes []*binder.Node) bool {
+// its only child due to the move. Parents that equal destNode are excluded
+// because those nodes are being moved back to their current parent (no-op).
+func moveAnyParentLosesAllChildren(root *binder.Node, sourceNodes []*binder.Node, destNode *binder.Node) bool {
 	for _, srcNode := range sourceNodes {
 		parent := deleteFindParentNode(root, srcNode)
-		if parent != nil && parent.Type != "root" && len(parent.Children) == 1 {
+		if parent != nil && parent.Type != "root" && len(parent.Children) == 1 && parent != destNode {
 			return true
 		}
 	}

@@ -40,11 +40,7 @@ func TestMove_MultiMatch_OPW001_MovesAll(t *testing.T) {
 		Yes:                       true,
 	}
 
-	out, diags, err := Move(context.Background(), src, nil, params)
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	out, diags := Move(context.Background(), src, nil, params)
 	if !hasDiagCode(diags, binder.CodeMultiMatch) {
 		t.Errorf("expected OPW001 (multi-match), got: %v", diags)
 	}
@@ -75,7 +71,7 @@ func TestMove_MultiMatch_OPW001_MessageFormat(t *testing.T) {
 		Yes:                       true,
 	}
 
-	_, diags, _ := Move(context.Background(), src, nil, params)
+	_, diags := Move(context.Background(), src, nil, params)
 
 	var opw001Msg string
 	for _, d := range diags {
@@ -139,7 +135,7 @@ func TestMove_RootSelectorGuard_OPE001(t *testing.T) {
 				Yes:                       true,
 			}
 
-			out, diags, _ := Move(context.Background(), src, nil, params)
+			out, diags := Move(context.Background(), src, nil, params)
 
 			// Must return OPE001 (selector no match / root guard).
 			if !hasDiagCode(diags, binder.CodeSelectorNoMatch) {
@@ -176,7 +172,7 @@ func TestMove_OPE006_SourceInCodeFence(t *testing.T) {
 		Yes:                       true,
 	}
 
-	_, diags, _ := Move(context.Background(), src, nil, params)
+	_, diags := Move(context.Background(), src, nil, params)
 
 	if !hasDiagCode(diags, binder.CodeNodeInCodeFence) {
 		t.Errorf("expected OPE006 (node in code fence), got: %v", diags)

@@ -103,21 +103,12 @@ func newAddChildCmdWithGetCWD(io NewNodeAddChildIO, getwd func() (string, error)
 				return emitOPE009AndError(cmd, jsonMode, err)
 			}
 
-			positionFlagsSet := 0
-			if first {
-				positionFlagsSet++
+			if err := checkConflictingPositionFlags(cmd, first, before, after); err != nil {
+				return err
 			}
-			if cmd.Flags().Changed("at") {
-				positionFlagsSet++
-			}
-			if before != "" {
-				positionFlagsSet++
-			}
-			if after != "" {
-				positionFlagsSet++
-			}
-			if positionFlagsSet > 1 {
-				return fmt.Errorf("only one of --first, --at, --before, --after may be specified (%s)", binder.CodeConflictingFlags)
+
+			if synopsis != "" && !newMode {
+				return fmt.Errorf("--synopsis requires --new: synopsis frontmatter can only be written when creating a new node file")
 			}
 
 			position := "last"
@@ -152,7 +143,7 @@ func newAddChildCmdWithGetCWD(io NewNodeAddChildIO, getwd func() (string, error)
 				return runNewMode(ctx, cmd, io, binderPath, binderBytes, proj, params, synopsis, editMode)
 			}
 
-			modifiedBytes, diags, _ := ops.AddChild(ctx, binderBytes, proj, params) //nolint:errcheck
+			modifiedBytes, diags := ops.AddChild(ctx, binderBytes, proj, params)
 			if diags == nil {
 				diags = []binder.Diagnostic{}
 			}
@@ -258,7 +249,7 @@ func runNewMode(ctx context.Context, cmd *cobra.Command, io NewNodeAddChildIO, b
 		return fmt.Errorf("creating node file: %w", err)
 	}
 
-	modifiedBytes, diags, _ := ops.AddChild(ctx, binderBytes, proj, params) //nolint:errcheck
+	modifiedBytes, diags := ops.AddChild(ctx, binderBytes, proj, params)
 	if diags == nil {
 		diags = []binder.Diagnostic{}
 	}
@@ -280,16 +271,18 @@ func runNewMode(ctx context.Context, cmd *cobra.Command, io NewNodeAddChildIO, b
 		}
 	}
 
-	if _, err := fmt.Fprintln(cmd.OutOrStdout(), "Created "+sanitizePath(params.Target)+" in "+sanitizePath(binderPath)); err != nil {
-		return fmt.Errorf("writing output: %w", err)
-	}
-
 	if editMode {
 		editor := os.Getenv("EDITOR")
-		if strings.TrimSpace(editor) == "" {
+		if len(strings.Fields(editor)) == 0 {
 			return fmt.Errorf("$EDITOR is not set")
 		}
 		if err := io.OpenEditor(editor, nodePath); err != nil {
+			_ = io.DeleteFile(nodePath)
+			if changed {
+				if rollbackErr := io.WriteBinderAtomic(ctx, binderPath, binderBytes); rollbackErr != nil {
+					return fmt.Errorf("opening editor: %w; binder rollback also failed: %v", err, rollbackErr)
+				}
+			}
 			return fmt.Errorf("opening editor: %w", err)
 		}
 		// Re-read the file after the editor exits so body text is preserved,
@@ -299,11 +292,15 @@ func runNewMode(ctx context.Context, cmd *cobra.Command, io NewNodeAddChildIO, b
 		}
 	}
 
+	if _, err := fmt.Fprintln(cmd.OutOrStdout(), "Created "+sanitizePath(params.Target)+" in "+sanitizePath(binderPath)); err != nil {
+		return fmt.Errorf("writing output: %w", err)
+	}
+
 	return nil
 }
 
 // fileAddChildIO implements NewNodeAddChildIO using OS file I/O.
-type fileAddChildIO struct{}
+type fileAddChildIO struct{ binderLocker }
 
 func newDefaultAddChildIO() *fileAddChildIO {
 	return &fileAddChildIO{}
@@ -324,9 +321,39 @@ func (w *fileAddChildIO) WriteBinderAtomic(ctx context.Context, path string, dat
 	return w.WriteBinderAtomicImpl(ctx, path, data)
 }
 
-// writeFileAtomicImpl writes data to path atomically via a temp file and rename.
-// tmpPrefix is the leading label used for the temp file name (e.g. ".binder" or ".node").
-func writeFileAtomicImpl(path, tmpPrefix string, data []byte) error {
+// writeBinderAtomicMergeImpl acquires the per-file binder lock, reads the current
+// on-disk content, merges the incoming data (union of lines), and writes atomically.
+// This prevents lost updates when concurrent writes start from the same stale snapshot.
+func writeBinderAtomicMergeImpl(path string, data []byte) error {
+	unlock, err := globalBinderLocks.lock(context.Background(), path)
+	if err != nil {
+		return fmt.Errorf("acquiring binder lock: %w", err)
+	}
+	defer func() { _ = unlock() }()
+
+	if fi, statErr := os.Stat(path); statErr == nil {
+		if fi.Mode().Perm()&0200 == 0 {
+			return fmt.Errorf("binder file is read-only")
+		}
+	}
+
+	current, readErr := os.ReadFile(path)
+	if readErr != nil && !os.IsNotExist(readErr) {
+		return fmt.Errorf("reading current binder: %w", readErr)
+	}
+	merged := mergeBinderLines(current, data)
+	return writeFileAtomicDirectImpl(path, ".binder", merged)
+}
+
+// writeBinderDirectImpl writes binder data to path atomically without merging.
+// Commands use this to ensure the exact post-operation content is written,
+// regardless of any concurrent writes that may have occurred.
+func writeBinderDirectImpl(path string, data []byte) error {
+	return writeFileAtomicDirectImpl(path, ".binder", data)
+}
+
+// writeFileAtomicDirectImpl writes data to path atomically via a temp file and rename.
+func writeFileAtomicDirectImpl(path, tmpPrefix string, data []byte) error {
 	dir := filepath.Dir(path)
 	tmp, err := os.CreateTemp(dir, tmpPrefix+"-*.tmp")
 	if err != nil {
@@ -349,14 +376,22 @@ func writeFileAtomicImpl(path, tmpPrefix string, data []byte) error {
 	return nil
 }
 
-// WriteBinderAtomicImpl performs the atomic write via OS temp file rename.
-func (w *fileAddChildIO) WriteBinderAtomicImpl(_ context.Context, path string, data []byte) error {
+// writeBinderCheckedImpl checks that path is writable (if it exists) then
+// writes data atomically. Shared by all file-IO WriteBinderAtomicImpl methods.
+func writeBinderCheckedImpl(path string, data []byte) error {
 	if fi, statErr := os.Stat(path); statErr == nil {
 		if fi.Mode().Perm()&0200 == 0 {
 			return fmt.Errorf("binder file is read-only")
 		}
 	}
-	return writeFileAtomicImpl(path, ".binder", data)
+	return writeBinderDirectImpl(path, data)
+}
+
+// WriteBinderAtomicImpl acquires the per-file binder lock, merges incoming data
+// with current on-disk content, and writes atomically. This prevents lost updates
+// when concurrent commands start from the same stale snapshot.
+func (w *fileAddChildIO) WriteBinderAtomicImpl(ctx context.Context, path string, data []byte) error {
+	return writeBinderAtomicMergeImpl(path, data)
 }
 
 // WriteNodeFileAtomic writes content to path atomically (for --new mode).
@@ -366,7 +401,7 @@ func (w *fileAddChildIO) WriteNodeFileAtomic(path string, content []byte) error 
 
 // WriteNodeFileAtomicImpl performs the atomic write of a new node file.
 func (w *fileAddChildIO) WriteNodeFileAtomicImpl(path string, content []byte) error {
-	return writeFileAtomicImpl(path, ".node", content)
+	return writeFileAtomicDirectImpl(path, ".node", content)
 }
 
 // DeleteFile removes the file at path (used for rollback in --new mode).

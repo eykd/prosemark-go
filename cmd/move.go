@@ -60,6 +60,10 @@ func newMoveCmdWithGetCWD(io MoveIO, getwd func() (string, error)) *cobra.Comman
 				return emitOPE009AndError(cmd, jsonMode, err)
 			}
 
+			if err := checkConflictingPositionFlags(cmd, first, before, after); err != nil {
+				return err
+			}
+
 			position := "last"
 			if first {
 				position = "first"
@@ -77,7 +81,7 @@ func newMoveCmdWithGetCWD(io MoveIO, getwd func() (string, error)) *cobra.Comman
 				params.At = &at
 			}
 
-			modifiedBytes, diags, _ := ops.Move(ctx, binderBytes, proj, params)
+			modifiedBytes, diags := ops.Move(ctx, binderBytes, proj, params)
 			if diags == nil {
 				diags = []binder.Diagnostic{}
 			}
@@ -127,7 +131,7 @@ func newMoveCmdWithGetCWD(io MoveIO, getwd func() (string, error)) *cobra.Comman
 }
 
 // fileMoveIO implements MoveIO using OS file I/O.
-type fileMoveIO struct{}
+type fileMoveIO struct{ binderLocker }
 
 func newDefaultMoveIO() *fileMoveIO {
 	return &fileMoveIO{}
@@ -150,10 +154,5 @@ func (w *fileMoveIO) WriteBinderAtomic(ctx context.Context, path string, data []
 
 // WriteBinderAtomicImpl performs the atomic write via OS temp file rename.
 func (w *fileMoveIO) WriteBinderAtomicImpl(_ context.Context, path string, data []byte) error {
-	if fi, statErr := os.Stat(path); statErr == nil {
-		if fi.Mode().Perm()&0200 == 0 {
-			return fmt.Errorf("binder file is read-only")
-		}
-	}
-	return writeFileAtomicImpl(path, ".binder", data)
+	return writeBinderCheckedImpl(path, data)
 }

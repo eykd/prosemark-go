@@ -74,10 +74,11 @@ func newParseCmdWithGetCWD(reader ParseReader, getwd func() (string, error)) *co
 				return fmt.Errorf("encoding output: %w", err)
 			}
 
-			for _, d := range diags {
-				if d.Severity == "error" {
-					return fmt.Errorf("binder has parse errors")
+			if hasDiagnosticError(diags) {
+				if parseErr != nil {
+					return fmt.Errorf("binder has parse errors: %w", parseErr)
 				}
+				return fmt.Errorf("binder has parse errors")
 			}
 			return nil
 		},
