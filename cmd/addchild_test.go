@@ -651,7 +651,6 @@ func TestNewAddChildCmd_NewMode_Scenarios(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			pf := tt.projectFiles
 			if pf == nil {
@@ -893,7 +892,6 @@ func TestIsUUIDFilename_RejectsNonV7UUID(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			got := node.IsUUIDFilename(tt.input)
 			if got != tt.wantMatch {
@@ -1081,7 +1079,6 @@ func TestNewAddChildCmd_SynopsisWithoutNewReturnsError(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			mock := &mockAddChildIO{
 				binderBytes: acBinder(),
