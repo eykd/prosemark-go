@@ -46,6 +46,8 @@ const (
 	AUD006 AuditCode = "AUD006"
 	// AUD007 indicates a node file YAML frontmatter block is syntactically unparseable.
 	AUD007 AuditCode = "AUD007"
+	// AUD008 indicates the project config .prosemark.yml is missing, unreadable, or contains invalid YAML.
+	AUD008 AuditCode = "AUD008"
 	// AUDW001 is a warning indicating a non-UUID filename linked in binder (backward-compatibility warning for Feature 001 projects).
 	AUDW001 AuditCode = "AUDW001"
 	// BNDW001 is a warning propagated from the binder parser indicating the binder file is missing its pragma comment.

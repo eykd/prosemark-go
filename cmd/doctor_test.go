@@ -183,6 +183,7 @@ func TestNewDoctorCmd_Scenarios(t *testing.T) {
 			binderBytes: doctorBinderWithNode(doctorTestNodeUUID),
 			nodeFiles: map[string]nodeFileEntry{
 				doctorTestNodeUUID + ".md": {content: validDoctorNodeContent(doctorTestNodeUUID), exists: true},
+				".prosemark.yml":           {content: []byte("version: \"1\"\n"), exists: true},
 			},
 			wantErr: false,
 		},
@@ -204,9 +205,11 @@ func TestNewDoctorCmd_Scenarios(t *testing.T) {
 			args:        []string{"--project", "."},
 			binderBytes: doctorBinderEmpty(),
 			uuidFiles:   []string{doctorTestNodeUUID + ".md"},
-			nodeFiles:   map[string]nodeFileEntry{},
-			wantErr:     false,
-			wantInOut:   "AUD002",
+			nodeFiles: map[string]nodeFileEntry{
+				".prosemark.yml": {content: []byte("version: \"1\"\n"), exists: true},
+			},
+			wantErr:   false,
+			wantInOut: "AUD002",
 		},
 		{
 			// US4/4: AUD003 duplicate binder reference → exit 1.
@@ -252,6 +255,7 @@ func TestNewDoctorCmd_Scenarios(t *testing.T) {
 			binderBytes: doctorBinderWithNode(doctorTestNodeUUID),
 			nodeFiles: map[string]nodeFileEntry{
 				doctorTestNodeUUID + ".md": {content: emptyBodyDoctorNodeContent(doctorTestNodeUUID), exists: true},
+				".prosemark.yml":           {content: []byte("version: \"1\"\n"), exists: true},
 			},
 			wantErr:   false,
 			wantInOut: "AUD006",
@@ -279,6 +283,7 @@ func TestNewDoctorCmd_Scenarios(t *testing.T) {
 			nodeFiles: map[string]nodeFileEntry{
 				doctorTestNodeUUID + ".md":  {content: emptyBodyDoctorNodeContent(doctorTestNodeUUID), exists: true},
 				doctorTestNodeUUID2 + ".md": {content: emptyBodyDoctorNodeContent(doctorTestNodeUUID2), exists: true},
+				".prosemark.yml":            {content: []byte("version: \"1\"\n"), exists: true},
 			},
 			wantErr:   false,
 			wantInOut: "AUD006",
@@ -289,9 +294,11 @@ func TestNewDoctorCmd_Scenarios(t *testing.T) {
 			args:        []string{"--project", "."},
 			binderBytes: doctorBinderEmpty(),
 			uuidFiles:   []string{doctorTestNodeUUID + ".md", doctorTestNodeUUID2 + ".md"},
-			nodeFiles:   map[string]nodeFileEntry{},
-			wantErr:     false,
-			wantInOut:   "AUD002",
+			nodeFiles: map[string]nodeFileEntry{
+				".prosemark.yml": {content: []byte("version: \"1\"\n"), exists: true},
+			},
+			wantErr:   false,
+			wantInOut: "AUD002",
 		},
 		{
 			// US4/11: AUDW001 non-UUID filename in binder (warning) → exit 0.
@@ -303,6 +310,7 @@ func TestNewDoctorCmd_Scenarios(t *testing.T) {
 			),
 			nodeFiles: map[string]nodeFileEntry{
 				"chapter-one.md": {content: []byte("Content here."), exists: true},
+				".prosemark.yml": {content: []byte("version: \"1\"\n"), exists: true},
 			},
 			wantErr:   false,
 			wantInOut: "AUDW001",
@@ -433,6 +441,7 @@ func TestNewDoctorCmd_JSONOutput_CleanProject(t *testing.T) {
 		binderBytes: doctorBinderWithNode(doctorTestNodeUUID),
 		nodeFiles: map[string]nodeFileEntry{
 			doctorTestNodeUUID + ".md": {content: validDoctorNodeContent(doctorTestNodeUUID), exists: true},
+			".prosemark.yml":           {content: []byte("version: \"1\"\n"), exists: true},
 		},
 	}
 	c := NewDoctorCmd(mock)
@@ -592,7 +601,9 @@ func TestNewDoctorCmd_WarningsOnlyExitsZero(t *testing.T) {
 	mock := &mockDoctorIO{
 		binderBytes: doctorBinderEmpty(),
 		uuidFiles:   []string{doctorTestNodeUUID + ".md"},
-		nodeFiles:   map[string]nodeFileEntry{},
+		nodeFiles: map[string]nodeFileEntry{
+			".prosemark.yml": {content: []byte("version: \"1\"\n"), exists: true},
+		},
 	}
 	c := NewDoctorCmd(mock)
 	c.SetOut(new(bytes.Buffer))
@@ -681,6 +692,7 @@ func TestNewDoctorCmd_BinderParseWarnings(t *testing.T) {
 			binderBytes: []byte("- [Node](" + doctorTestNodeUUID + ".md)\n"), // no pragma
 			nodeFiles: map[string]nodeFileEntry{
 				doctorTestNodeUUID + ".md": {content: validDoctorNodeContent(doctorTestNodeUUID), exists: true},
+				".prosemark.yml":           {content: []byte("version: \"1\"\n"), exists: true},
 			},
 			wantErr:   false, // BNDW001 is warning severity → exit 0
 			wantInOut: "BNDW001",
@@ -692,6 +704,7 @@ func TestNewDoctorCmd_BinderParseWarnings(t *testing.T) {
 			binderBytes: doctorBinderWithNode(doctorTestNodeUUID), // has pragma
 			nodeFiles: map[string]nodeFileEntry{
 				doctorTestNodeUUID + ".md": {content: validDoctorNodeContent(doctorTestNodeUUID), exists: true},
+				".prosemark.yml":           {content: []byte("version: \"1\"\n"), exists: true},
 			},
 			wantErr:     false,
 			wantNoneOut: "BNDW001",

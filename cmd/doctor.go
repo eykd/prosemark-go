@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 
 	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v3"
 
 	"github.com/eykd/prosemark-go/internal/node"
 )
@@ -86,7 +87,9 @@ func newDoctorCmdWithGetCWD(io DoctorIO, getwd func() (string, error)) *cobra.Co
 				BinderRefDiags: refDiags,
 			}
 
+			configDiags := checkProjectConfig(io, projectDir)
 			diags := node.RunDoctor(cmd.Context(), data)
+			diags = append(diags, configDiags...)
 
 			// Emit diagnostics.
 			if jsonMode {
@@ -123,6 +126,31 @@ func newDoctorCmdWithGetCWD(io DoctorIO, getwd func() (string, error)) *cobra.Co
 	cmd.Flags().Bool("json", false, "output diagnostics as JSON array")
 
 	return cmd
+}
+
+// checkProjectConfig validates .prosemark.yml existence and YAML integrity.
+// Returns an AUD008 error diagnostic if the file is missing, unreadable, or contains invalid YAML.
+func checkProjectConfig(io DoctorIO, projectDir string) []node.AuditDiagnostic {
+	configPath := filepath.Join(projectDir, ".prosemark.yml")
+	content, exists, err := io.ReadNodeFile(configPath)
+	if err != nil || !exists {
+		return []node.AuditDiagnostic{{
+			Code:     node.AUD008,
+			Severity: node.SeverityError,
+			Message:  ".prosemark.yml is missing or unreadable",
+			Path:     ".prosemark.yml",
+		}}
+	}
+	var cfg interface{}
+	if err := yaml.Unmarshal(content, &cfg); err != nil {
+		return []node.AuditDiagnostic{{
+			Code:     node.AUD008,
+			Severity: node.SeverityError,
+			Message:  ".prosemark.yml contains invalid YAML",
+			Path:     ".prosemark.yml",
+		}}
+	}
+	return nil
 }
 
 // doctorReadFile reads a binder-referenced file for doctor analysis.
