@@ -2,12 +2,9 @@ package cmd
 
 // Tests for consistent JSON diagnostic schema across all pmk commands.
 //
-// Issue: doctor --json emits a bare array with {code, message, path} items,
-// while parse/add-child/delete/move --json emit a wrapped object with
-// diagnostics using {severity, code, message, location}. All commands should
-// use a consistent diagnostic schema.
-//
-// These tests document the DESIRED behavior and currently FAIL.
+// Verifies that doctor --json emits a wrapped object with {version, diagnostics}
+// and that each diagnostic has {severity, code, message, path}, consistent with
+// the schema used by parse/add-child/delete/move --json output.
 
 import (
 	"bytes"
@@ -20,9 +17,6 @@ import (
 // TestNewDoctorCmd_JSON_IsWrappedObject verifies that --json outputs a wrapped
 // object with "version" and "diagnostics" keys (not a bare array), consistent
 // with parse/add-child/delete/move JSON output.
-//
-// Current behavior: bare JSON array → test FAILS.
-// Expected behavior: {"version":"1","diagnostics":[...]}
 func TestNewDoctorCmd_JSON_IsWrappedObject(t *testing.T) {
 	mock := &mockDoctorIO{
 		binderBytes: doctorBinderWithNode(doctorTestNodeUUID),
@@ -65,9 +59,6 @@ func TestNewDoctorCmd_JSON_IsWrappedObject(t *testing.T) {
 
 // TestNewDoctorCmd_JSON_CleanProject_IsWrappedObject verifies that a clean project
 // also emits a wrapped object with an empty diagnostics array.
-//
-// Current behavior: "[]" (bare empty array) → test FAILS.
-// Expected behavior: {"version":"1","diagnostics":[]}
 func TestNewDoctorCmd_JSON_CleanProject_IsWrappedObject(t *testing.T) {
 	mock := &mockDoctorIO{
 		binderBytes: doctorBinderWithNode(doctorTestNodeUUID),
@@ -106,10 +97,8 @@ func TestNewDoctorCmd_JSON_CleanProject_IsWrappedObject(t *testing.T) {
 }
 
 // TestNewDoctorCmd_JSON_DiagnosticsHaveSeverity verifies that each diagnostic in
-// --json output includes a "severity" field (consistent with binder diagnostic schema).
-//
-// Current behavior: severity is excluded → test FAILS.
-// Expected behavior: each diagnostic has "severity": "error"|"warning"
+// --json output includes a "severity" field with value "error" or "warning",
+// consistent with the binder diagnostic schema.
 func TestNewDoctorCmd_JSON_DiagnosticsHaveSeverity(t *testing.T) {
 	mock := &mockDoctorIO{
 		binderBytes: doctorBinderWithNode(doctorTestNodeUUID),
@@ -163,8 +152,6 @@ func TestNewDoctorCmd_JSON_DiagnosticsHaveSeverity(t *testing.T) {
 
 // TestNewDoctorCmd_JSON_DiagnosticsHaveRequiredFields verifies that each diagnostic
 // in --json output has the unified schema fields: severity, code, message, and path.
-//
-// Currently fails because (a) output is a bare array and (b) severity is absent.
 func TestNewDoctorCmd_JSON_DiagnosticsHaveRequiredFields(t *testing.T) {
 	tests := []struct {
 		name         string

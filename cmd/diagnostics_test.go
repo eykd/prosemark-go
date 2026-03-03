@@ -8,7 +8,7 @@ import (
 )
 
 // TestHasSeverityError verifies the single canonical severity predicate that
-// both hasDiagnosticError and hasErrorDiagnostic should delegate to.
+// both hasDiagnosticError and hasAuditDiagnosticError should delegate to.
 func TestHasSeverityError(t *testing.T) {
 	tests := []struct {
 		name string
@@ -56,10 +56,10 @@ func TestHasDiagnosticError_DelegatesViaPrimitive(t *testing.T) {
 	}
 }
 
-// TestHasErrorDiagnostic_DelegatesViaPrimitive verifies that hasErrorDiagnostic
+// TestHasAuditDiagnosticError_DelegatesViaPrimitive verifies that hasAuditDiagnosticError
 // (the node.AuditDiagnostic predicate used in doctor.go) produces results consistent
 // with the canonical hasSeverityError primitive.
-func TestHasErrorDiagnostic_DelegatesViaPrimitive(t *testing.T) {
+func TestHasAuditDiagnosticError_DelegatesViaPrimitive(t *testing.T) {
 	tests := []struct {
 		name  string
 		diags []node.AuditDiagnostic
@@ -76,8 +76,8 @@ func TestHasErrorDiagnostic_DelegatesViaPrimitive(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := hasErrorDiagnostic(tt.diags); got != tt.want {
-				t.Errorf("hasErrorDiagnostic() = %v, want %v", got, tt.want)
+			if got := hasAuditDiagnosticError(tt.diags); got != tt.want {
+				t.Errorf("hasAuditDiagnosticError() = %v, want %v", got, tt.want)
 			}
 		})
 	}

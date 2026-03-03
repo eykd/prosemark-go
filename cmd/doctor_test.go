@@ -640,7 +640,7 @@ var _ DoctorIO = (*fileDoctorIO)(nil)
 // output is NOT silently discarded. The command must return an error when
 // json.Encode fails (e.g., stdout is closed or a pipe breaks).
 func TestNewDoctorCmd_JSONEncodeError(t *testing.T) {
-	// Clean project so hasErrorDiagnostic is false — the only error path is
+	// Clean project so hasAuditDiagnosticError is false — the only error path is
 	// the encode failure itself.
 	mock := &mockDoctorIO{
 		binderBytes: doctorBinderWithNode(doctorTestNodeUUID),
