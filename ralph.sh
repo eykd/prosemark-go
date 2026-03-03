@@ -21,6 +21,7 @@ readonly MAX_RETRY_DELAY=300  # 5 minutes cap
 
 # Claude CLI timeout
 readonly CLAUDE_TIMEOUT=3600  # 60 minutes max per invocation
+readonly HEARTBEAT_INTERVAL=30  # seconds between progress heartbeats
 
 # TDD cycle configuration
 readonly TDD_STEP_RETRIES=3        # retries per step (semantic failures)
@@ -52,6 +53,7 @@ EXPLICIT_EPIC_ID=""  # Epic ID provided via --epic argument
 CURRENT_ITERATION=0
 START_TIME=0
 CLAUDE_PID=""
+HEARTBEAT_PID=""
 
 ##############################################################################
 # Logging infrastructure
@@ -88,8 +90,9 @@ log() {
     local level="$1"
     shift
     local message="$*"
-    local timestamp
+    local timestamp short_ts
     timestamp=$(date -Iseconds)
+    short_ts=$(date +%T)
 
     # Write to log file
     echo "[$timestamp] [$level] $message" >> "$LOG_FILE"
@@ -97,13 +100,13 @@ log() {
     # Also write to console for INFO/WARN/ERROR (always to stderr to avoid capture in command substitution)
     case "$level" in
         INFO)
-            echo "[ralph] $message" >&2
+            echo "[ralph] $short_ts $message" >&2
             ;;
         WARN)
-            echo "[ralph] WARNING: $message" >&2
+            echo "[ralph] $short_ts WARNING: $message" >&2
             ;;
         ERROR)
-            echo "[ralph] ERROR: $message" >&2
+            echo "[ralph] $short_ts ERROR: $message" >&2
             ;;
     esac
 }
@@ -666,6 +669,17 @@ task_has_children() {
     [[ "$child_count" -gt 0 ]]
 }
 
+# Check if a task has any active (open or in-progress) children, excluding events
+task_has_active_children() {
+    local task_id="$1"
+    local open_count inprogress_count
+    open_count=$(./bin/bd list --parent "$task_id" --status open --json 2>/dev/null | \
+        jq '[.[] | select(.issue_type != "event")] | length' 2>/dev/null) || return 1
+    inprogress_count=$(./bin/bd list --parent "$task_id" --status in-progress --json 2>/dev/null | \
+        jq '[.[] | select(.issue_type != "event")] | length' 2>/dev/null) || return 1
+    [[ $(( open_count + inprogress_count )) -gt 0 ]]
+}
+
 # Check if all direct children of a task are closed
 all_children_closed() {
     local task_id="$1"
@@ -704,6 +718,63 @@ auto_close_completed_parents() {
     done
 }
 
+# Recursively find the deepest active leaf task under a parent.
+# Prefers in-progress children (resume); falls back to first ready child.
+# At epic root ($EPIC_ID), also checks for globally-ready orphan tasks as a safety net.
+# Outputs the full task JSON object to stdout, or empty string if none found.
+find_leaf_task() {
+    local parent_id="$1"
+    local inprogress_children inprogress_task inprogress_child
+    local ready_children ready_task ready_child
+
+    # 1. Prefer any in-progress child (resume interrupted work)
+    inprogress_children=$(./bin/bd list --parent "$parent_id" --status in-progress --json 2>/dev/null | \
+        jq '[.[] | select(.issue_type != "event")]' 2>/dev/null) || inprogress_children="[]"
+    inprogress_task=$(echo "$inprogress_children" | jq -c 'first(.[])' 2>/dev/null) || inprogress_task=""
+    inprogress_child=$(echo "$inprogress_task" | jq -r '.id // empty' 2>/dev/null) || inprogress_child=""
+
+    if [[ -n "$inprogress_child" ]]; then
+        if task_has_active_children "$inprogress_child"; then
+            find_leaf_task "$inprogress_child"
+        else
+            echo "$inprogress_task"
+        fi
+        return 0
+    fi
+
+    # 2. Fall back to first ready child
+    ready_children=$(./bin/bd ready --parent "$parent_id" --limit 100 --json 2>/dev/null | \
+        jq '[.[] | select(.issue_type != "event" and .issue_type != "epic")]' 2>/dev/null) || ready_children="[]"
+    ready_task=$(echo "$ready_children" | jq -c 'first(.[])' 2>/dev/null) || ready_task=""
+    ready_child=$(echo "$ready_task" | jq -r '.id // empty' 2>/dev/null) || ready_child=""
+
+    if [[ -n "$ready_child" ]]; then
+        if task_has_active_children "$ready_child"; then
+            find_leaf_task "$ready_child"
+        else
+            echo "$ready_task"
+        fi
+        return 0
+    fi
+
+    # 3. At epic root level: scan for globally-ready orphan tasks (safety net)
+    if [[ "$parent_id" == "$EPIC_ID" ]]; then
+        local orphan_task orphan_id
+        orphan_task=$(./bin/bd ready --parent "$EPIC_ID" --limit 1 --json 2>/dev/null | \
+            jq -c 'first(.[] | select(.issue_type != "event" and .issue_type != "epic"))' 2>/dev/null) || orphan_task=""
+        orphan_id=$(echo "$orphan_task" | jq -r '.id // empty' 2>/dev/null) || orphan_id=""
+        if [[ -n "$orphan_id" ]]; then
+            log WARN "Using orphan ready task as fallback: $orphan_id"
+            echo "$orphan_task"
+            return 0
+        fi
+    fi
+
+    # No leaf found
+    echo ""
+    return 0
+}
+
 # Get ready tasks for the epic (returns JSON array)
 get_ready_tasks() {
     local epic_id="$1"
@@ -715,41 +786,8 @@ get_ready_tasks() {
     }
 
     # Filter out the epic itself and event tasks
-    local filtered
-    filtered=$(echo "$ready_json" | jq --arg epic "$epic_id" \
-        '[.[] | select(.id != $epic and .issue_type != "event")]')
-
-    # Filter out parent container tasks (tasks that have children).
-    # Parent tasks are not work items; ralph processes their children individually.
-    # Exception: sp:* phase tasks are container tasks by design — they are returned
-    # as-is so execute_spec_kit_phase_task can handle them.
-    local leaf_ids=()
-    local task_id task_title
-    while IFS= read -r task_id; do
-        [[ -z "$task_id" ]] && continue
-        task_title=$(echo "$filtered" | jq -r --arg id "$task_id" '.[] | select(.id == $id) | .title // ""')
-        if echo "$task_title" | grep -qP '\[sp:[0-9]{2}-'; then
-            log DEBUG "Keeping sp:* phase task as-is: $task_id"
-            leaf_ids+=("$task_id")
-        elif task_has_children "$task_id"; then
-            log DEBUG "Skipping parent container task: $task_id"
-        else
-            leaf_ids+=("$task_id")
-        fi
-    done < <(echo "$filtered" | jq -r '.[].id')
-
-    if [[ ${#leaf_ids[@]} -eq 0 ]]; then
-        echo "[]"
-        return 0
-    fi
-
-    # Rebuild JSON array with only leaf tasks
-    local id_array
-    id_array=$(printf '"%s",' "${leaf_ids[@]}")
-    id_array="[${id_array%,}]"
-
-    echo "$filtered" | jq --argjson ids "$id_array" \
-        '[.[] | select(.id | IN($ids[]))]'
+    echo "$ready_json" | jq --arg epic "$epic_id" \
+        '[.[] | select(.id != $epic and .issue_type != "event")]'
 }
 
 # Check if there are ready tasks remaining
@@ -2208,6 +2246,14 @@ Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>" 2>/dev/null || true
 # Claude CLI invocation
 ##############################################################################
 
+# Kill the background heartbeat process if running
+stop_heartbeat() {
+    if [[ -n "$HEARTBEAT_PID" ]] && kill -0 "$HEARTBEAT_PID" 2>/dev/null; then
+        kill "$HEARTBEAT_PID" 2>/dev/null || true
+        HEARTBEAT_PID=""
+    fi
+}
+
 # Invoke Claude CLI with focused prompt
 # Returns the exit code from Claude
 invoke_claude() {
@@ -2238,15 +2284,30 @@ invoke_claude() {
         script -qc "claude -p \"\$(cat '$prompt_file')\" --output-format text" "$temp_output" &
     CLAUDE_PID=$!
 
+    # Start heartbeat: print elapsed time every HEARTBEAT_INTERVAL seconds
+    local invoke_start
+    invoke_start=$(date +%s)
+    (
+        while true; do
+            sleep "$HEARTBEAT_INTERVAL"
+            local elapsed=$(( $(date +%s) - invoke_start ))
+            log INFO "Claude running... ($(format_duration "$elapsed") elapsed)"
+        done
+    ) &
+    HEARTBEAT_PID=$!
+
     # Clean up prompt file when no longer needed (after claude reads it)
     ( sleep 5; rm -f "$prompt_file" ) &
 
     # Wait for the background process to complete
     if wait "$CLAUDE_PID"; then
         exit_code=0
-        log INFO "Claude completed successfully"
+        stop_heartbeat
+        local elapsed=$(( $(date +%s) - invoke_start ))
+        log INFO "Claude completed successfully in $(format_duration "$elapsed")"
     else
         exit_code=$?
+        stop_heartbeat
         if [[ "$exit_code" -eq 124 ]]; then
             log ERROR "Claude timed out after ${CLAUDE_TIMEOUT}s"
         elif [[ "$exit_code" -eq 130 ]]; then
@@ -2344,6 +2405,9 @@ run_loop() {
     log INFO "Starting automation loop (max $MAX_ITERATIONS iterations)"
     log_section "AUTOMATION LOOP START"
 
+    # Set global epic ID for find_leaf_task orphan detection
+    EPIC_ID="$epic_id"
+
     # Detect and log operational mode
     task_source=$(detect_task_source "$epic_id")
     if [[ "$task_source" == "spec-kit" ]]; then
@@ -2360,45 +2424,47 @@ run_loop() {
 
         log_section "ITERATION $iteration/$MAX_ITERATIONS"
 
-        # Check for in-progress tasks first (resume interrupted work)
-        log DEBUG "Checking for in-progress tasks..."
-        if has_in_progress_tasks "$epic_id"; then
+        # Find the deepest active leaf task (prefers in-progress; falls back to ready)
+        log DEBUG "Finding next leaf task..."
+        next_task=$(find_leaf_task "$epic_id")
+
+        if [[ -z "$next_task" ]]; then
+            # No task found - check for stuck open tasks
+            log DEBUG "No leaf task found. Checking for remaining open tasks..."
+            if has_open_tasks "$epic_id"; then
+                local open_tasks open_count
+                open_tasks=$(get_open_tasks "$epic_id")
+                open_count=$(echo "$open_tasks" | jq 'length')
+                log WARN "No ready tasks, but $open_count open task(s) remain (possibly P3 or blocked tasks)"
+                log_block "Remaining Open Tasks" "$(echo "$open_tasks" | jq -r '.[] | "\(.id): \(.title) [priority: \(.priority // "none")]"')"
+                log ERROR "Cannot complete epic with open tasks remaining"
+                echo "" >&2
+                echo "[ralph] ERROR: Epic has $open_count open task(s) that are not ready:" >&2
+                echo "$open_tasks" | jq -r '.[] | "  - \(.id): \(.title) [priority: \(.priority // "none"), status: \(.status)]"' >&2
+                echo "" >&2
+                echo "These tasks may be:" >&2
+                echo "  - Low priority (P3) tasks waiting to be started" >&2
+                echo "  - Tasks blocked by dependencies" >&2
+                echo "  - Tasks that need manual intervention" >&2
+                echo "" >&2
+                echo "Please review these tasks and either:" >&2
+                echo "  - Close them if they're no longer needed" >&2
+                echo "  - Unblock them and let ralph continue" >&2
+                echo "  - Complete them manually" >&2
+                return "$EXIT_FAILURE"
+            fi
+            log INFO "No more ready tasks and no open tasks. Feature complete!"
+            return "$EXIT_SUCCESS"
+        fi
+
+        # Derive is_resuming from leaf task status
+        local leaf_status
+        leaf_status=$(echo "$next_task" | jq -r '.status // "open"')
+        if [[ "$leaf_status" == "in-progress" ]]; then
             is_resuming=true
-            next_task=$(get_in_progress_task "$epic_id")
             log INFO "Resuming interrupted task"
         else
-            # No in-progress tasks, check for ready tasks
             is_resuming=false
-            log DEBUG "Checking for ready tasks..."
-            if ! has_ready_tasks "$epic_id"; then
-                # No ready tasks, but check if there are still open tasks (e.g., P3 tasks)
-                log DEBUG "No ready tasks found. Checking for remaining open tasks..."
-                if has_open_tasks "$epic_id"; then
-                    local open_tasks open_count
-                    open_tasks=$(get_open_tasks "$epic_id")
-                    open_count=$(echo "$open_tasks" | jq 'length')
-                    log WARN "No ready tasks, but $open_count open task(s) remain (possibly P3 or blocked tasks)"
-                    log_block "Remaining Open Tasks" "$(echo "$open_tasks" | jq -r '.[] | "\(.id): \(.title) [priority: \(.priority // "none")]"')"
-                    log ERROR "Cannot complete epic with open tasks remaining"
-                    echo "" >&2
-                    echo "[ralph] ERROR: Epic has $open_count open task(s) that are not ready:" >&2
-                    echo "$open_tasks" | jq -r '.[] | "  - \(.id): \(.title) [priority: \(.priority // "none"), status: \(.status)]"' >&2
-                    echo "" >&2
-                    echo "These tasks may be:" >&2
-                    echo "  - Low priority (P3) tasks waiting to be started" >&2
-                    echo "  - Tasks blocked by dependencies" >&2
-                    echo "  - Tasks that need manual intervention" >&2
-                    echo "" >&2
-                    echo "Please review these tasks and either:" >&2
-                    echo "  - Close them if they're no longer needed" >&2
-                    echo "  - Unblock them and let ralph continue" >&2
-                    echo "  - Complete them manually" >&2
-                    return "$EXIT_FAILURE"
-                fi
-                log INFO "No more ready tasks and no open tasks. Feature complete!"
-                return "$EXIT_SUCCESS"
-            fi
-            next_task=$(get_next_task "$epic_id")
         fi
 
         # Extract task info for logging
@@ -2415,6 +2481,15 @@ run_loop() {
         else
             log INFO "Iteration $iteration/$MAX_ITERATIONS"
             log INFO "Epic: $epic_id | Task: $task_id | $task_title"
+        fi
+
+        # Show first line of description as context hint
+        local desc_preview
+        desc_preview=$(echo "$task_description" | head -1 | \
+            sed -e 's/\x1b\[[0-9;]*[mGKH]//g' -e 's/\x1b\][^\x07]*\x07//g' -e 's/\x1b[^[]//' | \
+            cut -c1-120)
+        if [[ -n "$desc_preview" ]]; then
+            log INFO "  > $desc_preview"
         fi
 
         log_block "Task Details" "ID: $task_id
@@ -2525,6 +2600,7 @@ handle_sigint() {
         fi
     fi
 
+    stop_heartbeat
     show_summary "Interrupted by user"
     # EXIT trap will handle lock release
     exit "$EXIT_SIGINT"
@@ -2532,6 +2608,7 @@ handle_sigint() {
 
 # Cleanup handler (runs on EXIT)
 cleanup() {
+    stop_heartbeat
     release_lock
 }
 
