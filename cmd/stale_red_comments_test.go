@@ -31,6 +31,16 @@ func TestNoStaleREDComments(t *testing.T) {
 			lineNum: 107,
 			context: "TestNewAddChildCmd_NewMode_RefreshPreservesEditorBodyContent",
 		},
+		{
+			file:    "opresult_schema_test.go",
+			lineNum: 16,
+			context: "TestNewAddChildCmd_JSONOutput_UsesExactOpResultSchema",
+		},
+		{
+			file:    "opresult_schema_test.go",
+			lineNum: 43,
+			context: "TestNewDeleteCmd_JSONOutput_UsesExactOpResultSchema",
+		},
 	}
 
 	for _, tc := range checks {
