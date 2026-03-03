@@ -133,24 +133,26 @@ func newDoctorCmdWithGetCWD(io DoctorIO, getwd func() (string, error)) *cobra.Co
 func checkProjectConfig(io DoctorIO, projectDir string) []node.AuditDiagnostic {
 	configPath := filepath.Join(projectDir, ".prosemark.yml")
 	content, exists, err := io.ReadNodeFile(configPath)
+
+	var msg string
 	if err != nil || !exists {
-		return []node.AuditDiagnostic{{
-			Code:     node.AUD008,
-			Severity: node.SeverityError,
-			Message:  ".prosemark.yml is missing or unreadable",
-			Path:     ".prosemark.yml",
-		}}
+		msg = ".prosemark.yml is missing or unreadable"
+	} else {
+		var cfg interface{}
+		if err := yaml.Unmarshal(content, &cfg); err != nil {
+			msg = ".prosemark.yml contains invalid YAML"
+		}
 	}
-	var cfg interface{}
-	if err := yaml.Unmarshal(content, &cfg); err != nil {
-		return []node.AuditDiagnostic{{
-			Code:     node.AUD008,
-			Severity: node.SeverityError,
-			Message:  ".prosemark.yml contains invalid YAML",
-			Path:     ".prosemark.yml",
-		}}
+
+	if msg == "" {
+		return nil
 	}
-	return nil
+	return []node.AuditDiagnostic{{
+		Code:     node.AUD008,
+		Severity: node.SeverityError,
+		Message:  msg,
+		Path:     ".prosemark.yml",
+	}}
 }
 
 // doctorReadFile reads a binder-referenced file for doctor analysis.
