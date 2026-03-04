@@ -1,0 +1,31 @@
+;===============================================================
+; A placeholder item [Chapter 3]() becomes a node in the outline tree.
+;===============================================================
+GIVEN a binder file with a single placeholder list item.
+
+WHEN the binder is parsed.
+
+THEN the parse result contains a node with the placeholder title.
+THEN the node has no associated file path.
+THEN no diagnostic is emitted.
+
+;===============================================================
+; A bare placeholder []() with no title parses without error.
+;===============================================================
+GIVEN a binder file with a placeholder item that has no title text.
+
+WHEN the binder is parsed.
+
+THEN the parse result contains a node with an empty title.
+THEN the node has no associated file path.
+THEN no diagnostic is emitted.
+
+;===============================================================
+; Multiple identical placeholder items each appear as a distinct node.
+;===============================================================
+GIVEN a binder file with two placeholder items sharing the same title.
+
+WHEN the binder is parsed.
+
+THEN the parse result contains two distinct nodes.
+THEN no duplicate-reference diagnostic is emitted.

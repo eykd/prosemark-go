@@ -1,0 +1,17 @@
+;===============================================================
+; A placeholder node does not trigger a missing-file diagnostic.
+;===============================================================
+GIVEN a binder file with a placeholder item in a project with known files.
+
+WHEN the binder is parsed.
+
+THEN no missing-file diagnostic is emitted for the placeholder node.
+
+;===============================================================
+; Two identical placeholder items do not trigger a duplicate diagnostic.
+;===============================================================
+GIVEN a binder file with two placeholder items that share the same title.
+
+WHEN the binder is parsed.
+
+THEN no duplicate-reference diagnostic is emitted.

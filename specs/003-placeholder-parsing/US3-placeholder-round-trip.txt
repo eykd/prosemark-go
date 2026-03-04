@@ -1,0 +1,8 @@
+;===============================================================
+; A binder with placeholder items serializes identically to its input.
+;===============================================================
+GIVEN a binder file containing placeholder items at various nesting levels.
+
+WHEN the file is parsed and then written back to text.
+
+THEN the output is byte-for-byte identical to the original input.
