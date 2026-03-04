@@ -486,13 +486,76 @@ Also include `real.md` (empty).
 
 ## Phase 3: Unit Tests
 
-**File**: `internal/binder/parser_test.go`
+**Files**:
+- `internal/binder/parselink_test.go` — new file, `package binder` (internal, for `TestParseLink`)
+- `internal/binder/parser_test.go` — existing file, `package binder_test` (for all other new tests)
 
-Add table-driven test cases for:
+### Why two files?
+
+`parseLink` is unexported. All existing test files use `package binder_test` and cannot access unexported symbols. `TestParseLink` must directly assert on `found bool` (the new third return value). Creating `parselink_test.go` with `package binder` grants access to the unexported function. Go allows `package binder` and `package binder_test` files to coexist in the same directory.
+
+The other three test functions (`TestParse_PlaceholderNodes`, `TestParse_NoDiagnosticsForPlaceholder`, `TestParse_PlaceholderContinuationLine`) test observable behavior through the exported `binder.Parse()` API and belong in `parser_test.go`.
+
+---
+
+### `TestParseLink` — in `internal/binder/parselink_test.go`
+
+```go
+package binder
+
+import "testing"
+
+func TestParseLink(t *testing.T) {
+    tests := []struct {
+        name       string
+        content    string
+        wantTarget string
+        wantTitle  string
+        wantFound  bool
+        wantDiags  int
+    }{
+        {"placeholder with title", "[Title]()", "", "Title", true, 0},
+        {"placeholder empty title", "[]()", "", "", true, 0},
+        {"placeholder whitespace title", "[ ]()", "", "", true, 0},
+        {"placeholder whitespace target", "[Title]( )", "", "Title", true, 0},
+        {"regular inline link", "[T](x.md)", "x.md", "T", true, 0},
+        {"regular inline link with tooltip", `[T](x.md "Tip")`, "x.md", "T", true, 0},
+        {"unrecognised text", "just text", "", "", false, 0},
+        // Ref-link with no matching def — unresolvable, stays skipped.
+        {"ref link absent", "[Title][nonexistent-ref]", "", "", false, 0},
+        // Known limitation: nested unescaped brackets — emptyTargetLinkRE captures partial
+        // title "[Chapter [3" and leaves trailing "]()". Neither regex matches fully.
+        // Authors must use escaped form [Chapter \[3\]]().
+        // {"nested brackets", "[Chapter [3]]()", ...}, // skipped; known limitation
+    }
+    for _, tt := range tests {
+        t.Run(tt.name, func(t *testing.T) {
+            // nil maps are safe: wikilink/ref branches only look up maps when the
+            // regex matches, and none of the test inputs use wikilink/ref syntax.
+            target, title, found, diags := parseLink(tt.content, nil, nil, "", 1, 0)
+            if target != tt.wantTarget {
+                t.Errorf("target = %q, want %q", target, tt.wantTarget)
+            }
+            if title != tt.wantTitle {
+                t.Errorf("title = %q, want %q", title, tt.wantTitle)
+            }
+            if found != tt.wantFound {
+                t.Errorf("found = %v, want %v", found, tt.wantFound)
+            }
+            if len(diags) != tt.wantDiags {
+                t.Errorf("len(diags) = %d, want %d: %v", len(diags), tt.wantDiags, diags)
+            }
+        })
+    }
+}
+```
+
+---
+
+### Other unit test cases — added to `internal/binder/parser_test.go`
 
 | Test function | Cases to add |
 |--------------|-------------|
-| `TestParseLink` (new function — no existing dedicated test) | `[Title]()` → title="Title", target="", found=true, diags=[]; `[]()` → title="", target="", found=true, diags=[]; `[ ]()` (whitespace-only title) → title="", found=true (TrimSpace applied); `[Title]( )` (whitespace-only target) → title="Title", target="", found=true (treated as placeholder); `[T](x.md "Tooltip")` still returns found=true (regression); unrecognised text → found=false; `[Title][nonexistent-ref]` (ref def absent) → found=false, target="" (unresolvable ref-link stays skipped) |
 | `TestParse_PlaceholderNodes` | Single placeholder; empty-title placeholder; placeholder as parent; duplicate identical titles produce 2 nodes; all 4 list marker types |
 | `TestParse_NoDiagnosticsForPlaceholder` | Placeholder + project context → no BNDW004; two identical placeholder titles → no BNDW003; real duplicate target still emits BNDW003; placeholder → no BNDW007 |
 | `TestParse_PlaceholderContinuationLine` | `[Title]()` on a primary list item line → placeholder node produced; real link on continuation line → node produced with correct target; `[Title]()` on continuation line (primary line has non-link text, e.g. `- placeholder\n  [Chapter 3]()`) → placeholder node produced (spec edge case: "Placeholder link appearing on a continuation line — recognized correctly") |
@@ -503,12 +566,192 @@ All new test cases must be written TDD-style (Red → Green → Refactor).
 
 ## Phase 4: Acceptance Test Binding
 
-After the conformance fixtures and unit tests pass, bind the generated acceptance test stubs:
+After the conformance fixtures and unit tests pass, bind the generated acceptance test stubs.
+
+### Infrastructure
+
+- **Generated file location**: `generated-acceptance-tests/003-placeholder-parsing-US<N>-<slug>_test.go`
+- **Package**: `package acceptance_test`
+- **Available helpers** (from `generated-acceptance-tests/helpers_test.go`):
+  - `writeFile(t, dir, name, content) string` — creates a file in a temp dir
+  - `runParse(t, binderPath) runResult` — runs `pmk parse --project <dir>`
+  - `runConformance(t, filter) runResult` — runs `go test ./conformance/... -run <filter>`
+  - `runResult.OK bool`, `runResult.Stdout string`, `runResult.Stderr string`
+- **`pmk parse` JSON shape** (all fields in one object on stdout):
+  ```json
+  {"version":"1","root":{"type":"root","children":[...]},"diagnostics":[]}
+  ```
+
+### Binding steps
 
 1. Run `just acceptance` to generate stubs from the 4 GWT `.txt` files.
-2. Implement each stub in `generated-acceptance-tests/003-placeholder-parsing-US*_test.go` (e.g. `003-placeholder-parsing-US1-recognize-placeholder-nodes_test.go`).
+2. Replace each stub body with the implementations below (preserving the function signature).
 3. Run `just acceptance` again to confirm all acceptance tests pass.
 4. Run `just test-all` to confirm unit tests and acceptance tests both pass.
+
+---
+
+### US1 — Recognize placeholder nodes
+
+**File**: `generated-acceptance-tests/003-placeholder-parsing-US1-recognize-placeholder-nodes_test.go`
+
+```go
+// Scenario: A placeholder item [Chapter 3]() becomes a node in the outline tree.
+func Test_A_placeholder_item_Chapter_3_becomes_a_node_in_the_outline_tree(t *testing.T) {
+    dir := t.TempDir()
+    writeFile(t, dir, "_binder.md", "<!-- prosemark-binder:v1 -->\n- [Chapter 3]()\n")
+    result := runParse(t, dir+"/_binder.md")
+    if !result.OK {
+        t.Fatalf("expected exit 0\nstdout: %s\nstderr: %s", result.Stdout, result.Stderr)
+    }
+    if !strings.Contains(result.Stdout, `"title":"Chapter 3"`) {
+        t.Errorf("expected node with title 'Chapter 3', got: %s", result.Stdout)
+    }
+    if strings.Contains(result.Stdout, `"target"`) {
+        t.Errorf("expected no target field for placeholder, got: %s", result.Stdout)
+    }
+    if !strings.Contains(result.Stdout, `"diagnostics":[]`) {
+        t.Errorf("expected no diagnostics, got: %s", result.Stdout)
+    }
+}
+
+// Scenario: A bare placeholder []() with no title parses without error.
+func Test_A_bare_placeholder_with_no_title_parses_without_error(t *testing.T) {
+    dir := t.TempDir()
+    writeFile(t, dir, "_binder.md", "<!-- prosemark-binder:v1 -->\n- []()\n")
+    result := runParse(t, dir+"/_binder.md")
+    if !result.OK {
+        t.Fatalf("expected exit 0\nstdout: %s\nstderr: %s", result.Stdout, result.Stderr)
+    }
+    if !strings.Contains(result.Stdout, `"type":"node"`) {
+        t.Errorf("expected a placeholder node, got: %s", result.Stdout)
+    }
+    if strings.Contains(result.Stdout, `"target"`) {
+        t.Errorf("expected no target field, got: %s", result.Stdout)
+    }
+    if !strings.Contains(result.Stdout, `"diagnostics":[]`) {
+        t.Errorf("expected no diagnostics, got: %s", result.Stdout)
+    }
+}
+
+// Scenario: Multiple identical placeholder items each appear as a distinct node.
+func Test_Multiple_identical_placeholder_items_each_appear_as_a_distinct_node(t *testing.T) {
+    dir := t.TempDir()
+    writeFile(t, dir, "_binder.md",
+        "<!-- prosemark-binder:v1 -->\n- [Chapter]()\n- [Chapter]()\n")
+    result := runParse(t, dir+"/_binder.md")
+    if !result.OK {
+        t.Fatalf("expected exit 0\nstdout: %s\nstderr: %s", result.Stdout, result.Stderr)
+    }
+    if count := strings.Count(result.Stdout, `"title":"Chapter"`); count != 2 {
+        t.Errorf("expected 2 nodes with title 'Chapter', got %d: %s", count, result.Stdout)
+    }
+    if !strings.Contains(result.Stdout, `"diagnostics":[]`) {
+        t.Errorf("expected no diagnostics (no BNDW003), got: %s", result.Stdout)
+    }
+}
+```
+
+---
+
+### US2 — Placeholder nodes with children
+
+**File**: `generated-acceptance-tests/003-placeholder-parsing-US2-placeholder-nodes-with-children_test.go`
+
+```go
+// Scenario: A placeholder parent can contain a file-backed child node.
+func Test_A_placeholder_parent_can_contain_a_file_backed_child_node(t *testing.T) {
+    dir := t.TempDir()
+    writeFile(t, dir, "_binder.md",
+        "<!-- prosemark-binder:v1 -->\n- [Part I]()\n  - [chapter-one.md](chapter-one.md \"Chapter One\")\n")
+    writeFile(t, dir, "chapter-one.md", "")
+    result := runParse(t, dir+"/_binder.md")
+    if !result.OK {
+        t.Fatalf("expected exit 0\nstdout: %s\nstderr: %s", result.Stdout, result.Stderr)
+    }
+    if !strings.Contains(result.Stdout, `"title":"Part I"`) {
+        t.Errorf("expected placeholder parent node, got: %s", result.Stdout)
+    }
+    if !strings.Contains(result.Stdout, `"target":"chapter-one.md"`) {
+        t.Errorf("expected child node with target, got: %s", result.Stdout)
+    }
+}
+
+// Scenario: Placeholder nodes can be nested three levels deep.
+func Test_Placeholder_nodes_can_be_nested_three_levels_deep(t *testing.T) {
+    dir := t.TempDir()
+    writeFile(t, dir, "_binder.md",
+        "<!-- prosemark-binder:v1 -->\n- [Level 1]()\n  - [Level 2]()\n    - [Level 3]()\n")
+    result := runParse(t, dir+"/_binder.md")
+    if !result.OK {
+        t.Fatalf("expected exit 0\nstdout: %s\nstderr: %s", result.Stdout, result.Stderr)
+    }
+    for _, title := range []string{"Level 1", "Level 2", "Level 3"} {
+        if !strings.Contains(result.Stdout, fmt.Sprintf(`"title":%q`, title)) {
+            t.Errorf("expected node %q in output, got: %s", title, result.Stdout)
+        }
+    }
+}
+```
+
+> Note: the `fmt.Sprintf(`"title":%q`, title)` form produces `"title":"Level 1"` with correct JSON quoting.
+
+---
+
+### US3 — Placeholder round-trip
+
+**File**: `generated-acceptance-tests/003-placeholder-parsing-US3-placeholder-round-trip_test.go`
+
+The round-trip is tested at the library level via the conformance stability suite. The CLI (`pmk parse`) outputs JSON, not the serialized binder format, so it cannot directly demonstrate byte-for-byte stability. The acceptance test delegates to `runConformance` with a filter that covers fixtures 121–125:
+
+```go
+// Scenario: A binder with placeholder items serializes identically to its input.
+func Test_A_binder_with_placeholder_items_serializes_identically_to_its_input(t *testing.T) {
+    // Delegates to the conformance ParseStability suite for fixture dirs 121–125.
+    // Fixture names start with "12" — filter matches 120–129 but only 121–125 exist.
+    result := runConformance(t, "TestConformance_ParseStability/12")
+    if !result.OK {
+        t.Fatalf("round-trip stability failed for placeholder fixtures\nstdout: %s\nstderr: %s",
+            result.Stdout, result.Stderr)
+    }
+}
+```
+
+---
+
+### US4 — No spurious diagnostics
+
+**File**: `generated-acceptance-tests/003-placeholder-parsing-US4-no-spurious-diagnostics_test.go`
+
+```go
+// Scenario: A placeholder node does not trigger a missing-file diagnostic.
+func Test_A_placeholder_node_does_not_trigger_a_missing_file_diagnostic(t *testing.T) {
+    dir := t.TempDir()
+    writeFile(t, dir, "_binder.md", "<!-- prosemark-binder:v1 -->\n- [Planned]()\n")
+    // Project has no file named "Planned" — BNDW004 must NOT fire for the placeholder.
+    result := runParse(t, dir+"/_binder.md")
+    if !result.OK {
+        t.Fatalf("expected exit 0\nstdout: %s\nstderr: %s", result.Stdout, result.Stderr)
+    }
+    if !strings.Contains(result.Stdout, `"diagnostics":[]`) {
+        t.Errorf("expected no BNDW004 for placeholder, got: %s", result.Stdout)
+    }
+}
+
+// Scenario: Two identical placeholder items do not trigger a duplicate diagnostic.
+func Test_Two_identical_placeholder_items_do_not_trigger_a_duplicate_diagnostic(t *testing.T) {
+    dir := t.TempDir()
+    writeFile(t, dir, "_binder.md",
+        "<!-- prosemark-binder:v1 -->\n- [Draft]()\n- [Draft]()\n")
+    result := runParse(t, dir+"/_binder.md")
+    if !result.OK {
+        t.Fatalf("expected exit 0\nstdout: %s\nstderr: %s", result.Stdout, result.Stderr)
+    }
+    if !strings.Contains(result.Stdout, `"diagnostics":[]`) {
+        t.Errorf("expected no BNDW003 for identical placeholders, got: %s", result.Stdout)
+    }
+}
+```
 
 ---
 
