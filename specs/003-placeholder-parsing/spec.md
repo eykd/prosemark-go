@@ -111,8 +111,8 @@ An author expects that placeholder nodes do not trigger "missing file" or "dupli
 ### Measurable Outcomes
 
 - **SC-001**: All planned unit tests for placeholder parsing pass with zero failures.
-- **SC-002**: All new conformance fixture directories (066–070) validate against their expected parse and diagnostics output.
-- **SC-003**: All existing conformance fixtures (001–065) continue to pass unchanged after the parser change.
+- **SC-002**: All new conformance fixture directories (121–125) validate against their expected parse and diagnostics output.
+- **SC-003**: All existing conformance fixtures (001–120) continue to pass unchanged after the parser change.
 - **SC-004**: No BNDW003 or BNDW004 diagnostics appear for any placeholder node in any parse result.
 - **SC-005**: Round-trip serialization produces byte-identical output for binder files containing placeholder nodes.
 - **SC-006**: 100% branch coverage is maintained on all non-Impl parser functions after the change.
