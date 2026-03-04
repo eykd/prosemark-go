@@ -71,6 +71,10 @@ install-tools:
 build:
     go build -o bin/pmk .
 
+# Install pmk to $GOBIN (default: ~/go/bin)
+install:
+    go build -o "$(go env GOBIN | grep . || echo "$(go env GOPATH)/bin")/pmk" .
+
 # Smoke-test: errors are visible, not silent
 smoke: build
     #!/usr/bin/env bash
