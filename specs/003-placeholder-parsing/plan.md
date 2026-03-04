@@ -130,8 +130,9 @@ func parseLink(content string, refDefs map[string]RefDef, wikiIndex map[string][
 
 ```go
 // Empty-target inline link: [Title]() — placeholder node.
+// strings.TrimSpace normalises whitespace-only titles (e.g. "[ ]()" → title "").
 if m := emptyTargetLinkRE.FindStringSubmatch(content); m != nil {
-    title, found = unescapeTitle(m[1]), true
+    title, found = strings.TrimSpace(unescapeTitle(m[1])), true
     return
 }
 ```
@@ -186,13 +187,13 @@ target, title, linkDiags := parseLink(content, result.RefDefs, wikiIndex, binder
 target, title, found, linkDiags := parseLink(content, result.RefDefs, wikiIndex, binderDir, lineNum, listItemColumn)
 ```
 
-**Step B — Derive `isPlaceholder`** immediately after the `parseLink` call:
+**Step B — Derive `isPlaceholder`** immediately after the `parseLink` call (initial value; recalculated after Step C):
 
 ```go
 isPlaceholder := found && target == ""
 ```
 
-**Step C — Fix the continuation-line guard** (lines 156–168). Change `if target == ""` → `if !found`.
+**Step C — Fix the continuation-line guard** (lines 156–168). Change `if target == ""` → `if !found`. Also capture `tFound` from the continuation `parseLink` call so that a placeholder on the continuation line is promoted correctly (spec edge case: "Placeholder link appearing on a continuation line — recognized correctly").
 
 Current code at lines 156–168:
 ```go
@@ -216,17 +217,25 @@ if !found && i+1 < len(result.Lines) {
     nextLine := result.Lines[i+1]
     if countLeadingWhitespace(nextLine) > indent && !listItemRE.MatchString(nextLine) {
         contContent := normalizeListContent(strings.TrimSpace(nextLine))
-        t, ti, _, ld := parseLink(contContent, result.RefDefs, wikiIndex, binderDir, i+2, 0)
+        t, ti, tFound, ld := parseLink(contContent, result.RefDefs, wikiIndex, binderDir, i+2, 0)
         consumed[i+1] = true
         if t != "" {
             target, title = t, ti
             linkDiags = ld
+            found = true
+        } else if tFound {
+            // Continuation line is a placeholder [Title]() — promote as found placeholder.
+            title = ti
+            linkDiags = ld
+            found = true
         }
     }
 }
+// Recalculate isPlaceholder: found/target may have changed in the continuation block.
+isPlaceholder = found && target == ""
 ```
 
-Note: `_` discards `found` from the continuation call — continuation lines produce real nodes (non-empty target), so a placeholder continuation is treated as "not found".
+Note: `isPlaceholder` must be recalculated after the continuation block because `found` and `target` may change there. Declaring it with `:=` before the block and reassigning with `=` after requires changing the declaration to `var isPlaceholder bool` or splitting the assignment.
 
 **Step D — Fix the skip condition** (lines 174–176). Change `if target == ""` → `if !found`:
 
@@ -459,10 +468,10 @@ Add table-driven test cases for:
 
 | Test function | Cases to add |
 |--------------|-------------|
-| `TestParseLink` (new function — no existing dedicated test) | `[Title]()` → title="Title", target="", found=true, diags=[]; `[]()` → title="", target="", found=true, diags=[]; `[T](x.md "Tooltip")` still returns found=true (regression); unrecognised text → found=false; `[Title][nonexistent-ref]` (ref def absent) → found=false, target="" (unresolvable ref-link stays skipped) |
+| `TestParseLink` (new function — no existing dedicated test) | `[Title]()` → title="Title", target="", found=true, diags=[]; `[]()` → title="", target="", found=true, diags=[]; `[ ]()` (whitespace-only title) → title="", found=true (TrimSpace applied); `[Title]( )` (whitespace-only target) → title="Title", target="", found=true (treated as placeholder); `[T](x.md "Tooltip")` still returns found=true (regression); unrecognised text → found=false; `[Title][nonexistent-ref]` (ref def absent) → found=false, target="" (unresolvable ref-link stays skipped) |
 | `TestParse_PlaceholderNodes` | Single placeholder; empty-title placeholder; placeholder as parent; duplicate identical titles produce 2 nodes; all 4 list marker types |
 | `TestParse_NoDiagnosticsForPlaceholder` | Placeholder + project context → no BNDW004; two identical placeholder titles → no BNDW003; real duplicate target still emits BNDW003; placeholder → no BNDW007 |
-| `TestParse_PlaceholderContinuationLine` | `[Title]()` on a primary list item line (not treated as continuation); real link on continuation line next to a placeholder is owned by the next list item |
+| `TestParse_PlaceholderContinuationLine` | `[Title]()` on a primary list item line → placeholder node produced; real link on continuation line → node produced with correct target; `[Title]()` on continuation line (primary line is bare list marker) → placeholder node produced (spec edge case: "Placeholder link appearing on a continuation line — recognized correctly") |
 
 All new test cases must be written TDD-style (Red → Green → Refactor).
 
@@ -498,7 +507,58 @@ Follow Red → Green → Refactor for each step:
 
 ---
 
-## Applied Learnings
+## Edge Cases & Error Handling
+
+### Continuation-Line Placeholder Recognition
+
+**Scenario**: A list item whose primary line has no link but whose continuation line (second line, indented) is `[Title]()`.
+
+```markdown
+-
+  [Chapter 3]()
+```
+
+**Risk**: The original §1.2 Step C design discards the `found` return from the continuation `parseLink` call (`_`) and only promotes the result when `t != ""`. For a placeholder `t = ""`, so `found` stays `false` and the item is skipped — contradicting the spec edge case "Placeholder link appearing on a continuation line — recognized correctly."
+
+**Resolution**: Capture `tFound` from the continuation call. Add an `else if tFound` branch that sets `found = true` and `title = ti`. Recalculate `isPlaceholder` after the continuation block (see §1.2 Step C updated code).
+
+**Test coverage required**: `TestParse_PlaceholderContinuationLine` must include a case where the primary line is a bare list marker and the continuation is `[Title]()`.
+
+---
+
+### Whitespace-Only Title `[ ]()`
+
+**Scenario**: Author writes `[ ]()` (space between brackets).
+
+**Risk**: `emptyTargetLinkRE` matches, `m[1] = " "`, `unescapeTitle(" ")` returns `" "`. This differs from `[]()` (empty title) in a non-obvious way, and `Node.Title = " "` would serialize as `[ ]()` rather than `[]()`, which is unexpected.
+
+**Resolution**: Apply `strings.TrimSpace` to the captured group before returning title — `strings.TrimSpace(unescapeTitle(m[1]))`. Both `[]()` and `[ ]()` then produce `title = ""`. (Already applied in §1.1 Step C.)
+
+**Test coverage required**: `TestParseLink` case: `[ ]()` → title="", found=true.
+
+---
+
+### Whitespace-Only Target `[Title]( )`
+
+**Scenario**: Author writes `[Title]( )` (space inside parentheses).
+
+**Behavior**: `emptyTargetLinkRE` uses `\(\s*\)`, which matches whitespace-only targets. `[Title]( )` is treated identically to `[Title]()` — a placeholder with title "Title". `inlineLinkRE` uses `[^)"]+` (one-or-more non-empty chars) and does NOT match whitespace-only targets, so `emptyTargetLinkRE` wins.
+
+**Decision**: Accept this behavior as intentional. Whitespace-only targets are semantically equivalent to empty targets and produce placeholder nodes. Document in tests.
+
+**Test coverage required**: `TestParseLink` case: `[Title]( )` → title="Title", target="", found=true (placeholder).
+
+---
+
+### Nested Brackets in Placeholder Title
+
+**Scenario**: `[Chapter [3]]()` — the regex character class `[^\]\\]` stops at the first `]`, capturing "Chapter [3". The trailing `]()` is not consumed; `emptyTargetLinkRE` does NOT match. `inlineLinkRE` also does not match. The item is skipped (not promoted to a placeholder).
+
+**Decision**: Document as a known limitation consistent with existing inline-link behavior. No fix needed — authors should avoid nested unescaped brackets. Escaped form `[Chapter \[3\]]()` would match correctly.
+
+**Test coverage**: Optional; add a comment to `TestParseLink` documenting the known limitation.
+
+---
 
 No prior learnings from `.specify/solutions/` were applicable (index is empty).
 
