@@ -155,9 +155,9 @@ When no branch matches, `found` defaults to `false` (zero value).
 
 ### 1.2 — Fix the call site and guards in the parse loop
 
-**File**: `internal/binder/parser.go` — main parse loop (around lines 153–176)
+**File**: `internal/binder/parser.go` — main parse loop
 
-**Step A — Capture `found`** from the updated `parseLink` call:
+**Step A — Capture `found`** from the updated `parseLink` call (line 153):
 
 ```go
 // Before (line 153):
@@ -173,43 +173,55 @@ target, title, found, linkDiags := parseLink(content, result.RefDefs, wikiIndex,
 isPlaceholder := found && target == ""
 ```
 
-**Step C — Fix the continuation-line guard** (lines 156–168). Change `if target == ""` → `if !found`:
+**Step C — Fix the continuation-line guard** (lines 156–168). Change `if target == ""` → `if !found`.
 
+Current code at lines 156–168:
 ```go
-// Before:
 if target == "" && i+1 < len(result.Lines) {
-    ...
-    t, ti, ld := parseLink(contContent, result.RefDefs, wikiIndex, binderDir, i+2, 0)
-    consumed[i+1] = true
-    if t != "" {
-        target, title = t, ti
-        linkDiags = ld
-    }
-}
-
-// After:
-if !found && i+1 < len(result.Lines) {
-    ...
-    t, ti, _, ld := parseLink(contContent, result.RefDefs, wikiIndex, binderDir, i+2, 0)
-    consumed[i+1] = true
-    if t != "" {
-        target, title = t, ti
-        linkDiags = ld
+    nextLine := result.Lines[i+1]
+    if countLeadingWhitespace(nextLine) > indent && !listItemRE.MatchString(nextLine) {
+        contContent := normalizeListContent(strings.TrimSpace(nextLine))
+        t, ti, ld := parseLink(contContent, result.RefDefs, wikiIndex, binderDir, i+2, 0)
+        consumed[i+1] = true
+        if t != "" {
+            target, title = t, ti
+            linkDiags = ld
+        }
     }
 }
 ```
 
-Note: the blank `_` discards `found` for the continuation case — continuation lines produce real nodes (non-empty target), so a placeholder continuation is treated as "not found".
-
-**Step D — Fix the skip condition** (line 174). Change `if target == ""` → `if !found`:
-
+Updated code:
 ```go
-// Before:
+if !found && i+1 < len(result.Lines) {
+    nextLine := result.Lines[i+1]
+    if countLeadingWhitespace(nextLine) > indent && !listItemRE.MatchString(nextLine) {
+        contContent := normalizeListContent(strings.TrimSpace(nextLine))
+        t, ti, _, ld := parseLink(contContent, result.RefDefs, wikiIndex, binderDir, i+2, 0)
+        consumed[i+1] = true
+        if t != "" {
+            target, title = t, ti
+            linkDiags = ld
+        }
+    }
+}
+```
+
+Note: `_` discards `found` from the continuation call — continuation lines produce real nodes (non-empty target), so a placeholder continuation is treated as "not found".
+
+**Step D — Fix the skip condition** (lines 174–176). Change `if target == ""` → `if !found`:
+
+Current code:
+```go
+// Skip items with no resolved target.
 if target == "" {
     continue
 }
+```
 
-// After:
+Updated code:
+```go
+// Skip items with no resolved target.
 if !found {
     continue
 }
@@ -225,10 +237,10 @@ A placeholder has `found=true` and `target=""`, so it is NOT skipped.
 
 `isPlaceholder` is already set in §1.2 Step B. Guard each check that inspects `target`:
 
-**Guard non-markdown target check (BNDW007, line ~179)**:
+**Guard non-markdown target check (BNDW007, lines 179–193)**:
 
 ```go
-// Before:
+// Before (line 179):
 if !isMarkdownTarget(target) && !hasIllegalPathChars(target) && !escapesRoot(target) {
 
 // After:
@@ -237,10 +249,10 @@ if !isPlaceholder && !isMarkdownTarget(target) && !hasIllegalPathChars(target) &
 
 Without this guard, `target=""` fails `isMarkdownTarget` and fires BNDW007 for every placeholder.
 
-**Guard percent-decode and path-validation block (lines ~196–212)**:
+**Guard percent-decode and path-validation block (lines 195–212)**:
 
 ```go
-// Before:
+// Before (lines 195–212):
 decoded, decodeOK := percentDecodeTarget(target)
 if !decodeOK { ... continue }
 target = decoded
@@ -255,10 +267,10 @@ if !isPlaceholder {
 }
 ```
 
-**Guard BNDW003 (duplicate file reference, lines ~225–234)**:
+**Guard BNDW003 (duplicate file reference, lines 225–234)**:
 
 ```go
-// Before:
+// Before (lines 225–234):
 if seenTargets[target] {
     diags = append(diags, Diagnostic{ /* BNDW003 */ })
 }
@@ -273,12 +285,14 @@ if !isPlaceholder {
 }
 ```
 
-**Guard BNDW004/BNDW009 (missing/case-mismatch target, lines ~236–256)**:
+**Guard BNDW004/BNDW009 (missing/case-mismatch target, lines 236–256)**:
 
 ```go
-// Before:
+// Before (lines 236–256):
 lookupTarget := strings.TrimPrefix(target, "./")
 if project != nil && !projectFileSet[lookupTarget] {
+    // BNDW009 / BNDW004 logic
+}
 
 // After:
 if !isPlaceholder {
@@ -289,9 +303,9 @@ if !isPlaceholder {
 }
 ```
 
-BNDW001, BNDW002 (multiple structural links, line ~259) and BNDW008 (self-ref, line ~214) are safe without guards:
-- `target="" != "_binder.md"` → BNDW008 does not fire.
-- BNDW002 counts `.md` links in `content`; a placeholder has none → count is 0 or 1 → does not fire.
+BNDW001, BNDW002 (lines 258–266) and BNDW008 (lines 214–223) are safe without guards:
+- BNDW008: `target="" != "_binder.md"` → does not fire; the guard exits before BNDW003/BNDW004 anyway.
+- BNDW002: uses `mdInlineLinkRE.FindAllString(content, -1)` which counts `.md` inline links in raw content; `[Title]()` has no `.md` link → count is 0, `len(allMd) > 1` is false → does not fire.
 
 ---
 
@@ -426,7 +440,7 @@ Add table-driven test cases for:
 
 | Test function | Cases to add |
 |--------------|-------------|
-| `TestParseLink` (or equivalent) | `[Title]()` → title="Title", target="", found=true, diags=[]; `[]()` → title="", target="", found=true, diags=[]; `[T](x.md)` still returns found=true (regression); unrecognised text → found=false |
+| `TestParseLink` (new function — no existing dedicated test) | `[Title]()` → title="Title", target="", found=true, diags=[]; `[]()` → title="", target="", found=true, diags=[]; `[T](x.md)` still returns found=true (regression); unrecognised text → found=false |
 | `TestParse_PlaceholderNodes` | Single placeholder; empty-title placeholder; placeholder as parent; duplicate identical titles produce 2 nodes; all 4 list marker types |
 | `TestParse_NoDiagnosticsForPlaceholder` | Placeholder + project context → no BNDW004; two identical placeholder titles → no BNDW003; real duplicate target still emits BNDW003; placeholder → no BNDW007 |
 | `TestParse_PlaceholderContinuationLine` | `[Title]()` on a primary list item line (not treated as continuation); real link on continuation line next to a placeholder is owned by the next list item |
@@ -440,7 +454,7 @@ All new test cases must be written TDD-style (Red → Green → Refactor).
 After the conformance fixtures and unit tests pass, bind the generated acceptance test stubs:
 
 1. Run `just acceptance` to generate stubs from the 4 GWT `.txt` files.
-2. Implement each stub in `generated-acceptance-tests/003-placeholder-parsing-US*.go`.
+2. Implement each stub in `generated-acceptance-tests/003-placeholder-parsing-US*_test.go` (e.g. `003-placeholder-parsing-US1-recognize-placeholder-nodes_test.go`).
 3. Run `just acceptance` again to confirm all acceptance tests pass.
 4. Run `just test-all` to confirm unit tests and acceptance tests both pass.
 
@@ -462,6 +476,19 @@ Follow Red → Green → Refactor for each step:
 10. **Conformance fixtures**: Create fixtures 121–125 and confirm `just test` passes.
 11. **Acceptance Green**: Bind acceptance test stubs; run `just acceptance`.
 12. **Refactor**: Clean up any duplication, ensure GoDoc, run `just check`.
+
+---
+
+## Applied Learnings
+
+No prior learnings from `.specify/solutions/` were applicable (index is empty).
+
+Research conducted during plan deepening (2026-03-04):
+- **Exact line numbers confirmed** against `internal/binder/parser.go` — all `~` approximations replaced with precise ranges.
+- **`parseLink` has no dedicated unit test** in `parser_test.go`; `TestParseLink` must be created as a new function.
+- **Continuation-line call** uses 3-return form `t, ti, ld` — updated to `t, ti, _, ld` after `found bool` is added.
+- **BNDW002 check** uses `mdInlineLinkRE` (counts `.md` links); confirmed safe for placeholders (count = 0).
+- **Acceptance test file naming**: `generated-acceptance-tests/<feature>-<USN>-<slug>_test.go`.
 
 ---
 
