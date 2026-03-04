@@ -136,18 +136,37 @@ if m := emptyTargetLinkRE.FindStringSubmatch(content); m != nil {
 }
 ```
 
-**Step D — Mark all existing branches** as `found = true`. Each existing `if m := ...` branch that assigns `target` and/or `title` must also set `found = true`. For example:
+**Step D — Mark existing branches as `found = true` only when a target is actually resolved.** The semantic of `found` is: "a recognized link pattern was parsed to a non-empty target, OR this is an empty-target placeholder." Unresolvable links (failed wikilinks, unmatched ref defs) must leave `found = false` so the existing skip behavior is preserved.
+
+Concrete rules per branch:
 
 ```go
+// inlineLinkRE: target is always non-empty → always set found.
 if m := inlineLinkRE.FindStringSubmatch(content); m != nil {
     target, title, found = m[2], unescapeTitle(m[1]), true
     // ...
+}
+
+// wikilinkRE: resolveWikilink may return target="" on failure (BNDE003).
+// Only set found when resolution succeeded.
 } else if m := wikilinkRE.FindStringSubmatch(content); m != nil {
-    target, title, found, diags = <resolved>, <resolved>, true, <diags>
-} // ... etc
+    target, title, diags = resolveWikilink(...)
+    found = target != ""
+}
+
+// fullRefLinkRE / collapsedRefRE / shortcutRefRE: ref def may not exist.
+// Set found only inside the successful lookup.
+} else if m := fullRefLinkRE.FindStringSubmatch(content); m != nil {
+    if rd, exists := refDefs[strings.ToLower(m[2])]; exists {
+        target, title, found = rd.Target, m[1], true
+    }
+}
+// ... same pattern for collapsedRefRE and shortcutRefRE
 ```
 
-When no branch matches, `found` defaults to `false` (zero value).
+**Why this matters**: the parse loop emits `linkDiags` (including BNDE003) at line 171 — before the skip check at line 174. If a failed wikilink sets `found = true`, `isPlaceholder` becomes `true` (found=true, target=""), bypassing BNDW007/BNDW003/BNDW004 guards and creating a spurious empty-target node. Keeping `found = false` for failed wikilinks preserves the existing skip path.
+
+When no branch matches (and `emptyTargetLinkRE` did not match), `found` defaults to `false` (zero value).
 
 **Precondition edge case**: `[Title]()` inside a code fence — the parse loop's existing `inCodeFence` gate runs before `parseLink` is called. No additional guard needed.
 
@@ -440,7 +459,7 @@ Add table-driven test cases for:
 
 | Test function | Cases to add |
 |--------------|-------------|
-| `TestParseLink` (new function — no existing dedicated test) | `[Title]()` → title="Title", target="", found=true, diags=[]; `[]()` → title="", target="", found=true, diags=[]; `[T](x.md)` still returns found=true (regression); unrecognised text → found=false |
+| `TestParseLink` (new function — no existing dedicated test) | `[Title]()` → title="Title", target="", found=true, diags=[]; `[]()` → title="", target="", found=true, diags=[]; `[T](x.md "Tooltip")` still returns found=true (regression); unrecognised text → found=false; `[Title][nonexistent-ref]` (ref def absent) → found=false, target="" (unresolvable ref-link stays skipped) |
 | `TestParse_PlaceholderNodes` | Single placeholder; empty-title placeholder; placeholder as parent; duplicate identical titles produce 2 nodes; all 4 list marker types |
 | `TestParse_NoDiagnosticsForPlaceholder` | Placeholder + project context → no BNDW004; two identical placeholder titles → no BNDW003; real duplicate target still emits BNDW003; placeholder → no BNDW007 |
 | `TestParse_PlaceholderContinuationLine` | `[Title]()` on a primary list item line (not treated as continuation); real link on continuation line next to a placeholder is owned by the next list item |
@@ -483,12 +502,15 @@ Follow Red → Green → Refactor for each step:
 
 No prior learnings from `.specify/solutions/` were applicable (index is empty).
 
-Research conducted during plan deepening (2026-03-04):
+Research conducted during plan deepening (2026-03-04, updated 2026-03-04):
 - **Exact line numbers confirmed** against `internal/binder/parser.go` — all `~` approximations replaced with precise ranges.
 - **`parseLink` has no dedicated unit test** in `parser_test.go`; `TestParseLink` must be created as a new function.
 - **Continuation-line call** uses 3-return form `t, ti, ld` — updated to `t, ti, _, ld` after `found bool` is added.
 - **BNDW002 check** uses `mdInlineLinkRE` (counts `.md` links); confirmed safe for placeholders (count = 0).
 - **Acceptance test file naming**: `generated-acceptance-tests/<feature>-<USN>-<slug>_test.go`.
+- **`found` semantics for wikilinks/ref-links**: Diagnostics (BNDE003) are appended to `diags` at line 171, BEFORE the skip check at line 174. Setting `found = true` for failed wikilinks would make `isPlaceholder = true` (found=true, target=""), causing the BNDW003/BNDW004 guards to suppress diagnostics for failed wikilinks and create spurious empty-target nodes. Fix: `found = (target != "")` for wikilinks; `found = true` only inside `if rd, exists` for ref-link branches.
+- **Conformance fixtures auto-discovered**: `TestConformance_ParseStability` uses `os.ReadDir` — no manual registration needed for fixtures 121–125.
+- **Node.Target and Node.Title use `omitempty`**: Confirmed in `types.go`. Fixture 122 (empty-title placeholder) JSON correctly omits both fields.
 
 ---
 
