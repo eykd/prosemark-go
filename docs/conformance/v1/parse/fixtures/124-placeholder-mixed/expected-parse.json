@@ -1,0 +1,31 @@
+{
+  "version": "1",
+  "root": {
+    "type": "root",
+    "children": [
+      {
+        "type": "node",
+        "target": "intro.md",
+        "title": "Introduction",
+        "children": []
+      },
+      {
+        "type": "node",
+        "title": "Part I",
+        "children": [
+          {
+            "type": "node",
+            "target": "chapter-one.md",
+            "title": "Chapter One",
+            "children": []
+          },
+          {
+            "type": "node",
+            "title": "Part I.I",
+            "children": []
+          }
+        ]
+      }
+    ]
+  }
+}

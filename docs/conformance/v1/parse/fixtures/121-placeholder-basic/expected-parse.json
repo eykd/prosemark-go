@@ -1,0 +1,13 @@
+{
+  "version": "1",
+  "root": {
+    "type": "root",
+    "children": [
+      {
+        "type": "node",
+        "title": "Chapter 3",
+        "children": []
+      }
+    ]
+  }
+}
