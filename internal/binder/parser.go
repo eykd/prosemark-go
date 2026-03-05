@@ -159,10 +159,14 @@ func Parse(ctx context.Context, src []byte, project *Project) (*ParseResult, []D
 			// A continuation line has more indentation than the list marker level.
 			if countLeadingWhitespace(nextLine) > indent && !listItemRE.MatchString(nextLine) {
 				contContent := normalizeListContent(strings.TrimSpace(nextLine))
-				t, ti, _, ld := parseLink(contContent, result.RefDefs, wikiIndex, binderDir, i+2, 0)
+				t, ti, tFound, ld := parseLink(contContent, result.RefDefs, wikiIndex, binderDir, i+2, 0)
 				consumed[i+1] = true
 				if t != "" {
 					target, title = t, ti
+					linkDiags = ld
+					found = true
+				} else if tFound {
+					title = ti
 					linkDiags = ld
 					found = true
 				}
@@ -177,8 +181,11 @@ func Parse(ctx context.Context, src []byte, project *Project) (*ParseResult, []D
 			continue
 		}
 
+		// Placeholder node: found=true with empty target (e.g. [Title]() or []()).
+		isPlaceholder := target == ""
+
 		// Handle non-md first link: if target is non-md, look for an md link elsewhere.
-		if !isMarkdownTarget(target) && !hasIllegalPathChars(target) && !escapesRoot(target) {
+		if !isPlaceholder && !isMarkdownTarget(target) && !hasIllegalPathChars(target) && !escapesRoot(target) {
 			// Emit BNDW007 for this non-md link and try to find an md link in content.
 			diags = append(diags, Diagnostic{
 				Severity: "warning",
@@ -195,26 +202,30 @@ func Parse(ctx context.Context, src []byte, project *Project) (*ParseResult, []D
 		}
 
 		// Percent-decode the target before validation.
-		decoded, decodeOK := percentDecodeTarget(target)
-		if !decodeOK {
-			diags = append(diags, Diagnostic{
-				Severity: "error",
-				Code:     CodeIllegalPathChars,
-				Message:  fmt.Sprintf("Illegal path characters in link target: %s", target),
-				Location: &Location{Line: lineNum, Column: listItemColumn},
-			})
-			continue
+		if !isPlaceholder {
+			decoded, decodeOK := percentDecodeTarget(target)
+			if !decodeOK {
+				diags = append(diags, Diagnostic{
+					Severity: "error",
+					Code:     CodeIllegalPathChars,
+					Message:  fmt.Sprintf("Illegal path characters in link target: %s", target),
+					Location: &Location{Line: lineNum, Column: listItemColumn},
+				})
+				continue
+			}
+			target = decoded
 		}
-		target = decoded
 
 		// Validate target path.
-		if diag := validateTarget(target, lineNum, listItemColumn); diag != nil {
-			diags = append(diags, *diag)
-			continue
+		if !isPlaceholder {
+			if diag := validateTarget(target, lineNum, listItemColumn); diag != nil {
+				diags = append(diags, *diag)
+				continue
+			}
 		}
 
 		// Check for self-referential link (BNDW008).
-		if target == "_binder.md" {
+		if !isPlaceholder && target == "_binder.md" {
 			diags = append(diags, Diagnostic{
 				Severity: "warning",
 				Code:     CodeSelfReferentialLink,
@@ -225,46 +236,52 @@ func Parse(ctx context.Context, src []byte, project *Project) (*ParseResult, []D
 		}
 
 		// Check for duplicate file reference (BNDW003).
-		if seenTargets[target] {
-			diags = append(diags, Diagnostic{
-				Severity: "warning",
-				Code:     CodeDuplicateFileRef,
-				Message:  fmt.Sprintf("Duplicate file reference: %s appears as more than one node in the binder tree", target),
-				Location: &Location{Line: lineNum},
-			})
+		if !isPlaceholder {
+			if seenTargets[target] {
+				diags = append(diags, Diagnostic{
+					Severity: "warning",
+					Code:     CodeDuplicateFileRef,
+					Message:  fmt.Sprintf("Duplicate file reference: %s appears as more than one node in the binder tree", target),
+					Location: &Location{Line: lineNum},
+				})
+			}
+			seenTargets[target] = true
 		}
-		seenTargets[target] = true
 
 		// Check for missing/case-mismatch target file when project context is available.
 		// Normalize "./" prefix before lookup so "./a.md" and "a.md" resolve to the same file.
-		lookupTarget := strings.TrimPrefix(target, "./")
-		if project != nil && !projectFileSet[lookupTarget] {
-			// Check for case-insensitive match (BNDW009).
-			if lowerMatch := projectFilesLower[strings.ToLower(lookupTarget)]; lowerMatch != "" {
-				diags = append(diags, Diagnostic{
-					Severity: "warning",
-					Code:     CodeCaseInsensitiveMatch,
-					Message:  fmt.Sprintf("case-insensitive match found: %s → %s", target, lowerMatch),
-					Location: &Location{Line: lineNum},
-				})
-			} else {
-				diags = append(diags, Diagnostic{
-					Severity: "warning",
-					Code:     CodeMissingTargetFile,
-					Message:  fmt.Sprintf("Target file %s is not present in the project", target),
-					Location: &Location{Line: lineNum},
-				})
+		if !isPlaceholder {
+			lookupTarget := strings.TrimPrefix(target, "./")
+			if project != nil && !projectFileSet[lookupTarget] {
+				// Check for case-insensitive match (BNDW009).
+				if lowerMatch := projectFilesLower[strings.ToLower(lookupTarget)]; lowerMatch != "" {
+					diags = append(diags, Diagnostic{
+						Severity: "warning",
+						Code:     CodeCaseInsensitiveMatch,
+						Message:  fmt.Sprintf("case-insensitive match found: %s → %s", target, lowerMatch),
+						Location: &Location{Line: lineNum},
+					})
+				} else {
+					diags = append(diags, Diagnostic{
+						Severity: "warning",
+						Code:     CodeMissingTargetFile,
+						Message:  fmt.Sprintf("Target file %s is not present in the project", target),
+						Location: &Location{Line: lineNum},
+					})
+				}
 			}
 		}
 
 		// Check for multiple structural .md links in one list item (BNDW002).
-		if allMd := mdInlineLinkRE.FindAllString(content, -1); len(allMd) > 1 {
-			diags = append(diags, Diagnostic{
-				Severity: "warning",
-				Code:     CodeMultipleStructLinks,
-				Message:  "list item contains multiple structural links; only the first is used",
-				Location: &Location{Line: lineNum},
-			})
+		if !isPlaceholder {
+			if allMd := mdInlineLinkRE.FindAllString(content, -1); len(allMd) > 1 {
+				diags = append(diags, Diagnostic{
+					Severity: "warning",
+					Code:     CodeMultipleStructLinks,
+					Message:  "list item contains multiple structural links; only the first is used",
+					Location: &Location{Line: lineNum},
+				})
+			}
 		}
 
 		node := &Node{
