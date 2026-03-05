@@ -14,7 +14,8 @@ var (
 	pragmaRE          = regexp.MustCompile(`<\\?!--\s*prosemark-binder:v1\s*-->`)
 	linkRE            = regexp.MustCompile(`\[[^\]]*\]\([^)]*\)`)
 	listItemRE        = regexp.MustCompile(`^(\s*)([-*+]|\d+[.)])\s+(.+)`)
-	emptyTargetLinkRE = regexp.MustCompile(`^\[((?:[^\]\\]|\\.)*)\]\(\s*\)`)
+	emptyTargetLinkRE    = regexp.MustCompile(`^\[((?:[^\]\\]|\\.)*)\]\(\s*\)`)
+	anyEmptyTargetLinkRE = regexp.MustCompile(`\[((?:[^\]\\]|\\.)*)\]\(\s*\)`)
 	inlineLinkRE      = regexp.MustCompile(`^\[((?:[^\]\\]|\\.)*)\]\(([^)"]+)(?:\s+"[^"]*")?\s*\)`)
 	fullRefLinkRE     = regexp.MustCompile(`^\[([^\]]*)\]\[([^\]]+)\]`)
 	collapsedRefRE    = regexp.MustCompile(`^\[([^\]]*)\]\[\]`)
@@ -129,8 +130,8 @@ func Parse(ctx context.Context, src []byte, project *Project) (*ParseResult, []D
 
 		m := listItemRE.FindStringSubmatch(line)
 		if m == nil {
-			// Not a list item: check for .md inline links outside lists (BNDW006).
-			if mdInlineLinkRE.MatchString(line) {
+			// Not a list item: check for .md inline links or placeholder links outside lists (BNDW006).
+			if mdInlineLinkRE.MatchString(line) || anyEmptyTargetLinkRE.MatchString(line) {
 				diags = append(diags, Diagnostic{
 					Severity: "warning",
 					Code:     CodeLinkOutsideList,
