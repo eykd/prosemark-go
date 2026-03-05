@@ -162,14 +162,14 @@ func Parse(ctx context.Context, src []byte, project *Project) (*ParseResult, []D
 				contContent := normalizeListContent(strings.TrimSpace(nextLine))
 				t, ti, tFound, ld := parseLink(contContent, result.RefDefs, wikiIndex, binderDir, i+2, 0)
 				consumed[i+1] = true
-				if t != "" {
-					target, title = t, ti
-					linkDiags = ld
+				if tFound {
 					found = true
-				} else if tFound {
-					title = ti
 					linkDiags = ld
-					found = true
+					if t != "" {
+						target, title = t, ti
+					} else {
+						title = ti
+					}
 				}
 			}
 		}
