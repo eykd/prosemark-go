@@ -11,18 +11,19 @@ import (
 )
 
 var (
-	pragmaRE        = regexp.MustCompile(`<\\?!--\s*prosemark-binder:v1\s*-->`)
-	linkRE          = regexp.MustCompile(`\[[^\]]*\]\([^)]*\)`)
-	listItemRE      = regexp.MustCompile(`^(\s*)([-*+]|\d+[.)])\s+(.+)`)
-	inlineLinkRE    = regexp.MustCompile(`^\[((?:[^\]\\]|\\.)*)\]\(([^)"]+)(?:\s+"[^"]*")?\s*\)`)
-	fullRefLinkRE   = regexp.MustCompile(`^\[([^\]]*)\]\[([^\]]+)\]`)
-	collapsedRefRE  = regexp.MustCompile(`^\[([^\]]*)\]\[\]`)
-	wikilinkRE      = regexp.MustCompile(`^!?\[\[([^\]|]+)(?:\|([^\]]*))?\]\]`)
-	shortcutRefRE   = regexp.MustCompile(`^\[([^\]]+)\]$`)
-	refDefRE        = regexp.MustCompile(`^\[([^\]]+)\]:\s+(\S+)(?:\s+"([^"]*)")?`)
-	mdInlineLinkRE  = regexp.MustCompile(`\[[^\]]*\]\([^)]*\.md[^)]*\)`)
-	checkboxRE      = regexp.MustCompile(`^\[[xX ]\]\s+`)
-	strikethroughRE = regexp.MustCompile(`~~[^~]*~~`)
+	pragmaRE          = regexp.MustCompile(`<\\?!--\s*prosemark-binder:v1\s*-->`)
+	linkRE            = regexp.MustCompile(`\[[^\]]*\]\([^)]*\)`)
+	listItemRE        = regexp.MustCompile(`^(\s*)([-*+]|\d+[.)])\s+(.+)`)
+	emptyTargetLinkRE = regexp.MustCompile(`^\[((?:[^\]\\]|\\.)*)\]\(\s*\)`)
+	inlineLinkRE      = regexp.MustCompile(`^\[((?:[^\]\\]|\\.)*)\]\(([^)"]+)(?:\s+"[^"]*")?\s*\)`)
+	fullRefLinkRE     = regexp.MustCompile(`^\[([^\]]*)\]\[([^\]]+)\]`)
+	collapsedRefRE    = regexp.MustCompile(`^\[([^\]]*)\]\[\]`)
+	wikilinkRE        = regexp.MustCompile(`^!?\[\[([^\]|]+)(?:\|([^\]]*))?\]\]`)
+	shortcutRefRE     = regexp.MustCompile(`^\[([^\]]+)\]$`)
+	refDefRE          = regexp.MustCompile(`^\[([^\]]+)\]:\s+(\S+)(?:\s+"([^"]*)")?`)
+	mdInlineLinkRE    = regexp.MustCompile(`\[[^\]]*\]\([^)]*\.md[^)]*\)`)
+	checkboxRE        = regexp.MustCompile(`^\[[xX ]\]\s+`)
+	strikethroughRE   = regexp.MustCompile(`~~[^~]*~~`)
 	// allInlineLinkRE finds all inline links anywhere in content.
 	allInlineLinkRE = regexp.MustCompile(`\[((?:[^\]\\]|\\.)*)\]\(([^)"]+)(?:\s+"[^"]*")?\s*\)`)
 )
@@ -150,19 +151,20 @@ func Parse(ctx context.Context, src []byte, project *Project) (*ParseResult, []D
 
 		content = normalizeListContent(content)
 
-		target, title, linkDiags := parseLink(content, result.RefDefs, wikiIndex, binderDir, lineNum, listItemColumn)
+		target, title, found, linkDiags := parseLink(content, result.RefDefs, wikiIndex, binderDir, lineNum, listItemColumn)
 
 		// If no link found in content, check the immediately following continuation line.
-		if target == "" && i+1 < len(result.Lines) {
+		if !found && i+1 < len(result.Lines) {
 			nextLine := result.Lines[i+1]
 			// A continuation line has more indentation than the list marker level.
 			if countLeadingWhitespace(nextLine) > indent && !listItemRE.MatchString(nextLine) {
 				contContent := normalizeListContent(strings.TrimSpace(nextLine))
-				t, ti, ld := parseLink(contContent, result.RefDefs, wikiIndex, binderDir, i+2, 0)
+				t, ti, _, ld := parseLink(contContent, result.RefDefs, wikiIndex, binderDir, i+2, 0)
 				consumed[i+1] = true
 				if t != "" {
 					target, title = t, ti
 					linkDiags = ld
+					found = true
 				}
 			}
 		}
@@ -171,7 +173,7 @@ func Parse(ctx context.Context, src []byte, project *Project) (*ParseResult, []D
 		diags = append(diags, linkDiags...)
 
 		// Skip items with no resolved target.
-		if target == "" {
+		if !found {
 			continue
 		}
 
@@ -340,14 +342,21 @@ func pass1Scan(lines []string) pass1Data {
 	return result
 }
 
-// parseLink parses the content portion of a list item and returns (target, title, diags).
-// Returns ("", "", nil) if no link can be resolved.
-func parseLink(content string, refDefs map[string]RefDef, wikiIndex map[string][]wikilinkEntry, binderDir string, lineNum, column int) (target, title string, diags []Diagnostic) {
+// parseLink parses the content portion of a list item and returns (target, title, found, diags).
+// found is true when a link structure was resolved (including placeholder nodes with empty target).
+// Returns ("", "", false, nil) if no link can be resolved.
+func parseLink(content string, refDefs map[string]RefDef, wikiIndex map[string][]wikilinkEntry, binderDir string, lineNum, column int) (target, title string, found bool, diags []Diagnostic) {
+	if m := emptyTargetLinkRE.FindStringSubmatch(content); m != nil {
+		title = strings.TrimSpace(unescapeTitle(m[1]))
+		found = true
+		return
+	}
 	if m := inlineLinkRE.FindStringSubmatch(content); m != nil {
 		target, title = m[2], unescapeTitle(m[1])
 		if title == "" {
 			title = stemFromPath(target)
 		}
+		found = true
 	} else if m := wikilinkRE.FindStringSubmatch(content); m != nil {
 		rawStem := m[1]
 		alias := m[2]
@@ -359,17 +368,23 @@ func parseLink(content string, refDefs map[string]RefDef, wikiIndex map[string][
 			}
 		}
 		target, title, diags = resolveWikilink(rawStem, alias, wikiIndex, binderDir, lineNum, column)
+		if target != "" {
+			found = true
+		}
 	} else if m := fullRefLinkRE.FindStringSubmatch(content); m != nil {
 		if rd, exists := refDefs[strings.ToLower(m[2])]; exists {
 			target, title = rd.Target, m[1]
+			found = true
 		}
 	} else if m := collapsedRefRE.FindStringSubmatch(content); m != nil {
 		if rd, exists := refDefs[strings.ToLower(m[1])]; exists {
 			target, title = rd.Target, m[1]
+			found = true
 		}
 	} else if m := shortcutRefRE.FindStringSubmatch(content); m != nil {
 		if rd, exists := refDefs[strings.ToLower(m[1])]; exists {
 			target, title = rd.Target, m[1]
+			found = true
 		}
 	}
 	return
