@@ -1359,18 +1359,6 @@ func TestParse_PlaceholderNodes(t *testing.T) {
 			wantChildren: 1,
 			wantTitle:    "Part I",
 		},
-		{
-			// FR-008: placeholder in code fence must NOT be promoted to a structural node.
-			name:         "[Title]() inside backtick code fence produces no node",
-			src:          pragma + "```\n- [Chapter]()\n```\n",
-			wantChildren: 0,
-		},
-		{
-			// FR-008: placeholder on a non-list paragraph line must NOT be promoted.
-			name:         "[Title]() on non-list paragraph line produces no node",
-			src:          pragma + "[Chapter]()\n",
-			wantChildren: 0,
-		},
 	}
 
 	for _, tt := range tests {
@@ -1527,11 +1515,11 @@ func TestParse_FR008_PlaceholderOnNonListLine_EmitsBNDW006(t *testing.T) {
 func TestParse_PlaceholderContinuationLine(t *testing.T) {
 	pragma := "<!-- prosemark-binder:v1 -->\n\n"
 	tests := []struct {
-		name        string
-		src         string
-		wantCount   int
-		wantTitle   string
-		wantTarget  string
+		name       string
+		src        string
+		wantCount  int
+		wantTitle  string
+		wantTarget string
 	}{
 		{
 			name:       "[Title]() on primary list line is recognized directly",
