@@ -35,3 +35,9 @@ lefthook-local.yml
 # Acceptance test pipeline (generated artifacts)
 acceptance-pipeline/ir/
 .ralph-acceptance.json
+
+# Dolt / beads database (local state, not tracked)
+.dolt/
+.doltcfg/
+beads_prosemark-go/
+config.yaml
