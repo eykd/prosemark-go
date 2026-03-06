@@ -3,18 +3,10 @@
 **Feature Branch**: `003-placeholder-parsing`
 **Created**: 2026-03-04
 **Status**: Draft
-**Beads Epic**: `prosemark-go-9el`
+**Beads Epic**: `prosemark-go-2zj`
 **Beads Phase Tasks**:
 
-- clarify: `prosemark-go-9el.1`
-- plan: `prosemark-go-9el.2`
-- red-team: `prosemark-go-9el.3`
-- tasks: `prosemark-go-9el.4`
-- analyze: `prosemark-go-9el.5`
-- implement: `prosemark-go-9el.6`
-- security-review: `prosemark-go-9el.7`
-- architecture-review: `prosemark-go-9el.8`
-- code-quality-review: `prosemark-go-9el.9`
+- implement: `prosemark-go-2zj.1`
 
 ## User Scenarios & Testing _(mandatory)_
 

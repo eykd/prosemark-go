@@ -14,5 +14,10 @@ func Test_A_binder_with_placeholder_items_serializes_identically_to_its_input(t 
 	// WHEN the file is parsed and then written back to text.
 	// THEN the output is byte-for-byte identical to the original input.
 
-	t.Skip("acceptance test not yet bound")
+	// Delegates to the conformance ParseStability suite for fixture dirs 121–125.
+	result := runConformance(t, "TestConformance_ParseStability/12")
+	if !result.OK {
+		t.Fatalf("round-trip stability failed for placeholder fixtures\nstdout: %s\nstderr: %s",
+			result.Stdout, result.Stderr)
+	}
 }

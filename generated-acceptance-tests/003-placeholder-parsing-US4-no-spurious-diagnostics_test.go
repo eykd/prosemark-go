@@ -4,6 +4,7 @@
 package acceptance_test
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -11,18 +12,37 @@ import (
 // Source: specs/003-placeholder-parsing/US4-no-spurious-diagnostics.txt:2
 func Test_A_placeholder_node_does_not_trigger_a_missing_file_diagnostic(t *testing.T) {
 	// GIVEN a binder file with a placeholder item in a project with known files.
-	// WHEN the binder is parsed.
-	// THEN no missing-file diagnostic is emitted for the placeholder node.
+	dir := t.TempDir()
+	writeFile(t, dir, "_binder.md", "<!-- prosemark-binder:v1 -->\n- [Planned]()\n")
 
-	t.Skip("acceptance test not yet bound")
+	// WHEN the binder is parsed.
+	result := runParse(t, dir+"/_binder.md")
+	if !result.OK {
+		t.Fatalf("expected exit 0\nstdout: %s\nstderr: %s", result.Stdout, result.Stderr)
+	}
+
+	// THEN no missing-file diagnostic is emitted for the placeholder node.
+	if !strings.Contains(result.Stdout, `"diagnostics":[]`) {
+		t.Errorf("expected no BNDW004 for placeholder, got: %s", result.Stdout)
+	}
 }
 
 // Two identical placeholder items do not trigger a duplicate diagnostic.
 // Source: specs/003-placeholder-parsing/US4-no-spurious-diagnostics.txt:11
 func Test_Two_identical_placeholder_items_do_not_trigger_a_duplicate_diagnostic(t *testing.T) {
 	// GIVEN a binder file with two placeholder items that share the same title.
-	// WHEN the binder is parsed.
-	// THEN no duplicate-reference diagnostic is emitted.
+	dir := t.TempDir()
+	writeFile(t, dir, "_binder.md",
+		"<!-- prosemark-binder:v1 -->\n- [Draft]()\n- [Draft]()\n")
 
-	t.Skip("acceptance test not yet bound")
+	// WHEN the binder is parsed.
+	result := runParse(t, dir+"/_binder.md")
+	if !result.OK {
+		t.Fatalf("expected exit 0\nstdout: %s\nstderr: %s", result.Stdout, result.Stderr)
+	}
+
+	// THEN no duplicate-reference diagnostic is emitted.
+	if !strings.Contains(result.Stdout, `"diagnostics":[]`) {
+		t.Errorf("expected no BNDW003 for identical placeholders, got: %s", result.Stdout)
+	}
 }
