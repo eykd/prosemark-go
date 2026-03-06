@@ -9,6 +9,10 @@
       "Bash(./bin/pmk:*)"
     ]
   },
+  "statusLine": {
+    "type": "command",
+    "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/scripts/status-line.sh"
+  },
   "hooks": {
     "PreToolUse": [
       {
