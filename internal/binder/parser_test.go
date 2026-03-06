@@ -1293,3 +1293,275 @@ func TestParse_EscapedBracketTitle_TitleIsDisplayForm(t *testing.T) {
 		})
 	}
 }
+
+// TestParse_PlaceholderNodes verifies FR-001, FR-002, FR-004, FR-005, FR-007, FR-008:
+// placeholder links produce real nodes in the tree, are exempt from duplicate detection,
+// support child nesting, work with all list marker styles, and are NOT promoted from
+// non-structural positions (code fences, non-list lines).
+func TestParse_PlaceholderNodes(t *testing.T) {
+	pragma := "<!-- prosemark-binder:v1 -->\n\n"
+	tests := []struct {
+		name          string
+		src           string
+		wantChildren  int
+		wantDiagCount int
+		wantTitle     string // only checked when wantChildren == 1
+		wantTarget    string // only checked when wantChildren == 1
+	}{
+		{
+			name:         "single [Title]() produces one node with correct title and empty target",
+			src:          pragma + "- [Chapter 3]()\n",
+			wantChildren: 1,
+			wantTitle:    "Chapter 3",
+			wantTarget:   "",
+		},
+		{
+			name:         "[]() produces one node with empty title and empty target",
+			src:          pragma + "- []()\n",
+			wantChildren: 1,
+			wantTitle:    "",
+			wantTarget:   "",
+		},
+		{
+			name:         "[ ]() whitespace title produces one node with empty title",
+			src:          pragma + "- [ ]()\n",
+			wantChildren: 1,
+			wantTitle:    "",
+			wantTarget:   "",
+		},
+		{
+			name:          "duplicate placeholder titles produce two nodes without BNDW003",
+			src:           pragma + "- [Chapter]()\n- [Chapter]()\n",
+			wantChildren:  2,
+			wantDiagCount: 0,
+		},
+		{
+			name:         "dash marker produces placeholder node",
+			src:          pragma + "- [Part I]()\n",
+			wantChildren: 1,
+			wantTitle:    "Part I",
+		},
+		{
+			name:         "asterisk marker produces placeholder node",
+			src:          pragma + "* [Part I]()\n",
+			wantChildren: 1,
+			wantTitle:    "Part I",
+		},
+		{
+			name:         "plus marker produces placeholder node",
+			src:          pragma + "+ [Part I]()\n",
+			wantChildren: 1,
+			wantTitle:    "Part I",
+		},
+		{
+			name:         "ordered marker produces placeholder node",
+			src:          pragma + "1. [Part I]()\n",
+			wantChildren: 1,
+			wantTitle:    "Part I",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, diags, err := binder.Parse(context.Background(), []byte(tt.src), nil)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if len(result.Root.Children) != tt.wantChildren {
+				t.Errorf("root children = %d, want %d (diags: %v)", len(result.Root.Children), tt.wantChildren, diags)
+			}
+			if tt.wantDiagCount > 0 && len(diags) != tt.wantDiagCount {
+				t.Errorf("diag count = %d, want %d", len(diags), tt.wantDiagCount)
+			}
+			if tt.wantChildren == 1 && len(result.Root.Children) == 1 {
+				node := result.Root.Children[0]
+				if node.Title != tt.wantTitle {
+					t.Errorf("node.Title = %q, want %q", node.Title, tt.wantTitle)
+				}
+				if node.Target != tt.wantTarget {
+					t.Errorf("node.Target = %q, want %q", node.Target, tt.wantTarget)
+				}
+			}
+		})
+	}
+}
+
+// TestParse_PlaceholderNodes_ParentWithChild verifies FR-005: a placeholder node may
+// act as a parent in the hierarchy, with file-backed children nested beneath it.
+func TestParse_PlaceholderNodes_ParentWithChild(t *testing.T) {
+	pragma := "<!-- prosemark-binder:v1 -->\n\n"
+	src := pragma + "- [Part I]()\n  - [chapter-one.md](chapter-one.md)\n"
+	result, diags, err := binder.Parse(context.Background(), []byte(src), nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result.Root.Children) != 1 {
+		t.Fatalf("root children = %d, want 1 (diags: %v)", len(result.Root.Children), diags)
+	}
+	parent := result.Root.Children[0]
+	if parent.Target != "" {
+		t.Errorf("parent.Target = %q, want empty (placeholder)", parent.Target)
+	}
+	if parent.Title != "Part I" {
+		t.Errorf("parent.Title = %q, want %q", parent.Title, "Part I")
+	}
+	if len(parent.Children) != 1 {
+		t.Errorf("parent children = %d, want 1", len(parent.Children))
+		return
+	}
+	child := parent.Children[0]
+	if child.Target != "chapter-one.md" {
+		t.Errorf("child.Target = %q, want %q", child.Target, "chapter-one.md")
+	}
+}
+
+// TestParse_FR008_PlaceholderInCodeFence_EmitsBNDW005 is a precision regression guard
+// for FR-008: when [Title]() appears inside a fenced code block, the parser must NOT
+// promote it to a structural node AND must still emit BNDW005 (existing fence-link
+// diagnostic behavior unchanged after emptyTargetLinkRE was added).
+func TestParse_FR008_PlaceholderInCodeFence_EmitsBNDW005(t *testing.T) {
+	pragma := "<!-- prosemark-binder:v1 -->\n\n"
+	tests := []struct {
+		name  string
+		src   string
+		fence string // fence marker for documentation
+	}{
+		{
+			name:  "backtick fence: [Title]() emits BNDW005 and produces no node",
+			src:   pragma + "```\n- [Chapter]()\n```\n",
+			fence: "backtick",
+		},
+		{
+			name:  "tilde fence: [Title]() emits BNDW005 and produces no node",
+			src:   pragma + "~~~\n- [Chapter]()\n~~~\n",
+			fence: "tilde",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, diags, err := binder.Parse(context.Background(), []byte(tt.src), nil)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if len(result.Root.Children) != 0 {
+				t.Errorf("root children = %d, want 0 (placeholder in fence must not become a node)", len(result.Root.Children))
+			}
+			found := false
+			for _, d := range diags {
+				if d.Code == binder.CodeLinkInCodeFence {
+					found = true
+					if d.Severity != "warning" {
+						t.Errorf("BNDW005 severity = %q, want %q", d.Severity, "warning")
+					}
+				}
+			}
+			if !found {
+				t.Errorf("expected BNDW005 for placeholder [Title]() inside %s code fence, got none (diags: %v)", tt.fence, diags)
+			}
+		})
+	}
+}
+
+// TestParse_FR008_PlaceholderOnNonListLine_EmitsBNDW006 verifies FR-008: a placeholder
+// link [Title]() that appears on a non-list paragraph line must not be promoted to a
+// structural node, and BNDW006 (link outside list) must be emitted to alert the author
+// that the placeholder is misplaced. Placeholder links are structural links per the spec
+// definition ("may have an empty or non-empty file path"); the existing BNDW006 mechanism
+// that warns for .md links outside lists should also apply to placeholder links.
+func TestParse_FR008_PlaceholderOnNonListLine_EmitsBNDW006(t *testing.T) {
+	pragma := "<!-- prosemark-binder:v1 -->\n\n"
+	tests := []struct {
+		name string
+		src  string
+	}{
+		{
+			name: "bare paragraph line: [Chapter]() emits BNDW006 and produces no node",
+			src:  pragma + "[Chapter]()\n",
+		},
+		{
+			name: "inline prose: [Part I]() in a sentence emits BNDW006 and produces no node",
+			src:  pragma + "See also [Part I]() for details.\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, diags, err := binder.Parse(context.Background(), []byte(tt.src), nil)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if len(result.Root.Children) != 0 {
+				t.Errorf("root children = %d, want 0 (placeholder on non-list line must not become a node)", len(result.Root.Children))
+			}
+			found := false
+			for _, d := range diags {
+				if d.Code == binder.CodeLinkOutsideList {
+					found = true
+					if d.Severity != "warning" {
+						t.Errorf("BNDW006 severity = %q, want %q", d.Severity, "warning")
+					}
+				}
+			}
+			if !found {
+				t.Errorf("expected BNDW006 for placeholder [Title]() on non-list line, got none (diags: %v)", diags)
+			}
+		})
+	}
+}
+
+// TestParse_PlaceholderContinuationLine verifies that placeholders are recognized on
+// continuation lines (second line of a multi-line list item).
+func TestParse_PlaceholderContinuationLine(t *testing.T) {
+	pragma := "<!-- prosemark-binder:v1 -->\n\n"
+	tests := []struct {
+		name       string
+		src        string
+		wantCount  int
+		wantTitle  string
+		wantTarget string
+	}{
+		{
+			name:       "[Title]() on primary list line is recognized directly",
+			src:        pragma + "- [Chapter 3]()\n",
+			wantCount:  1,
+			wantTitle:  "Chapter 3",
+			wantTarget: "",
+		},
+		{
+			name:       "[Title]() on continuation line produces a placeholder node",
+			src:        pragma + "- placeholder text\n  [Chapter 3]()\n",
+			wantCount:  1,
+			wantTitle:  "Chapter 3",
+			wantTarget: "",
+		},
+		{
+			name:       "real file link on continuation line produces a file-backed node",
+			src:        pragma + "- some text\n  [chapter-one.md](chapter-one.md)\n",
+			wantCount:  1,
+			wantTitle:  "chapter-one.md",
+			wantTarget: "chapter-one.md",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, diags, err := binder.Parse(context.Background(), []byte(tt.src), nil)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if len(result.Root.Children) != tt.wantCount {
+				t.Fatalf("root children = %d, want %d (diags: %v)", len(result.Root.Children), tt.wantCount, diags)
+			}
+			if tt.wantCount == 1 {
+				node := result.Root.Children[0]
+				if node.Title != tt.wantTitle {
+					t.Errorf("node.Title = %q, want %q", node.Title, tt.wantTitle)
+				}
+				if node.Target != tt.wantTarget {
+					t.Errorf("node.Target = %q, want %q", node.Target, tt.wantTarget)
+				}
+			}
+		})
+	}
+}

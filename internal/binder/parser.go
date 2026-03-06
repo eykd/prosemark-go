@@ -11,18 +11,20 @@ import (
 )
 
 var (
-	pragmaRE        = regexp.MustCompile(`<\\?!--\s*prosemark-binder:v1\s*-->`)
-	linkRE          = regexp.MustCompile(`\[[^\]]*\]\([^)]*\)`)
-	listItemRE      = regexp.MustCompile(`^(\s*)([-*+]|\d+[.)])\s+(.+)`)
-	inlineLinkRE    = regexp.MustCompile(`^\[((?:[^\]\\]|\\.)*)\]\(([^)"]+)(?:\s+"[^"]*")?\s*\)`)
-	fullRefLinkRE   = regexp.MustCompile(`^\[([^\]]*)\]\[([^\]]+)\]`)
-	collapsedRefRE  = regexp.MustCompile(`^\[([^\]]*)\]\[\]`)
-	wikilinkRE      = regexp.MustCompile(`^!?\[\[([^\]|]+)(?:\|([^\]]*))?\]\]`)
-	shortcutRefRE   = regexp.MustCompile(`^\[([^\]]+)\]$`)
-	refDefRE        = regexp.MustCompile(`^\[([^\]]+)\]:\s+(\S+)(?:\s+"([^"]*)")?`)
-	mdInlineLinkRE  = regexp.MustCompile(`\[[^\]]*\]\([^)]*\.md[^)]*\)`)
-	checkboxRE      = regexp.MustCompile(`^\[[xX ]\]\s+`)
-	strikethroughRE = regexp.MustCompile(`~~[^~]*~~`)
+	pragmaRE             = regexp.MustCompile(`<\\?!--\s*prosemark-binder:v1\s*-->`)
+	linkRE               = regexp.MustCompile(`\[[^\]]*\]\([^)]*\)`)
+	listItemRE           = regexp.MustCompile(`^(\s*)([-*+]|\d+[.)])\s+(.+)`)
+	emptyTargetLinkRE    = regexp.MustCompile(`^\[((?:[^\]\\]|\\.)*)\]\(\s*\)`)
+	anyEmptyTargetLinkRE = regexp.MustCompile(`\[((?:[^\]\\]|\\.)*)\]\(\s*\)`)
+	inlineLinkRE         = regexp.MustCompile(`^\[((?:[^\]\\]|\\.)*)\]\(([^)"]+)(?:\s+"[^"]*")?\s*\)`)
+	fullRefLinkRE        = regexp.MustCompile(`^\[([^\]]*)\]\[([^\]]+)\]`)
+	collapsedRefRE       = regexp.MustCompile(`^\[([^\]]*)\]\[\]`)
+	wikilinkRE           = regexp.MustCompile(`^!?\[\[([^\]|]+)(?:\|([^\]]*))?\]\]`)
+	shortcutRefRE        = regexp.MustCompile(`^\[([^\]]+)\]$`)
+	refDefRE             = regexp.MustCompile(`^\[([^\]]+)\]:\s+(\S+)(?:\s+"([^"]*)")?`)
+	mdInlineLinkRE       = regexp.MustCompile(`\[[^\]]*\]\([^)]*\.md[^)]*\)`)
+	checkboxRE           = regexp.MustCompile(`^\[[xX ]\]\s+`)
+	strikethroughRE      = regexp.MustCompile(`~~[^~]*~~`)
 	// allInlineLinkRE finds all inline links anywhere in content.
 	allInlineLinkRE = regexp.MustCompile(`\[((?:[^\]\\]|\\.)*)\]\(([^)"]+)(?:\s+"[^"]*")?\s*\)`)
 )
@@ -128,8 +130,8 @@ func Parse(ctx context.Context, src []byte, project *Project) (*ParseResult, []D
 
 		m := listItemRE.FindStringSubmatch(line)
 		if m == nil {
-			// Not a list item: check for .md inline links outside lists (BNDW006).
-			if mdInlineLinkRE.MatchString(line) {
+			// Not a list item: check for .md inline links or placeholder links outside lists (BNDW006).
+			if mdInlineLinkRE.MatchString(line) || anyEmptyTargetLinkRE.MatchString(line) {
 				diags = append(diags, Diagnostic{
 					Severity: "warning",
 					Code:     CodeLinkOutsideList,
@@ -150,19 +152,24 @@ func Parse(ctx context.Context, src []byte, project *Project) (*ParseResult, []D
 
 		content = normalizeListContent(content)
 
-		target, title, linkDiags := parseLink(content, result.RefDefs, wikiIndex, binderDir, lineNum, listItemColumn)
+		target, title, found, linkDiags := parseLink(content, result.RefDefs, wikiIndex, binderDir, lineNum, listItemColumn)
 
 		// If no link found in content, check the immediately following continuation line.
-		if target == "" && i+1 < len(result.Lines) {
+		if !found && i+1 < len(result.Lines) {
 			nextLine := result.Lines[i+1]
 			// A continuation line has more indentation than the list marker level.
 			if countLeadingWhitespace(nextLine) > indent && !listItemRE.MatchString(nextLine) {
 				contContent := normalizeListContent(strings.TrimSpace(nextLine))
-				t, ti, ld := parseLink(contContent, result.RefDefs, wikiIndex, binderDir, i+2, 0)
+				t, ti, tFound, ld := parseLink(contContent, result.RefDefs, wikiIndex, binderDir, i+2, 0)
 				consumed[i+1] = true
-				if t != "" {
-					target, title = t, ti
+				if tFound {
+					found = true
 					linkDiags = ld
+					if t != "" {
+						target, title = t, ti
+					} else {
+						title = ti
+					}
 				}
 			}
 		}
@@ -171,12 +178,15 @@ func Parse(ctx context.Context, src []byte, project *Project) (*ParseResult, []D
 		diags = append(diags, linkDiags...)
 
 		// Skip items with no resolved target.
-		if target == "" {
+		if !found {
 			continue
 		}
 
+		// Placeholder node: found=true with empty target (e.g. [Title]() or []()).
+		isPlaceholder := target == ""
+
 		// Handle non-md first link: if target is non-md, look for an md link elsewhere.
-		if !isMarkdownTarget(target) && !hasIllegalPathChars(target) && !escapesRoot(target) {
+		if !isPlaceholder && !isMarkdownTarget(target) && !hasIllegalPathChars(target) && !escapesRoot(target) {
 			// Emit BNDW007 for this non-md link and try to find an md link in content.
 			diags = append(diags, Diagnostic{
 				Severity: "warning",
@@ -193,26 +203,30 @@ func Parse(ctx context.Context, src []byte, project *Project) (*ParseResult, []D
 		}
 
 		// Percent-decode the target before validation.
-		decoded, decodeOK := percentDecodeTarget(target)
-		if !decodeOK {
-			diags = append(diags, Diagnostic{
-				Severity: "error",
-				Code:     CodeIllegalPathChars,
-				Message:  fmt.Sprintf("Illegal path characters in link target: %s", target),
-				Location: &Location{Line: lineNum, Column: listItemColumn},
-			})
-			continue
+		if !isPlaceholder {
+			decoded, decodeOK := percentDecodeTarget(target)
+			if !decodeOK {
+				diags = append(diags, Diagnostic{
+					Severity: "error",
+					Code:     CodeIllegalPathChars,
+					Message:  fmt.Sprintf("Illegal path characters in link target: %s", target),
+					Location: &Location{Line: lineNum, Column: listItemColumn},
+				})
+				continue
+			}
+			target = decoded
 		}
-		target = decoded
 
 		// Validate target path.
-		if diag := validateTarget(target, lineNum, listItemColumn); diag != nil {
-			diags = append(diags, *diag)
-			continue
+		if !isPlaceholder {
+			if diag := validateTarget(target, lineNum, listItemColumn); diag != nil {
+				diags = append(diags, *diag)
+				continue
+			}
 		}
 
 		// Check for self-referential link (BNDW008).
-		if target == "_binder.md" {
+		if !isPlaceholder && target == "_binder.md" {
 			diags = append(diags, Diagnostic{
 				Severity: "warning",
 				Code:     CodeSelfReferentialLink,
@@ -223,46 +237,52 @@ func Parse(ctx context.Context, src []byte, project *Project) (*ParseResult, []D
 		}
 
 		// Check for duplicate file reference (BNDW003).
-		if seenTargets[target] {
-			diags = append(diags, Diagnostic{
-				Severity: "warning",
-				Code:     CodeDuplicateFileRef,
-				Message:  fmt.Sprintf("Duplicate file reference: %s appears as more than one node in the binder tree", target),
-				Location: &Location{Line: lineNum},
-			})
+		if !isPlaceholder {
+			if seenTargets[target] {
+				diags = append(diags, Diagnostic{
+					Severity: "warning",
+					Code:     CodeDuplicateFileRef,
+					Message:  fmt.Sprintf("Duplicate file reference: %s appears as more than one node in the binder tree", target),
+					Location: &Location{Line: lineNum},
+				})
+			}
+			seenTargets[target] = true
 		}
-		seenTargets[target] = true
 
 		// Check for missing/case-mismatch target file when project context is available.
 		// Normalize "./" prefix before lookup so "./a.md" and "a.md" resolve to the same file.
-		lookupTarget := strings.TrimPrefix(target, "./")
-		if project != nil && !projectFileSet[lookupTarget] {
-			// Check for case-insensitive match (BNDW009).
-			if lowerMatch := projectFilesLower[strings.ToLower(lookupTarget)]; lowerMatch != "" {
-				diags = append(diags, Diagnostic{
-					Severity: "warning",
-					Code:     CodeCaseInsensitiveMatch,
-					Message:  fmt.Sprintf("case-insensitive match found: %s → %s", target, lowerMatch),
-					Location: &Location{Line: lineNum},
-				})
-			} else {
-				diags = append(diags, Diagnostic{
-					Severity: "warning",
-					Code:     CodeMissingTargetFile,
-					Message:  fmt.Sprintf("Target file %s is not present in the project", target),
-					Location: &Location{Line: lineNum},
-				})
+		if !isPlaceholder {
+			lookupTarget := strings.TrimPrefix(target, "./")
+			if project != nil && !projectFileSet[lookupTarget] {
+				// Check for case-insensitive match (BNDW009).
+				if lowerMatch := projectFilesLower[strings.ToLower(lookupTarget)]; lowerMatch != "" {
+					diags = append(diags, Diagnostic{
+						Severity: "warning",
+						Code:     CodeCaseInsensitiveMatch,
+						Message:  fmt.Sprintf("case-insensitive match found: %s → %s", target, lowerMatch),
+						Location: &Location{Line: lineNum},
+					})
+				} else {
+					diags = append(diags, Diagnostic{
+						Severity: "warning",
+						Code:     CodeMissingTargetFile,
+						Message:  fmt.Sprintf("Target file %s is not present in the project", target),
+						Location: &Location{Line: lineNum},
+					})
+				}
 			}
 		}
 
 		// Check for multiple structural .md links in one list item (BNDW002).
-		if allMd := mdInlineLinkRE.FindAllString(content, -1); len(allMd) > 1 {
-			diags = append(diags, Diagnostic{
-				Severity: "warning",
-				Code:     CodeMultipleStructLinks,
-				Message:  "list item contains multiple structural links; only the first is used",
-				Location: &Location{Line: lineNum},
-			})
+		if !isPlaceholder {
+			if allMd := mdInlineLinkRE.FindAllString(content, -1); len(allMd) > 1 {
+				diags = append(diags, Diagnostic{
+					Severity: "warning",
+					Code:     CodeMultipleStructLinks,
+					Message:  "list item contains multiple structural links; only the first is used",
+					Location: &Location{Line: lineNum},
+				})
+			}
 		}
 
 		node := &Node{
@@ -340,14 +360,21 @@ func pass1Scan(lines []string) pass1Data {
 	return result
 }
 
-// parseLink parses the content portion of a list item and returns (target, title, diags).
-// Returns ("", "", nil) if no link can be resolved.
-func parseLink(content string, refDefs map[string]RefDef, wikiIndex map[string][]wikilinkEntry, binderDir string, lineNum, column int) (target, title string, diags []Diagnostic) {
+// parseLink parses the content portion of a list item and returns (target, title, found, diags).
+// found is true when a link structure was resolved (including placeholder nodes with empty target).
+// Returns ("", "", false, nil) if no link can be resolved.
+func parseLink(content string, refDefs map[string]RefDef, wikiIndex map[string][]wikilinkEntry, binderDir string, lineNum, column int) (target, title string, found bool, diags []Diagnostic) {
+	if m := emptyTargetLinkRE.FindStringSubmatch(content); m != nil {
+		title = strings.TrimSpace(unescapeTitle(m[1]))
+		found = true
+		return
+	}
 	if m := inlineLinkRE.FindStringSubmatch(content); m != nil {
 		target, title = m[2], unescapeTitle(m[1])
 		if title == "" {
 			title = stemFromPath(target)
 		}
+		found = true
 	} else if m := wikilinkRE.FindStringSubmatch(content); m != nil {
 		rawStem := m[1]
 		alias := m[2]
@@ -359,17 +386,23 @@ func parseLink(content string, refDefs map[string]RefDef, wikiIndex map[string][
 			}
 		}
 		target, title, diags = resolveWikilink(rawStem, alias, wikiIndex, binderDir, lineNum, column)
+		if target != "" {
+			found = true
+		}
 	} else if m := fullRefLinkRE.FindStringSubmatch(content); m != nil {
 		if rd, exists := refDefs[strings.ToLower(m[2])]; exists {
 			target, title = rd.Target, m[1]
+			found = true
 		}
 	} else if m := collapsedRefRE.FindStringSubmatch(content); m != nil {
 		if rd, exists := refDefs[strings.ToLower(m[1])]; exists {
 			target, title = rd.Target, m[1]
+			found = true
 		}
 	} else if m := shortcutRefRE.FindStringSubmatch(content); m != nil {
 		if rd, exists := refDefs[strings.ToLower(m[1])]; exists {
 			target, title = rd.Target, m[1]
+			found = true
 		}
 	}
 	return

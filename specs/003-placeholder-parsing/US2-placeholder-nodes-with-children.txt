@@ -1,0 +1,18 @@
+;===============================================================
+; A placeholder parent can contain a file-backed child node.
+;===============================================================
+GIVEN a binder file with a placeholder item that has an indented file-backed child.
+
+WHEN the binder is parsed.
+
+THEN the parse result contains a placeholder parent node.
+THEN the parent node has one child with a non-empty file path.
+
+;===============================================================
+; Placeholder nodes can be nested three levels deep.
+;===============================================================
+GIVEN a binder file with placeholder nodes nested three levels deep.
+
+WHEN the binder is parsed.
+
+THEN each placeholder node appears at the correct depth in the outline.
