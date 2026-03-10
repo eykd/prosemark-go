@@ -98,6 +98,9 @@ An AI agent runs `pmk --help` to discover the tool's capabilities. The output in
 
 ### Edge Cases
 
+- Missing `--yes` flag on mutation commands: handled as a Cobra required-flag error (exit 1), not via OPE009. OPE009 is reserved exclusively for transient/I/O failures.
+- Dry-run + --yes interaction: `--dry-run` bypasses the `--yes` requirement. Since no changes are made, confirmation is unnecessary. Agents can preview operations without providing `--yes`.
+- Init command output: `init` uses `OpResult` (same as mutation commands) for consistent JSON output. Created files are reported as info-level diagnostics.
 - Exit code mapping with multiple diagnostics of different severity: the first error diagnostic's mapped exit code wins (positional order).
 - Exit code for warnings-only: exit 0 (warnings are not errors).
 - Dry-run with `--json` and diagnostics: diagnostics are still emitted in the output.
@@ -134,7 +137,7 @@ An AI agent runs `pmk --help` to discover the tool's capabilities. The output in
 - **FR-014**: When `--dry-run` is set, all validation and diagnostic computation MUST still execute fully.
 - **FR-015**: The `OpResult` struct MUST include a `DryRun bool` field with JSON tag `json:"dryRun,omitempty"`.
 - **FR-016**: In human mode with `--dry-run`, output MUST be prefixed with `dry-run:` to indicate no changes were made.
-- **FR-017**: The `init` command with `--dry-run` MUST report what files would be created without creating them.
+- **FR-017**: The `init` command MUST use `OpResult` for output (both human and JSON modes), with created files reported as info-level diagnostics. With `--dry-run`, it MUST report what files would be created without creating them.
 - **FR-018**: Read-only commands (`parse`, `doctor`) MUST accept `--dry-run` without error but behave identically (no-op).
 
 #### Phase 4: Help Text Enrichment
@@ -178,6 +181,9 @@ An AI agent runs `pmk --help` to discover the tool's capabilities. The output in
 ### Session 2026-03-10
 
 - Q: When multiple error diagnostics with different exit codes are present, which strategy determines the final exit code? → A: First error diagnostic's mapped exit code wins (positional order).
+- Q: OPE009 is mapped to exit 6 (I/O) but also used for missing --yes. How should missing --yes be handled? → A: Treat missing --yes as a Cobra-level required flag error (exit 1); remove it from OPE009 usage. OPE009 remains exclusively for transient/I/O failures.
+- Q: Should --dry-run bypass the --yes requirement on mutation commands? → A: Yes. --dry-run bypasses --yes since no changes are made; agents can preview without confirmation.
+- Q: What JSON structure should `init --dry-run --json` output? → A: Switch init to use OpResult (same as mutation commands) with info-level diagnostics for created files.
 
 ## Interview
 
@@ -188,3 +194,6 @@ _(none remaining)_
 ### Answer Log
 
 - **Q1** (2026-03-10): Multiple-error exit code resolution strategy → **A: First-error-wins (positional)**
+- **Q2** (2026-03-10): OPE009 dual meaning (I/O failure vs missing --yes) → **A: Missing --yes is Cobra required-flag error (exit 1); OPE009 stays I/O-only**
+- **Q3** (2026-03-10): Dry-run + --yes interaction → **A: --dry-run bypasses --yes; no confirmation needed for previews**
+- **Q4** (2026-03-10): Init dry-run JSON format → **A: Use OpResult with info-level diagnostics for created files**

@@ -231,6 +231,70 @@ if dryRun {
 
 Phases 2 and 3 depend on Phase 1 (exit codes must be in place). Phases 2 and 3 are independent of each other. Phase 4 depends on Phases 1 and 3 (documents exit codes and --dry-run).
 
+## Edge Cases & Error Handling
+
+_Added by red team review (2026-03-10)._
+
+### OPE009 Dual Meaning
+
+OPE009 is currently used for both "I/O or parse failure" (mapped to exit code 6) AND "missing --yes confirmation" in delete/move commands. A missing `--yes` flag is a usage error, not a transient I/O failure. **Resolution**: Verify that the `--yes` check produces a distinct diagnostic code (or a Cobra-level error) that maps to exit code 1 (usage), not OPE009. If delete/move currently emit OPE009 for missing `--yes`, either: (a) introduce a new code like OPE011 for missing confirmation, mapped to exit 1; or (b) confirm this is handled at the Cobra required-flag level and never reaches the diagnostic mapper.
+
+### Dry-Run + --yes Interaction
+
+Mutation commands (`delete`, `move`) require `--yes` for non-interactive confirmation. When `--dry-run` is active, no changes are made, so requiring `--yes` adds unnecessary friction for agents previewing operations. **Resolution**: When `--dry-run` is set, `--yes` should NOT be required. The command should proceed through validation and produce the preview result without needing confirmation. Document this interaction in the `--dry-run` flag help text.
+
+### Edit Command Inherits --dry-run
+
+The `edit` command opens `$EDITOR` interactively. As a persistent flag on root, `--dry-run` is inherited by `edit`. The plan says "no dry-run needed" for edit, but doesn't specify what happens if a user passes `--dry-run` to `edit`. **Resolution**: `edit` should accept `--dry-run` silently (same as `parse`/`doctor`) since it doesn't perform destructive writes to the binder. The editor session is the user's intent, not a mutation pmk controls. No special handling needed beyond accepting the flag.
+
+### Init Dry-Run Output Format
+
+`init` currently prints ad-hoc messages rather than using `OpResult`. **Resolution**: Refactor `init` to use `OpResult` for output (same as mutation commands). Created files are reported as info-level diagnostics. In dry-run mode, `DryRun: true` and `Changed: false`; files that would be created appear as info-level diagnostics. This gives agents a single JSON schema across all commands.
+
+### Suggestion Attachment Centralization
+
+Each command's `RunE` must individually call `attachSuggestions` after producing diagnostics. If any command omits this call, suggestions silently don't appear — a regression risk as commands are added. **Resolution**: Rather than centralizing (which would add complexity), mitigate by: (1) adding a unit test per command that verifies suggestions appear on known diagnostic codes, and (2) documenting the `attachSuggestions` call as a required step in the command implementation pattern.
+
+### Diagnostic Merge Order
+
+"First error diagnostic's mapped exit code wins" depends on deterministic ordering of merged parse + operation diagnostics in `OpResult.Diagnostics`. **Resolution**: Document that parse diagnostics come first (they're produced first), followed by operation diagnostics. This is the natural order and matches the current `OpResult` construction pattern. Add a test that verifies ordering when both parse and operation errors are present.
+
+### Unmapped Diagnostic Code Default
+
+If a new diagnostic code is added in the future but not added to the exit code mapping, `ExitCodeForDiagnostics` would silently return 0 (success) for an error diagnostic — hiding the failure from agents. **Resolution**: The mapping function must return a sensible default for unmapped error-level diagnostics. Use exit code 1 (general error) as the fallback for any error diagnostic whose code is not in the mapping table. Add a test that verifies an unknown error diagnostic code produces exit code 1, not 0.
+
+### Dry-Run Exit Code Consistency
+
+The plan implies but does not explicitly state that exit codes work identically in dry-run mode. An agent relying on exit codes to decide whether a real run would succeed needs dry-run to produce the same exit code as a real run. **Resolution**: Explicitly document that `--dry-run` does not affect exit code computation. If validation produces errors, the same exit code is returned regardless of `--dry-run`. Add a test that verifies dry-run exit codes match real-run exit codes for the same invalid inputs.
+
+### ExitError Survives Error Wrapping
+
+`main.go` uses `errors.As(err, &exitErr)` to extract `ExitError`. If any command wraps its return error (e.g., `fmt.Errorf("addchild: %w", exitErr)`), `errors.As` must still find the `ExitError` through the wrapping chain. **Resolution**: (1) Ensure `ExitError` implements `Unwrap()` (already in the plan). (2) Commands should return `ExitError` directly as the outermost error, not wrap it further. (3) Add a test in `main.go` tests that verifies `errors.As` extracts `ExitError` from a wrapped error chain.
+
+### Empty Diagnostics Edge Case
+
+`ExitCodeForDiagnostics(nil)` and `ExitCodeForDiagnostics([]Diagnostic{})` must return 0. This is the "no errors" case. **Resolution**: Add explicit unit tests for nil and empty slice inputs returning exit code 0. This is likely the natural behavior of the implementation but should be verified.
+
+### AuditDiagnostic Suggestion Path
+
+Doctor uses `node.AuditDiagnostic` (a different type from `binder.Diagnostic`). The plan mentions a separate `auditSuggestionMap` and conversion to `DoctorDiagnosticJSON`. **Resolution**: Ensure the suggestion attachment happens at the right point in the doctor pipeline — after converting `AuditDiagnostic` to `DoctorDiagnosticJSON` but before serialization. The `DoctorDiagnosticJSON` type must also have a `Suggestion` field. Add a test that verifies doctor output includes suggestions for known AUD codes.
+
+## Security Considerations
+
+_Added by red team review (2026-03-10)._
+
+### Error Message Content
+
+Suggestion strings include specific `pmk` commands (e.g., `Run 'pmk parse --json'`). For a local CLI tool, this is safe and desirable — suggestions are recovery hints, not secrets. No information leakage concern since the tool operates on local files the user already has access to.
+
+### Dry-Run Validation Integrity
+
+`--dry-run` must NOT bypass validation or diagnostic computation. The plan correctly specifies that "all validation and diagnostic computation MUST still execute fully" (FR-014). This is critical: if dry-run skipped validation, an agent could use dry-run to bypass safety checks and then assume the operation is safe. **Verify**: Unit tests must confirm that dry-run produces identical diagnostics to a real run for the same inputs.
+
+### Dry-Run as Scripted Oracle
+
+An agent might use `--dry-run` in a loop to probe many operations rapidly (e.g., testing every possible selector). Since dry-run still reads the binder file from disk on each invocation, this is bounded by filesystem I/O and process startup time — acceptable for a CLI tool. No mitigation needed, but worth noting that dry-run has no cheaper cost path than a real run (minus the write).
+
 ## Post-Design Constitution Re-Check
 
 | Principle | Status | Notes |
