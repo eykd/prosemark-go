@@ -1,0 +1,35 @@
+;===============================================================
+; Help output includes an exit codes table.
+;===============================================================
+GIVEN the tool is installed.
+
+WHEN the agent requests help for the tool.
+
+THEN the help output contains an exit codes table listing codes 0 through 6 with meanings.
+
+;===============================================================
+; Help output describes the project state model.
+;===============================================================
+GIVEN the tool is installed.
+
+WHEN the agent requests help for the tool.
+
+THEN the help output describes the state model including the configuration file and binder file.
+
+;===============================================================
+; Subcommand help includes usage examples.
+;===============================================================
+GIVEN the tool is installed.
+
+WHEN the agent requests help for the add-child subcommand.
+
+THEN the help output includes at least two usage examples.
+
+;===============================================================
+; Subcommand help documents dry-run.
+;===============================================================
+GIVEN the tool is installed.
+
+WHEN the agent requests help for the delete subcommand.
+
+THEN the help output documents the dry-run flag.

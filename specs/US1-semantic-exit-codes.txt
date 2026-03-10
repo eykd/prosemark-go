@@ -1,0 +1,54 @@
+;===============================================================
+; An agent can distinguish "not found" from other failures
+; by examining the process exit code.
+;===============================================================
+GIVEN a project with no node matching selector "nonexistent".
+
+WHEN the agent runs a delete command targeting "nonexistent".
+
+THEN the process exits with code 3.
+
+;===============================================================
+; Conflicting flags produce a usage error exit code.
+;===============================================================
+GIVEN a valid project.
+
+WHEN the agent runs an add-child command with conflicting position flags.
+
+THEN the process exits with code 1.
+
+;===============================================================
+; A missing binder file produces an I/O failure exit code.
+;===============================================================
+GIVEN a directory with no binder file.
+
+WHEN the agent runs a parse command.
+
+THEN the process exits with code 6.
+
+;===============================================================
+; A binder with invalid content produces a validation error exit code.
+;===============================================================
+GIVEN a binder with a node whose path contains illegal characters.
+
+WHEN the agent runs a parse command.
+
+THEN the process exits with code 2.
+
+;===============================================================
+; An ambiguous selector produces a conflict exit code.
+;===============================================================
+GIVEN a binder where a bare stem selector matches multiple nodes.
+
+WHEN the agent runs a delete command targeting the ambiguous selector.
+
+THEN the process exits with code 5.
+
+;===============================================================
+; A successful operation produces exit code zero.
+;===============================================================
+GIVEN a valid project with a binder.
+
+WHEN the agent runs a parse command.
+
+THEN the process exits with code 0.

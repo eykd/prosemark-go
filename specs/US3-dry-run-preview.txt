@@ -1,0 +1,50 @@
+;===============================================================
+; Dry-run delete shows what would change without modifying files.
+;===============================================================
+GIVEN a valid project with a delete target.
+
+WHEN the agent runs a delete command with dry-run enabled.
+
+THEN the output indicates dry-run mode.
+THEN the output shows what would change.
+THEN the binder file is unmodified.
+
+;===============================================================
+; Dry-run add-child in human mode shows a dry-run prefix.
+;===============================================================
+GIVEN a valid project.
+
+WHEN the agent runs an add-child command with dry-run enabled in human mode.
+
+THEN the output includes a dry-run prefix.
+THEN no files are created or modified.
+
+;===============================================================
+; Dry-run move shows what would change without modifying files.
+;===============================================================
+GIVEN a valid project with a move target.
+
+WHEN the agent runs a move command with dry-run enabled.
+
+THEN the output indicates dry-run mode.
+THEN the binder file is unmodified.
+
+;===============================================================
+; Dry-run still reports errors with the correct exit code.
+;===============================================================
+GIVEN an invalid selector.
+
+WHEN the agent runs a delete command with dry-run enabled targeting that selector.
+
+THEN the command reports the error.
+THEN the process exits with the correct error exit code.
+
+;===============================================================
+; Dry-run init describes what would be created without creating files.
+;===============================================================
+GIVEN a directory with no project.
+
+WHEN the agent runs an init command with dry-run enabled.
+
+THEN the output describes what files would be created.
+THEN no files are created.

@@ -1,0 +1,35 @@
+;===============================================================
+; A not-found error includes a suggestion to list available nodes.
+;===============================================================
+GIVEN a selector that matches no nodes.
+
+WHEN the agent runs a delete command targeting that selector.
+
+THEN the error output includes a suggestion to list available nodes.
+
+;===============================================================
+; JSON mode includes a suggestion field on the diagnostic.
+;===============================================================
+GIVEN a selector that matches no nodes.
+
+WHEN the agent runs a delete command in JSON mode targeting that selector.
+
+THEN the JSON output contains a suggestion field on the diagnostic.
+
+;===============================================================
+; Conflicting flags include a suggestion about which flags to use.
+;===============================================================
+GIVEN conflicting position flags.
+
+WHEN the agent runs an add-child command with those flags.
+
+THEN the error includes a suggestion about specifying only one positioning flag.
+
+;===============================================================
+; A missing binder file includes a suggestion to check the file.
+;===============================================================
+GIVEN a directory with no binder file.
+
+WHEN the agent runs a parse command.
+
+THEN the error includes a suggestion to check that the binder file exists.
