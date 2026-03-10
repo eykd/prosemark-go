@@ -101,6 +101,8 @@ Pipeline CLI: `go run ./acceptance/cmd/pipeline -action=<parse|generate|run>`
 - Filesystem (`{uuid}.md`, `{uuid}.notes.md`, `_binder.md`, `.prosemark.yml`) (002-node-identity)
 - Go 1.25.6 + `internal/binder` package (parser, serializer, types); `regexp`, `strings`, `fmt` from stdlib (003-placeholder-parsing)
 - Filesystem (binder files); no database or network I/O (003-placeholder-parsing)
+- Go 1.25.6 + cobra v1.10.2, spf13/pflag v1.0.9 (004-agent-native-cli)
+- Filesystem (`_binder.md`, `.prosemark.yml`, `{uuid}.md` node files) (004-agent-native-cli)
 
 
 ---
@@ -110,6 +112,6 @@ Pipeline CLI: `go run ./acceptance/cmd/pipeline -action=<parse|generate|run>`
 Always use subagents liberally and aggressively to conserve the main context window. Delegate research, exploration, and parallelizable work to subagents rather than doing it inline. This keeps the main context clean and allows more work to be done in parallel.
 
 ## Recent Changes
+- 004-agent-native-cli: Added Go 1.25.6 + cobra v1.10.2, spf13/pflag v1.0.9
 - 003-placeholder-parsing: Added Go 1.25.6 + `internal/binder` package (parser, serializer, types); `regexp`, `strings`, `fmt` from stdlib
 - 002-node-identity: Added Go 1.25.6
-- 001-prosemark-binder: Added Go 1.25 + cobra v1.10.2, spf13/pflag v1.0.9 (no new external dependencies needed)
