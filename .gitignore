@@ -41,3 +41,5 @@ acceptance-pipeline/ir/
 .doltcfg/
 beads_prosemark-go/
 config.yaml
+
+.sprite
