@@ -75,10 +75,13 @@ func newParseCmdWithGetCWD(reader ParseReader, getwd func() (string, error)) *co
 			}
 
 			if hasDiagnosticError(diags) {
+				var inner error
 				if parseErr != nil {
-					return fmt.Errorf("binder has parse errors: %w", parseErr)
+					inner = fmt.Errorf("binder has parse errors: %w", parseErr)
+				} else {
+					inner = fmt.Errorf("binder has parse errors")
 				}
-				return fmt.Errorf("binder has parse errors")
+				return &ExitError{Code: ExitCodeForDiagnostics(diags), Err: inner}
 			}
 			return nil
 		},

@@ -27,15 +27,6 @@ var moveParseBinderFn = binder.Parse
 // (atomic abort semantics). Parse errors are surfaced as diagnostics, not as a
 // returned error.
 func Move(ctx context.Context, src []byte, project *binder.Project, params binder.MoveParams) ([]byte, []binder.Diagnostic) {
-	// Require --yes confirmation (OPE009).
-	if !params.Yes {
-		return src, []binder.Diagnostic{{
-			Severity: "error",
-			Code:     binder.CodeIOOrParseFailure,
-			Message:  "move requires --yes confirmation",
-		}}
-	}
-
 	// Parse the source.
 	result, parseDiags, err := moveParseBinderFn(ctx, src, project)
 	if err != nil {
@@ -50,6 +41,15 @@ func Move(ctx context.Context, src []byte, project *binder.Project, params binde
 	sourceNodes, selDiags := moveEvalSourceSelector(params.SourceSelector, result.Root, result.Lines)
 	if len(sourceNodes) == 0 {
 		return src, append(parseDiags, selDiags...)
+	}
+
+	// Require --yes confirmation (OPE009).
+	if !params.Yes {
+		return src, []binder.Diagnostic{{
+			Severity: "error",
+			Code:     binder.CodeIOOrParseFailure,
+			Message:  "move requires --yes confirmation",
+		}}
 	}
 
 	var allDiags []binder.Diagnostic

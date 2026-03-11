@@ -77,7 +77,7 @@ func newDeleteCmdWithGetCWD(io DeleteIO, getwd func() (string, error)) *cobra.Co
 			}
 
 			if hasDiagnosticError(diags) {
-				return fmt.Errorf("delete has errors")
+				return &ExitError{Code: ExitCodeForDiagnostics(diags), Err: fmt.Errorf("delete has errors")}
 			}
 
 			if changed {
