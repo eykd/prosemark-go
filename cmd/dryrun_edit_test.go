@@ -2,14 +2,14 @@ package cmd
 
 import (
 	"bytes"
+	"strings"
 	"testing"
 )
 
 // --- edit dry-run tests ---
 //
-// The edit command currently has no dry-run support. It opens the editor and
-// writes files unconditionally. These tests verify the expected dry-run behavior:
-// skip editor, skip writes, skip notes creation.
+// The edit command supports dry-run: it skips the editor, skips file writes,
+// and skips notes file creation, printing what would happen instead.
 
 func TestEditCmd_DryRun_SkipsEditorOpen(t *testing.T) {
 	t.Setenv("EDITOR", "vi")
@@ -100,5 +100,22 @@ func TestEditCmd_DryRun_HumanOutputPrefix(t *testing.T) {
 	got := out.String()
 	if !bytes.HasPrefix([]byte(got), []byte("dry-run:")) {
 		t.Errorf("expected human output prefixed with 'dry-run:', got: %q", got)
+	}
+}
+
+func TestEditCmd_DryRun_NotAnnotatedAsNoOp(t *testing.T) {
+	c := NewEditCmd(nil)
+	if c.Annotations != nil && c.Annotations[dryRunAnnotationKey] == dryRunNoOp {
+		t.Error("edit command must NOT be annotated with dry-run=no-op; it has real dry-run behavior")
+	}
+}
+
+func TestEditCmd_DryRun_HelpTextDescribesMutationDryRun(t *testing.T) {
+	c := NewEditCmd(nil)
+	if strings.Contains(c.Long, "no effect") {
+		t.Error("edit command help must not claim --dry-run has no effect; it has real dry-run behavior")
+	}
+	if !strings.Contains(c.Long, dryRunHelpSuffix) {
+		t.Errorf("edit command Long must contain the mutation dry-run help suffix, got: %q", c.Long)
 	}
 }
