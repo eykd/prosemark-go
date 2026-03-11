@@ -157,9 +157,15 @@ func checkProjectConfig(io DoctorIO, projectDir string) []node.AuditDiagnostic {
 	if err != nil || !exists {
 		msg = ".prosemark.yml is missing or unreadable"
 	} else {
-		var cfg interface{}
+		var cfg struct {
+			Version string `yaml:"version"`
+		}
 		if err := yaml.Unmarshal(content, &cfg); err != nil {
 			msg = ".prosemark.yml contains invalid YAML"
+		} else if cfg.Version == "" {
+			msg = ".prosemark.yml missing version field"
+		} else if cfg.Version != "1" {
+			msg = fmt.Sprintf(".prosemark.yml has unrecognized version %q", cfg.Version)
 		}
 	}
 
