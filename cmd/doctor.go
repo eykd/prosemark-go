@@ -82,7 +82,7 @@ func newDoctorCmdWithGetCWD(io DoctorIO, getwd func() (string, error)) *cobra.Co
 			if err != nil {
 				uuidFiles = []string{}
 				dirScanDiags = []node.AuditDiagnostic{{
-					Code:     "AUDW002",
+					Code:     node.AUDW002,
 					Severity: node.SeverityWarning,
 					Message:  fmt.Sprintf("directory scan failed: %v", err),
 					Path:     projectDir,

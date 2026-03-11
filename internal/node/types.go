@@ -50,6 +50,8 @@ const (
 	AUD008 AuditCode = "AUD008"
 	// AUDW001 is a warning indicating a non-UUID filename linked in binder (backward-compatibility warning for Feature 001 projects).
 	AUDW001 AuditCode = "AUDW001"
+	// AUDW002 is a warning indicating the project directory scan failed (e.g. permission denied).
+	AUDW002 AuditCode = "AUDW002"
 	// BNDW001 is a warning propagated from the binder parser indicating the binder file is missing its pragma comment.
 	BNDW001 AuditCode = "BNDW001"
 )
