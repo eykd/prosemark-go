@@ -350,6 +350,33 @@ func TestRootCmd_EditCmd_BinderParseError_ShowsCannotParse(t *testing.T) {
 	}
 }
 
+// TestMutationSubcommands_Help_DocumentsDryRun verifies that mutation
+// subcommands mention --dry-run in their Long description text (the block
+// between the short description and the "Usage:" line in --help output).
+func TestMutationSubcommands_Help_DocumentsDryRun(t *testing.T) {
+	mutationCmds := []string{"add", "delete", "init", "move"}
+
+	for _, name := range mutationCmds {
+		t.Run(name, func(t *testing.T) {
+			root := NewRootCmd()
+			sub, _, err := root.Find([]string{name})
+			if err != nil {
+				t.Fatalf("subcommand %q not found: %v", name, err)
+			}
+
+			long := sub.Long
+			if long == "" {
+				t.Fatalf("%s has no Long description", name)
+			}
+
+			if !strings.Contains(long, "--dry-run") {
+				t.Errorf("%s Long description does not mention --dry-run:\n%s",
+					name, long)
+			}
+		})
+	}
+}
+
 // TestSubcommands_Help_ContainsExamples verifies that every subcommand has an
 // Example field with at least 2 usage examples in standard Cobra format.
 func TestSubcommands_Help_ContainsExamples(t *testing.T) {
