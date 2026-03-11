@@ -226,14 +226,14 @@ func TestDoctorCmd_DryRun_IdenticalExitCodeOnError(t *testing.T) {
 
 func TestParseCmd_DryRun_AnnotatedAsNoOp(t *testing.T) {
 	c := NewParseCmd(nil)
-	if c.Annotations == nil || c.Annotations["dry-run"] != "no-op" {
+	if c.Annotations == nil || c.Annotations[dryRunAnnotationKey] != dryRunNoOp {
 		t.Error("parse command must be annotated with dry-run=no-op (FR-018)")
 	}
 }
 
 func TestDoctorCmd_DryRun_AnnotatedAsNoOp(t *testing.T) {
 	c := NewDoctorCmd(nil)
-	if c.Annotations == nil || c.Annotations["dry-run"] != "no-op" {
+	if c.Annotations == nil || c.Annotations[dryRunAnnotationKey] != dryRunNoOp {
 		t.Error("doctor command must be annotated with dry-run=no-op (FR-018)")
 	}
 }

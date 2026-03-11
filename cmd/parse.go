@@ -35,7 +35,7 @@ func newParseCmdWithGetCWD(reader ParseReader, getwd func() (string, error)) *co
 		Short:        "Parse a binder file and output JSON",
 		Args:         cobra.NoArgs,
 		SilenceUsage: true,
-		Annotations:  map[string]string{"dry-run": "no-op"},
+		Annotations:  dryRunNoOpAnnotation(),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			binderPath, err := resolveBinderPathFromCmd(cmd, getwd)
 			if err != nil {

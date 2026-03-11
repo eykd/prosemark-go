@@ -15,6 +15,18 @@ import (
 // maxBinderFileSize is the maximum allowed size for _binder.md files (10 MB).
 const maxBinderFileSize = 10 * 1024 * 1024
 
+// dryRunAnnotationKey is the cobra annotation key declaring a command's dry-run policy.
+const dryRunAnnotationKey = "dry-run"
+
+// dryRunNoOp is the annotation value indicating --dry-run is accepted but has no effect.
+const dryRunNoOp = "no-op"
+
+// dryRunNoOpAnnotation returns the annotation map for read-only commands
+// where --dry-run is accepted as a no-op (FR-018).
+func dryRunNoOpAnnotation() map[string]string {
+	return map[string]string{dryRunAnnotationKey: dryRunNoOp}
+}
+
 // readBinderSizeLimitedImpl reads the binder file at path, rejecting files that
 // exceed maxBinderFileSize. Excluded from coverage because it wraps OS calls.
 func readBinderSizeLimitedImpl(path string) ([]byte, error) {
@@ -37,7 +49,7 @@ func NewRootCmd() *cobra.Command {
 		SilenceErrors: true,
 		RunE:          rootRunE,
 	}
-	root.PersistentFlags().Bool("dry-run", false, "preview changes without writing to disk")
+	root.PersistentFlags().Bool(dryRunAnnotationKey, false, "preview changes without writing to disk")
 	root.AddCommand(NewParseCmd(newDefaultParseReader()))
 	root.AddCommand(NewAddChildCmd(newDefaultAddChildIO()))
 	root.AddCommand(NewDeleteCmd(newDefaultDeleteIO()))
@@ -55,7 +67,7 @@ func rootRunE(cmd *cobra.Command, _ []string) error {
 // isDryRun returns true when the --dry-run persistent flag is set on cmd.
 // Returns false if the flag is not defined (e.g. in unit tests without a root parent).
 func isDryRun(cmd *cobra.Command) bool {
-	f := cmd.Flags().Lookup("dry-run")
+	f := cmd.Flags().Lookup(dryRunAnnotationKey)
 	if f == nil {
 		return false
 	}
