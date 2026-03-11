@@ -176,3 +176,60 @@ func TestAddChildCmd_JsonMode_DiagnosticError_ReturnsExitError(t *testing.T) {
 		t.Errorf("ExitError.Code = %d, want %d (ExitValidation)", exitErr.Code, ExitValidation)
 	}
 }
+
+// TestAddChildCmd_NewMode_TitleNewline_ReturnsExitError verifies that in --new
+// mode, a --title containing a newline character is rejected with ExitError
+// code 2 (ExitValidation).
+func TestAddChildCmd_NewMode_TitleNewline_ReturnsExitError(t *testing.T) {
+	mock := &mockAddChildIOWithNew{
+		mockAddChildIO: mockAddChildIO{
+			binderBytes: emptyBinder(),
+			project:     &binder.Project{Files: []string{}, BinderDir: "."},
+		},
+	}
+	c := NewAddChildCmd(mock)
+	c.SetOut(new(bytes.Buffer))
+	c.SetErr(new(bytes.Buffer))
+	c.SetArgs([]string{"--new", "--title", "Line1\nLine2", "--parent", ".", "--project", "."})
+
+	err := c.Execute()
+	if err == nil {
+		t.Fatal("expected error for title containing newline in --new mode")
+	}
+
+	var exitErr *ExitError
+	if !errors.As(err, &exitErr) {
+		t.Fatalf("expected ExitError, got %T: %v", err, err)
+	}
+	if exitErr.Code != ExitValidation {
+		t.Errorf("ExitError.Code = %d, want %d (ExitValidation)", exitErr.Code, ExitValidation)
+	}
+}
+
+// TestAddChildCmd_NonNewMode_TitleNewline_ReturnsExitError verifies that in
+// non-new mode (binder diagnostic path), a --title containing a newline
+// character triggers OPE012 and is rejected with ExitError code 2
+// (ExitValidation).
+func TestAddChildCmd_NonNewMode_TitleNewline_ReturnsExitError(t *testing.T) {
+	mock := &mockAddChildIO{
+		binderBytes: acBinder(),
+		project:     &binder.Project{Files: []string{"chapter-one.md"}, BinderDir: "."},
+	}
+	c := NewAddChildCmd(mock)
+	c.SetOut(new(bytes.Buffer))
+	c.SetErr(new(bytes.Buffer))
+	c.SetArgs([]string{"--parent", ".", "--target", "chapter-one.md", "--title", "Line1\nLine2", "--project", "."})
+
+	err := c.Execute()
+	if err == nil {
+		t.Fatal("expected error for title containing newline in non-new mode")
+	}
+
+	var exitErr *ExitError
+	if !errors.As(err, &exitErr) {
+		t.Fatalf("expected ExitError, got %T: %v", err, err)
+	}
+	if exitErr.Code != ExitValidation {
+		t.Errorf("ExitError.Code = %d, want %d (ExitValidation)", exitErr.Code, ExitValidation)
+	}
+}

@@ -139,7 +139,7 @@ func newAddChildCmdWithGetCWD(io NewNodeAddChildIO, getwd func() (string, error)
 
 			if newMode {
 				if err := node.ValidateNewNodeInput(target, title, synopsis); err != nil {
-					return err
+					return &ExitError{Code: ExitValidation, Err: err}
 				}
 				if target == "" {
 					id, genErr := nodeIDGenerator()

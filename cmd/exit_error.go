@@ -31,6 +31,7 @@ var diagnosticExitMap = map[string]int{
 	binder.CodeNodeInCodeFence:     ExitConflict,
 	binder.CodeIOOrParseFailure:    ExitTransient,
 	binder.CodeMissingConfirmation: ExitUsage,
+	binder.CodeInvalidTitleContent: ExitValidation,
 }
 
 // ExitCodeForDiagnostics returns the exit code for the first error diagnostic.
