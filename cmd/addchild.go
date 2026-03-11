@@ -313,6 +313,12 @@ func runNewMode(ctx context.Context, cmd *cobra.Command, io NewNodeAddChildIO, b
 
 	if opts.editMode && !dryRun {
 		if len(strings.Fields(opts.editor)) == 0 {
+			_ = io.DeleteFile(nodePath)
+			if result.changed {
+				if rollbackErr := io.WriteBinderAtomic(ctx, binderPath, binderBytes); rollbackErr != nil {
+					return fmt.Errorf("$EDITOR is not set; binder rollback also failed: %v", rollbackErr)
+				}
+			}
 			return fmt.Errorf("$EDITOR is not set")
 		}
 		if err := io.OpenEditor(opts.editor, nodePath); err != nil {
