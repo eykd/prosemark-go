@@ -43,8 +43,25 @@ func readBinderSizeLimitedImpl(path string) ([]byte, error) {
 // NewRootCmd creates the root pmk command with all subcommands registered.
 func NewRootCmd() *cobra.Command {
 	root := &cobra.Command{
-		Use:           "pmk",
-		Short:         "pmk - prosemark CLI for long-form writing projects",
+		Use:   "pmk",
+		Short: "pmk - prosemark CLI for long-form writing projects",
+		Long: `pmk - prosemark CLI for long-form writing projects
+
+Exit Codes:
+  0  Success
+  1  Usage error
+  2  Validation error
+  3  Not found
+  5  Conflict
+  6  Transient
+
+State Model:
+  .prosemark.yml  project configuration
+  _binder.md      outline and node registry
+
+Environment Variables:
+  EDITOR       editor for the edit command
+  PMK_PROJECT  default project directory`,
 		Args:          cobra.NoArgs,
 		SilenceErrors: true,
 		RunE:          rootRunE,
