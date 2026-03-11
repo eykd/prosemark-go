@@ -105,32 +105,14 @@ func newDoctorCmdWithGetCWD(io DoctorIO, getwd func() (string, error)) *cobra.Co
 			diags = append(diags, configDiags...)
 
 			// Emit diagnostics.
+			jsonDiags := toDoctorDiagnosticJSON(diags)
+			attachAuditSuggestions(jsonDiags)
 			if jsonMode {
-				jsonDiags := make([]DoctorDiagnosticJSON, len(diags))
-				for i, d := range diags {
-					jsonDiags[i] = DoctorDiagnosticJSON{
-						Severity: string(d.Severity),
-						Code:     string(d.Code),
-						Message:  d.Message,
-						Path:     d.Path,
-					}
-				}
-				attachAuditSuggestions(jsonDiags)
 				out := doctorOutput{Version: "1", Diagnostics: jsonDiags}
 				if err := json.NewEncoder(cmd.OutOrStdout()).Encode(out); err != nil {
 					return fmt.Errorf("encoding output: %w", err)
 				}
 			} else {
-				jsonDiags := make([]DoctorDiagnosticJSON, len(diags))
-				for i, d := range diags {
-					jsonDiags[i] = DoctorDiagnosticJSON{
-						Severity: string(d.Severity),
-						Code:     string(d.Code),
-						Message:  d.Message,
-						Path:     d.Path,
-					}
-				}
-				attachAuditSuggestions(jsonDiags)
 				for _, d := range jsonDiags {
 					fmt.Fprintf(cmd.ErrOrStderr(), "%s %-7s %s\n",
 						d.Code,
@@ -198,6 +180,20 @@ func doctorReadFile(io DoctorIO, projectDir, ref string) []byte {
 		return []byte{}
 	}
 	return content
+}
+
+// toDoctorDiagnosticJSON converts audit diagnostics to the JSON output type.
+func toDoctorDiagnosticJSON(diags []node.AuditDiagnostic) []DoctorDiagnosticJSON {
+	jsonDiags := make([]DoctorDiagnosticJSON, len(diags))
+	for i, d := range diags {
+		jsonDiags[i] = DoctorDiagnosticJSON{
+			Severity: string(d.Severity),
+			Code:     string(d.Code),
+			Message:  d.Message,
+			Path:     d.Path,
+		}
+	}
+	return jsonDiags
 }
 
 // fileDoctorIO implements DoctorIO using OS file I/O.
