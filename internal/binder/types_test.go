@@ -205,6 +205,63 @@ func TestOpResultType(t *testing.T) {
 	}
 }
 
+// TestOpResultType_DryRunField verifies OpResult has a DryRun field.
+func TestOpResultType_DryRunField(t *testing.T) {
+	r := binder.OpResult{
+		Version: "1",
+		Changed: false,
+		DryRun:  true,
+	}
+	if !r.DryRun {
+		t.Error("OpResult.DryRun must be true when set")
+	}
+}
+
+// TestOpResultType_DryRunJSON_OmittedWhenFalse verifies DryRun is omitted from JSON when false (backward compatible).
+func TestOpResultType_DryRunJSON_OmittedWhenFalse(t *testing.T) {
+	r := binder.OpResult{
+		Version:     "1",
+		Changed:     false,
+		Diagnostics: []binder.Diagnostic{},
+	}
+	data, err := json.Marshal(r)
+	if err != nil {
+		t.Fatalf("json.Marshal error: %v", err)
+	}
+	var out map[string]any
+	if err := json.Unmarshal(data, &out); err != nil {
+		t.Fatalf("json.Unmarshal error: %v", err)
+	}
+	if _, ok := out["dryRun"]; ok {
+		t.Error("OpResult JSON must omit 'dryRun' when false (omitempty)")
+	}
+}
+
+// TestOpResultType_DryRunJSON_PresentWhenTrue verifies DryRun appears in JSON when true.
+func TestOpResultType_DryRunJSON_PresentWhenTrue(t *testing.T) {
+	r := binder.OpResult{
+		Version:     "1",
+		Changed:     false,
+		DryRun:      true,
+		Diagnostics: []binder.Diagnostic{},
+	}
+	data, err := json.Marshal(r)
+	if err != nil {
+		t.Fatalf("json.Marshal error: %v", err)
+	}
+	var out map[string]any
+	if err := json.Unmarshal(data, &out); err != nil {
+		t.Fatalf("json.Unmarshal error: %v", err)
+	}
+	v, ok := out["dryRun"]
+	if !ok {
+		t.Fatal("OpResult JSON must include 'dryRun' when true")
+	}
+	if v != true {
+		t.Errorf("OpResult JSON dryRun = %v, want true", v)
+	}
+}
+
 // TestSelectorResultType verifies SelectorResult struct fields.
 func TestSelectorResultType(t *testing.T) {
 	sr := binder.SelectorResult{

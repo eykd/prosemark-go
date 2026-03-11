@@ -209,9 +209,53 @@ func TestRootCmd_DoctorCmd_HumanReadable_SeverityColumnAligned(t *testing.T) {
 	}
 }
 
-// TestRootCmd_EditCmd_BinderParseError_ShowsCannotParse verifies that pmk edit
-// produces a "cannot parse binder" error message when _binder.md exists but is
-// malformed, per plan.md §Binder Parse Failure in pmk edit case (3).
+// TestRootCmd_DryRunFlag_DefaultFalse verifies --dry-run is a persistent bool
+// flag on the root command with a default value of false.
+func TestRootCmd_DryRunFlag_DefaultFalse(t *testing.T) {
+	root := NewRootCmd()
+	f := root.PersistentFlags().Lookup("dry-run")
+	if f == nil {
+		t.Fatal("expected --dry-run persistent flag on root command")
+	}
+	if f.DefValue != "false" {
+		t.Errorf("--dry-run default = %q, want %q", f.DefValue, "false")
+	}
+}
+
+func TestRootCmd_DryRunFlag_InheritedBySubcommands(t *testing.T) {
+	root := NewRootCmd()
+	for _, sub := range root.Commands() {
+		c := sub
+		t.Run(c.Name(), func(t *testing.T) {
+			f := c.InheritedFlags().Lookup("dry-run")
+			if f == nil {
+				t.Errorf("subcommand %q does not inherit --dry-run flag", c.Name())
+			}
+		})
+	}
+}
+
+func TestRootCmd_DryRunFlag_SetToTrue(t *testing.T) {
+	root := NewRootCmd()
+	out := new(bytes.Buffer)
+	root.SetOut(out)
+	root.SetErr(new(bytes.Buffer))
+	root.SetArgs([]string{"--dry-run"})
+
+	err := root.Execute()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	f := root.PersistentFlags().Lookup("dry-run")
+	if f == nil {
+		t.Fatal("expected --dry-run flag")
+	}
+	if f.Value.String() != "true" {
+		t.Errorf("--dry-run value after setting = %q, want %q", f.Value.String(), "true")
+	}
+}
+
 func TestRootCmd_EditCmd_BinderParseError_ShowsCannotParse(t *testing.T) {
 	dir := t.TempDir()
 	binderPath := filepath.Join(dir, "_binder.md")
