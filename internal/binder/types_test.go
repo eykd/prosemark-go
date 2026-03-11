@@ -68,6 +68,64 @@ func TestDiagnosticType(t *testing.T) {
 	}
 }
 
+// TestDiagnosticType_SuggestionField verifies Diagnostic has a Suggestion string field.
+func TestDiagnosticType_SuggestionField(t *testing.T) {
+	d := binder.Diagnostic{
+		Severity:   "warning",
+		Code:       binder.CodeMissingPragma,
+		Message:    "missing pragma line",
+		Suggestion: "Add <!-- prosemark:binder --> as the first line",
+	}
+	if d.Suggestion != "Add <!-- prosemark:binder --> as the first line" {
+		t.Errorf("Diagnostic.Suggestion = %q, want %q", d.Suggestion, "Add <!-- prosemark:binder --> as the first line")
+	}
+}
+
+// TestDiagnosticSuggestionJSON_OmittedWhenEmpty verifies Suggestion is omitted from JSON when empty (backward compatible).
+func TestDiagnosticSuggestionJSON_OmittedWhenEmpty(t *testing.T) {
+	d := binder.Diagnostic{
+		Severity: "error",
+		Code:     binder.CodeIllegalPathChars,
+		Message:  "illegal path character",
+	}
+	data, err := json.Marshal(d)
+	if err != nil {
+		t.Fatalf("json.Marshal error: %v", err)
+	}
+	var out map[string]any
+	if err := json.Unmarshal(data, &out); err != nil {
+		t.Fatalf("json.Unmarshal error: %v", err)
+	}
+	if _, ok := out["suggestion"]; ok {
+		t.Error("Diagnostic JSON must omit 'suggestion' when empty (omitempty)")
+	}
+}
+
+// TestDiagnosticSuggestionJSON_PresentWhenSet verifies Suggestion appears in JSON when non-empty.
+func TestDiagnosticSuggestionJSON_PresentWhenSet(t *testing.T) {
+	d := binder.Diagnostic{
+		Severity:   "warning",
+		Code:       binder.CodeMissingPragma,
+		Message:    "missing pragma",
+		Suggestion: "Add the pragma line",
+	}
+	data, err := json.Marshal(d)
+	if err != nil {
+		t.Fatalf("json.Marshal error: %v", err)
+	}
+	var out map[string]any
+	if err := json.Unmarshal(data, &out); err != nil {
+		t.Fatalf("json.Unmarshal error: %v", err)
+	}
+	v, ok := out["suggestion"]
+	if !ok {
+		t.Fatal("Diagnostic JSON must include 'suggestion' when set")
+	}
+	if v != "Add the pragma line" {
+		t.Errorf("Diagnostic JSON suggestion = %v, want %q", v, "Add the pragma line")
+	}
+}
+
 // TestLocationType verifies Location struct fields.
 func TestLocationType(t *testing.T) {
 	loc := binder.Location{Line: 1, Column: 1, ByteOffset: 0}
