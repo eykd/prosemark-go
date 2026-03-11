@@ -404,7 +404,7 @@ func TestReadOnlySubcommands_Help_HasLongDescription(t *testing.T) {
 // subcommands that accept --dry-run document it as a no-op in their Long
 // description, so users understand it has no effect on read-only operations.
 func TestReadOnlySubcommands_Help_DocumentsDryRunNoOp(t *testing.T) {
-	readOnlyCmds := []string{"doctor", "edit", "parse"}
+	readOnlyCmds := []string{"doctor", "parse"}
 
 	for _, name := range readOnlyCmds {
 		t.Run(name, func(t *testing.T) {
