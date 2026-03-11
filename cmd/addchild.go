@@ -82,6 +82,7 @@ func newAddChildCmdWithGetCWD(io NewNodeAddChildIO, getwd func() (string, error)
 	cmd := &cobra.Command{
 		Use:   "add",
 		Short: "Add a child node to a binder",
+		Long:  "Add a child node to a binder.\n\nUse --dry-run to preview changes without modifying any files.",
 		Example: `  # Add an existing node as a child of another node
   pmk add --parent abc123 --child def456
 
