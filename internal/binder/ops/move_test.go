@@ -725,3 +725,51 @@ func TestMove_ParseError_OPE009(t *testing.T) {
 		t.Error("expected src unchanged on parse error")
 	}
 }
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Parse diagnostics preserved on confirmation failure
+// ──────────────────────────────────────────────────────────────────────────────
+
+// TestMove_ConfirmationFailure_PreservesParseWarnings verifies that when --yes
+// is missing, parse warnings are still included in the returned diagnostics
+// alongside the confirmation error.
+func TestMove_ConfirmationFailure_PreservesParseWarnings(t *testing.T) {
+	orig := moveParseBinderFn
+	t.Cleanup(func() { moveParseBinderFn = orig })
+
+	parseWarning := binder.Diagnostic{
+		Severity: "warning",
+		Code:     binder.CodeMissingPragma,
+		Message:  "mock parse warning",
+	}
+
+	// Inject a parse function that returns a valid result plus a warning diagnostic.
+	moveParseBinderFn = func(_ context.Context, src []byte, _ *binder.Project) (*binder.ParseResult, []binder.Diagnostic, error) {
+		// Delegate to the real parser, then append our synthetic warning.
+		realResult, realDiags, err := binder.Parse(context.Background(), src, nil)
+		return realResult, append(realDiags, parseWarning), err
+	}
+
+	src := binderSrc("- [Alpha](alpha.md)", "- [Beta](beta.md)")
+	out, diags := Move(context.Background(), src, nil, binder.MoveParams{
+		SourceSelector:            "alpha",
+		DestinationParentSelector: "beta",
+		Position:                  "last",
+		Yes:                       false,
+	})
+
+	// Source bytes must be unchanged.
+	if !bytes.Equal(out, src) {
+		t.Error("expected src unchanged on confirmation failure")
+	}
+
+	// Must contain the confirmation error.
+	if !hasDiagCode(diags, binder.CodeIOOrParseFailure) {
+		t.Errorf("expected OPE009 confirmation diagnostic, got: %v", diags)
+	}
+
+	// Must also contain the parse warning (the bug: these are currently lost).
+	if !hasDiagCode(diags, binder.CodeMissingPragma) {
+		t.Errorf("expected parse warning %s to be preserved, got: %v", binder.CodeMissingPragma, diags)
+	}
+}
