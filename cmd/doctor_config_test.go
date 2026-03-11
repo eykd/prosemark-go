@@ -86,6 +86,82 @@ func TestNewDoctorCmd_ProjectConfigValidation(t *testing.T) {
 	}
 }
 
+// TestNewDoctorCmd_ProjectConfigVersionValidation verifies that doctor validates
+// the version field value in .prosemark.yml, emitting AUD008 for unrecognized
+// or missing version values.
+func TestNewDoctorCmd_ProjectConfigVersionValidation(t *testing.T) {
+	tests := []struct {
+		name      string
+		content   string
+		wantErr   bool
+		wantCode  string
+		wantInMsg string // substring expected in the diagnostic message
+	}{
+		{
+			name:      "unrecognized numeric version emits AUD008",
+			content:   "version: \"99\"\n",
+			wantErr:   true,
+			wantCode:  "AUD008",
+			wantInMsg: "unrecognized version",
+		},
+		{
+			name:      "arbitrary string version emits AUD008",
+			content:   "version: \"banana\"\n",
+			wantErr:   true,
+			wantCode:  "AUD008",
+			wantInMsg: "unrecognized version",
+		},
+		{
+			name:      "empty string version emits AUD008",
+			content:   "version: \"\"\n",
+			wantErr:   true,
+			wantCode:  "AUD008",
+			wantInMsg: "version",
+		},
+		{
+			name:      "missing version key emits AUD008",
+			content:   "other_key: value\n",
+			wantErr:   true,
+			wantCode:  "AUD008",
+			wantInMsg: "version",
+		},
+		{
+			name:    "version 1 is accepted",
+			content: "version: \"1\"\n",
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock := &mockDoctorIO{
+				binderBytes: doctorBinderEmpty(),
+				nodeFiles: map[string]nodeFileEntry{
+					".prosemark.yml": {content: []byte(tt.content), exists: true},
+				},
+			}
+			c := NewDoctorCmd(mock)
+			out := new(bytes.Buffer)
+			errOut := new(bytes.Buffer)
+			c.SetOut(out)
+			c.SetErr(errOut)
+			c.SetArgs([]string{"--project", "."})
+
+			err := c.Execute()
+
+			if (err != nil) != tt.wantErr {
+				t.Errorf("error = %v, wantErr %v (stderr=%q)", err, tt.wantErr, errOut.String())
+			}
+			if tt.wantCode != "" && !strings.Contains(errOut.String(), tt.wantCode) {
+				t.Errorf("stderr = %q, expected to contain %q", errOut.String(), tt.wantCode)
+			}
+			if tt.wantInMsg != "" && !strings.Contains(errOut.String(), tt.wantInMsg) {
+				t.Errorf("stderr = %q, expected to contain message substring %q", errOut.String(), tt.wantInMsg)
+			}
+		})
+	}
+}
+
 // TestNewDoctorCmd_ProjectConfig_JSONMode verifies that AUD008 appears in
 // --json output when .prosemark.yml is absent.
 func TestNewDoctorCmd_ProjectConfig_JSONMode(t *testing.T) {
