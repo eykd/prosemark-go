@@ -436,6 +436,40 @@ func TestInitCmd_HumanOutput_PrintsInfoDiagnostics(t *testing.T) {
 	}
 }
 
+func TestInitCmd_StdoutWriteError(t *testing.T) {
+	mock := newMockInitIO()
+	c := newInitCmdWithGetCWD(mock, func() (string, error) { return ".", nil })
+	c.SetOut(&errWriter{err: errors.New("write error")})
+	c.SetErr(new(bytes.Buffer))
+	c.SetArgs([]string{"--project", "."})
+
+	err := c.Execute()
+	if err == nil {
+		t.Fatal("expected error when stdout write fails")
+	}
+	if !strings.Contains(err.Error(), "writing output") {
+		t.Errorf("error = %q, want to contain %q", err.Error(), "writing output")
+	}
+}
+
+func TestInitCmd_StderrWriteError_Warning(t *testing.T) {
+	mock := newMockInitIO()
+	mock.binderExists = true
+	mock.configExists = true
+	c := newInitCmdWithGetCWD(mock, func() (string, error) { return ".", nil })
+	c.SetOut(new(bytes.Buffer))
+	c.SetErr(&errWriter{err: errors.New("write error")})
+	c.SetArgs([]string{"--project", ".", "--force"})
+
+	err := c.Execute()
+	if err == nil {
+		t.Fatal("expected error when stderr write fails for warning")
+	}
+	if !strings.Contains(err.Error(), "writing output") {
+		t.Errorf("error = %q, want to contain %q", err.Error(), "writing output")
+	}
+}
+
 func TestNewRootCmd_RegistersInitSubcommand(t *testing.T) {
 	root := NewRootCmd()
 	var found bool
