@@ -33,6 +33,7 @@ func newParseCmdWithGetCWD(reader ParseReader, getwd func() (string, error)) *co
 	cmd := &cobra.Command{
 		Use:   "parse",
 		Short: "Parse a binder file and output JSON",
+		Long:  "Parse a binder file and output its structure as JSON.\n\nThe --dry-run flag is accepted but has no effect (no-op) on this read-only command.",
 		Example: `  # Parse the binder in the current directory
   pmk parse
 

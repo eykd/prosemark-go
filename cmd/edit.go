@@ -36,6 +36,7 @@ func newEditCmdWithGetCWD(io EditIO, getwd func() (string, error)) *cobra.Comman
 	cmd := &cobra.Command{
 		Use:   "edit <id>",
 		Short: "Open a node file in $EDITOR",
+		Long:  "Open a node file in $EDITOR for editing.\n\nThe --dry-run flag is accepted but has no effect (no-op) on this read-only command.",
 		Example: `  # Open a node for editing
   pmk edit abc123
 
