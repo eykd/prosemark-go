@@ -2,10 +2,13 @@ package cmd
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/eykd/prosemark-go/internal/binder"
 )
 
 // mockInitIO is a test double for InitIO.
@@ -242,6 +245,194 @@ func TestNewInitCmd_ConfigFileContent(t *testing.T) {
 	got := mock.written[".prosemark.yml"]
 	if got != wantConfigContent {
 		t.Errorf(".prosemark.yml content = %q, want %q", got, wantConfigContent)
+	}
+}
+
+// --- init OpResult and dry-run tests ---
+
+func TestInitCmd_JSONOutput_ReturnsOpResult(t *testing.T) {
+	mock := newMockInitIO()
+	sub := newInitCmdWithGetCWD(mock, func() (string, error) { return ".", nil })
+	root := withDryRunFlag(sub)
+	out := new(bytes.Buffer)
+	sub.SetOut(out)
+	sub.SetErr(new(bytes.Buffer))
+	root.SetArgs([]string{"init", "--project", ".", "--json"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var result binder.OpResult
+	if err := json.Unmarshal(out.Bytes(), &result); err != nil {
+		t.Fatalf("output is not valid JSON OpResult: %v\noutput: %s", err, out.String())
+	}
+	if result.Version != "1" {
+		t.Errorf("Version = %q, want %q", result.Version, "1")
+	}
+	if !result.Changed {
+		t.Error("expected Changed=true when files are created")
+	}
+	if result.DryRun {
+		t.Error("expected DryRun=false when not in dry-run mode")
+	}
+}
+
+func TestInitCmd_JSONOutput_IncludesInfoDiagnostics(t *testing.T) {
+	mock := newMockInitIO()
+	sub := newInitCmdWithGetCWD(mock, func() (string, error) { return ".", nil })
+	root := withDryRunFlag(sub)
+	out := new(bytes.Buffer)
+	sub.SetOut(out)
+	sub.SetErr(new(bytes.Buffer))
+	root.SetArgs([]string{"init", "--project", ".", "--json"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var result binder.OpResult
+	if err := json.Unmarshal(out.Bytes(), &result); err != nil {
+		t.Fatalf("output is not valid JSON: %v\noutput: %s", err, out.String())
+	}
+
+	// Created files should be reported as info-level diagnostics.
+	var infoDiags []binder.Diagnostic
+	for _, d := range result.Diagnostics {
+		if d.Severity == "info" {
+			infoDiags = append(infoDiags, d)
+		}
+	}
+	if len(infoDiags) < 2 {
+		t.Errorf("expected at least 2 info diagnostics for created files, got %d: %v",
+			len(infoDiags), result.Diagnostics)
+	}
+
+	// Verify diagnostics mention the created files.
+	combined := ""
+	for _, d := range infoDiags {
+		combined += d.Message + " "
+	}
+	if !strings.Contains(combined, "_binder.md") {
+		t.Errorf("info diagnostics should mention _binder.md, got: %q", combined)
+	}
+	if !strings.Contains(combined, ".prosemark.yml") {
+		t.Errorf("info diagnostics should mention .prosemark.yml, got: %q", combined)
+	}
+}
+
+func TestInitCmd_DryRun_SkipsWrite(t *testing.T) {
+	mock := newMockInitIO()
+	sub := newInitCmdWithGetCWD(mock, func() (string, error) { return ".", nil })
+	root := withDryRunFlag(sub)
+	root.SetOut(new(bytes.Buffer))
+	root.SetErr(new(bytes.Buffer))
+	root.SetArgs([]string{"init", "--project", ".", "--dry-run"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(mock.written) != 0 {
+		t.Errorf("dry-run must not write any files, but wrote: %v", mock.written)
+	}
+}
+
+func TestInitCmd_DryRun_JSONOutput(t *testing.T) {
+	mock := newMockInitIO()
+	sub := newInitCmdWithGetCWD(mock, func() (string, error) { return ".", nil })
+	root := withDryRunFlag(sub)
+	out := new(bytes.Buffer)
+	sub.SetOut(out)
+	sub.SetErr(new(bytes.Buffer))
+	root.SetArgs([]string{"init", "--project", ".", "--json", "--dry-run"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var result binder.OpResult
+	if err := json.Unmarshal(out.Bytes(), &result); err != nil {
+		t.Fatalf("output is not valid JSON: %v\noutput: %s", err, out.String())
+	}
+	if !result.DryRun {
+		t.Error("expected DryRun=true in OpResult")
+	}
+	if result.Changed {
+		t.Error("expected Changed=false in dry-run mode")
+	}
+}
+
+func TestInitCmd_DryRun_InfoDiagnosticsListWouldBeCreated(t *testing.T) {
+	mock := newMockInitIO()
+	sub := newInitCmdWithGetCWD(mock, func() (string, error) { return ".", nil })
+	root := withDryRunFlag(sub)
+	out := new(bytes.Buffer)
+	sub.SetOut(out)
+	sub.SetErr(new(bytes.Buffer))
+	root.SetArgs([]string{"init", "--project", ".", "--json", "--dry-run"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var result binder.OpResult
+	if err := json.Unmarshal(out.Bytes(), &result); err != nil {
+		t.Fatalf("output is not valid JSON: %v\noutput: %s", err, out.String())
+	}
+
+	// In dry-run mode, info diagnostics should list what would be created.
+	var infoDiags []binder.Diagnostic
+	for _, d := range result.Diagnostics {
+		if d.Severity == "info" {
+			infoDiags = append(infoDiags, d)
+		}
+	}
+	if len(infoDiags) < 2 {
+		t.Errorf("expected at least 2 info diagnostics for would-be-created files, got %d: %v",
+			len(infoDiags), result.Diagnostics)
+	}
+}
+
+func TestInitCmd_DryRun_HumanOutputPrefix(t *testing.T) {
+	mock := newMockInitIO()
+	sub := newInitCmdWithGetCWD(mock, func() (string, error) { return ".", nil })
+	root := withDryRunFlag(sub)
+	out := new(bytes.Buffer)
+	sub.SetOut(out)
+	sub.SetErr(new(bytes.Buffer))
+	root.SetArgs([]string{"init", "--project", ".", "--dry-run"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !strings.HasPrefix(out.String(), "dry-run:") {
+		t.Errorf("expected human output prefixed with 'dry-run:', got: %q", out.String())
+	}
+}
+
+func TestInitCmd_HumanOutput_PrintsInfoDiagnostics(t *testing.T) {
+	mock := newMockInitIO()
+	sub := newInitCmdWithGetCWD(mock, func() (string, error) { return ".", nil })
+	root := withDryRunFlag(sub)
+	out := new(bytes.Buffer)
+	errOut := new(bytes.Buffer)
+	sub.SetOut(out)
+	sub.SetErr(errOut)
+	root.SetArgs([]string{"init", "--project", "."})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Info diagnostics about created files should appear in stderr.
+	stderr := errOut.String()
+	if !strings.Contains(stderr, "_binder.md") {
+		t.Errorf("stderr should mention _binder.md, got: %q", stderr)
+	}
+	if !strings.Contains(stderr, ".prosemark.yml") {
+		t.Errorf("stderr should mention .prosemark.yml, got: %q", stderr)
 	}
 }
 
