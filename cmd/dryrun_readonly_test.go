@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"testing"
 
 	"github.com/eykd/prosemark-go/internal/binder"
@@ -168,24 +169,27 @@ func TestDoctorCmd_DryRun_IdenticalOutput_Human(t *testing.T) {
 	cmdNormal := NewDoctorCmd(makeMock())
 	rootNormal := withDryRunFlag(cmdNormal)
 	outNormal := new(bytes.Buffer)
-	errNormal := new(bytes.Buffer)
+	errBufNormal := new(bytes.Buffer)
 	cmdNormal.SetOut(outNormal)
-	cmdNormal.SetErr(errNormal)
+	cmdNormal.SetErr(errBufNormal)
 	rootNormal.SetArgs([]string{"doctor", "--project", "."})
-	_ = rootNormal.Execute()
+	execErrNormal := rootNormal.Execute()
 
 	// With --dry-run.
 	cmdDry := NewDoctorCmd(makeMock())
 	rootDry := withDryRunFlag(cmdDry)
 	outDry := new(bytes.Buffer)
-	errDry := new(bytes.Buffer)
+	errBufDry := new(bytes.Buffer)
 	cmdDry.SetOut(outDry)
-	cmdDry.SetErr(errDry)
+	cmdDry.SetErr(errBufDry)
 	rootDry.SetArgs([]string{"doctor", "--project", ".", "--dry-run"})
-	_ = rootDry.Execute()
+	execErrDry := rootDry.Execute()
 
-	if errNormal.String() != errDry.String() {
-		t.Errorf("stderr differs with --dry-run:\nwithout: %q\nwith:    %q", errNormal.String(), errDry.String())
+	// Both must return matching *ExitError (AUD001 triggers error exit).
+	assertMatchingExitErrors(t, execErrNormal, execErrDry)
+
+	if errBufNormal.String() != errBufDry.String() {
+		t.Errorf("stderr differs with --dry-run:\nwithout: %q\nwith:    %q", errBufNormal.String(), errBufDry.String())
 	}
 	if outNormal.String() != outDry.String() {
 		t.Errorf("stdout differs with --dry-run:\nwithout: %q\nwith:    %q", outNormal.String(), outDry.String())
@@ -235,6 +239,25 @@ func TestDoctorCmd_DryRun_AnnotatedAsNoOp(t *testing.T) {
 	c := NewDoctorCmd(nil)
 	if c.Annotations == nil || c.Annotations[dryRunAnnotationKey] != dryRunNoOp {
 		t.Error("doctor command must be annotated with dry-run=no-op (FR-018)")
+	}
+}
+
+// assertMatchingExitErrors asserts both errors are non-nil *ExitError with the same exit code.
+func assertMatchingExitErrors(t *testing.T, errNormal, errDry error) {
+	t.Helper()
+
+	var exitNormal *ExitError
+	if !errors.As(errNormal, &exitNormal) {
+		t.Fatalf("normal execution: expected *ExitError, got %T: %v", errNormal, errNormal)
+	}
+
+	var exitDry *ExitError
+	if !errors.As(errDry, &exitDry) {
+		t.Fatalf("dry-run execution: expected *ExitError, got %T: %v", errDry, errDry)
+	}
+
+	if exitNormal.Code != exitDry.Code {
+		t.Errorf("exit code mismatch: normal=%d, dry-run=%d", exitNormal.Code, exitDry.Code)
 	}
 }
 
