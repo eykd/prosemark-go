@@ -1143,3 +1143,40 @@ func TestNewAddChildCmd_AbsoluteTargetReturnsError(t *testing.T) {
 		})
 	}
 }
+
+// TestNewAddChildCmd_NewMode_DiagnosticSuggestionsAttached verifies that
+// runNewMode calls prepareDiagnostics so that diagnostics carry their
+// human-readable Suggestion field (printed to stderr).
+// RED: currently runNewMode nil-guards manually and never calls attachSuggestions.
+func TestNewAddChildCmd_NewMode_DiagnosticSuggestionsAttached(t *testing.T) {
+	// A binder with one child; use --parent with a selector that won't match
+	// to trigger OPE001 (CodeSelectorNoMatch), which has a mapped suggestion.
+	binderWithChild := []byte("<!-- prosemark-binder:v1 -->\n- [Chapter One](chapter-one.md)\n")
+
+	mock := &mockAddChildIOWithNew{
+		mockAddChildIO: mockAddChildIO{
+			binderBytes: binderWithChild,
+			project:     &binder.Project{Files: []string{"chapter-one.md"}, BinderDir: "."},
+		},
+	}
+
+	c := NewAddChildCmd(mock)
+	out := new(bytes.Buffer)
+	errOut := new(bytes.Buffer)
+	c.SetOut(out)
+	c.SetErr(errOut)
+	// --parent "nonexistent.md" will fail selector resolution → OPE001 diagnostic
+	c.SetArgs([]string{"--new", "--title", "Orphan", "--parent", "nonexistent.md", "--project", "."})
+
+	err := c.Execute()
+	if err == nil {
+		t.Fatal("expected error from unresolved parent selector")
+	}
+
+	// The key assertion: prepareDiagnostics must attach the suggestion for OPE001.
+	// printDiagnostics writes "  suggestion: ..." to stderr when d.Suggestion != "".
+	stderr := errOut.String()
+	if !strings.Contains(stderr, "suggestion:") {
+		t.Errorf("expected stderr to contain suggestion for OPE001 diagnostic, got: %q", stderr)
+	}
+}
