@@ -67,10 +67,7 @@ func newDeleteCmdWithGetCWD(io DeleteIO, getwd func() (string, error)) *cobra.Co
 				diags = []binder.Diagnostic{}
 			}
 
-			changed := !bytes.Equal(binderBytes, modifiedBytes)
-			if dryRun {
-				changed = false
-			}
+			changed := !bytes.Equal(binderBytes, modifiedBytes) && !dryRun
 
 			if jsonMode {
 				out := binder.OpResult{Version: "1", Changed: changed, DryRun: dryRun, Diagnostics: diags}
@@ -85,7 +82,7 @@ func newDeleteCmdWithGetCWD(io DeleteIO, getwd func() (string, error)) *cobra.Co
 				return &ExitError{Code: ExitCodeForDiagnostics(diags), Err: fmt.Errorf("delete has errors")}
 			}
 
-			if !dryRun && !bytes.Equal(binderBytes, modifiedBytes) {
+			if changed {
 				if err = io.WriteBinderAtomic(ctx, binderPath, modifiedBytes); err != nil {
 					return fmt.Errorf("writing binder: %w", err)
 				}

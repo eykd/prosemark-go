@@ -88,10 +88,7 @@ func newMoveCmdWithGetCWD(io MoveIO, getwd func() (string, error)) *cobra.Comman
 				diags = []binder.Diagnostic{}
 			}
 
-			changed := !bytes.Equal(binderBytes, modifiedBytes)
-			if dryRun {
-				changed = false
-			}
+			changed := !bytes.Equal(binderBytes, modifiedBytes) && !dryRun
 
 			if jsonMode {
 				out := binder.OpResult{Version: "1", Changed: changed, DryRun: dryRun, Diagnostics: diags}
@@ -106,7 +103,7 @@ func newMoveCmdWithGetCWD(io MoveIO, getwd func() (string, error)) *cobra.Comman
 				return &ExitError{Code: ExitCodeForDiagnostics(diags), Err: fmt.Errorf("move has errors")}
 			}
 
-			if !dryRun && !bytes.Equal(binderBytes, modifiedBytes) {
+			if changed {
 				if err = io.WriteBinderAtomic(ctx, binderPath, modifiedBytes); err != nil {
 					return fmt.Errorf("writing binder: %w", err)
 				}

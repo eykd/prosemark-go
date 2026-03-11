@@ -150,10 +150,8 @@ func newAddChildCmdWithGetCWD(io NewNodeAddChildIO, getwd func() (string, error)
 				diags = []binder.Diagnostic{}
 			}
 
-			changed := !bytes.Equal(binderBytes, modifiedBytes)
-			if dryRun {
-				changed = false
-			}
+			bytesModified := !bytes.Equal(binderBytes, modifiedBytes)
+			changed := bytesModified && !dryRun
 
 			if jsonMode {
 				out := binder.OpResult{Version: "1", Changed: changed, DryRun: dryRun, Diagnostics: diags}
@@ -168,7 +166,7 @@ func newAddChildCmdWithGetCWD(io NewNodeAddChildIO, getwd func() (string, error)
 				return &ExitError{Code: ExitCodeForDiagnostics(diags), Err: fmt.Errorf("add has errors")}
 			}
 
-			if !dryRun && changed {
+			if changed {
 				if err = io.WriteBinderAtomic(ctx, binderPath, modifiedBytes); err != nil {
 					return fmt.Errorf("writing binder: %w", err)
 				}
@@ -179,7 +177,7 @@ func newAddChildCmdWithGetCWD(io NewNodeAddChildIO, getwd func() (string, error)
 				if dryRun {
 					prefix = "dry-run: "
 				}
-				if !dryRun && !bytes.Equal(binderBytes, modifiedBytes) || dryRun {
+				if changed || dryRun {
 					if _, err := fmt.Fprintln(cmd.OutOrStdout(), prefix+"Added "+sanitizePath(target)+" to "+sanitizePath(binderPath)); err != nil {
 						return fmt.Errorf("writing output: %w", err)
 					}
