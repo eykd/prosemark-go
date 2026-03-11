@@ -172,14 +172,12 @@ func newAddChildCmdWithGetCWD(io NewNodeAddChildIO, getwd func() (string, error)
 			}
 
 			if !jsonMode {
+				msg := sanitizePath(target) + " already in " + sanitizePath(binderPath) + " (skipped)"
 				if result.changed || (dryRun && result.bytesModified) {
-					if _, err := fmt.Fprintln(cmd.OutOrStdout(), dryRunPrefix(dryRun)+"Added "+sanitizePath(target)+" to "+sanitizePath(binderPath)); err != nil {
-						return fmt.Errorf("writing output: %w", err)
-					}
-				} else {
-					if _, err := fmt.Fprintln(cmd.OutOrStdout(), sanitizePath(target)+" already in "+sanitizePath(binderPath)+" (skipped)"); err != nil {
-						return fmt.Errorf("writing output: %w", err)
-					}
+					msg = dryRunPrefix(dryRun) + "Added " + sanitizePath(target) + " to " + sanitizePath(binderPath)
+				}
+				if _, err := fmt.Fprintln(cmd.OutOrStdout(), msg); err != nil {
+					return fmt.Errorf("writing output: %w", err)
 				}
 			}
 
