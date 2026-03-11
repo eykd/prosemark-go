@@ -239,6 +239,7 @@ func refreshNodeUpdated(io nodeRefresher, path string) error {
 // the binder, and optionally opens an editor to populate the file.
 // params.Target must already be set to a valid UUID filename before calling.
 func runNewMode(ctx context.Context, cmd *cobra.Command, io NewNodeAddChildIO, binderPath string, binderBytes []byte, proj *binder.Project, params binder.AddChildParams, synopsis string, editMode bool) error {
+	dryRun := isDryRun(cmd)
 	uuidStem := strings.TrimSuffix(params.Target, ".md")
 	binderDir := filepath.Dir(binderPath)
 	nodePath := filepath.Join(binderDir, params.Target)
@@ -252,8 +253,10 @@ func runNewMode(ctx context.Context, cmd *cobra.Command, io NewNodeAddChildIO, b
 	}
 	content := node.SerializeFrontmatter(fm)
 
-	if err := io.WriteNodeFileAtomic(nodePath, content); err != nil {
-		return fmt.Errorf("creating node file: %w", err)
+	if !dryRun {
+		if err := io.WriteNodeFileAtomic(nodePath, content); err != nil {
+			return fmt.Errorf("creating node file: %w", err)
+		}
 	}
 
 	modifiedBytes, diags := ops.AddChild(ctx, binderBytes, proj, params)
@@ -264,11 +267,14 @@ func runNewMode(ctx context.Context, cmd *cobra.Command, io NewNodeAddChildIO, b
 	printDiagnostics(cmd, diags)
 
 	if hasDiagnosticError(diags) {
-		rollbackErr := io.DeleteFile(nodePath)
+		var rollbackErr error
+		if !dryRun {
+			rollbackErr = io.DeleteFile(nodePath)
+		}
 		return &ExitError{Code: ExitCodeForDiagnostics(diags), Err: errors.Join(fmt.Errorf("add has errors"), rollbackErr)}
 	}
 
-	changed := !bytes.Equal(binderBytes, modifiedBytes)
+	changed := !bytes.Equal(binderBytes, modifiedBytes) && !dryRun
 	if changed {
 		if writeErr := io.WriteBinderAtomic(ctx, binderPath, modifiedBytes); writeErr != nil {
 			if rollbackErr := io.DeleteFile(nodePath); rollbackErr != nil {
@@ -278,7 +284,7 @@ func runNewMode(ctx context.Context, cmd *cobra.Command, io NewNodeAddChildIO, b
 		}
 	}
 
-	if editMode {
+	if editMode && !dryRun {
 		editor := os.Getenv("EDITOR")
 		if len(strings.Fields(editor)) == 0 {
 			return fmt.Errorf("$EDITOR is not set")
@@ -299,7 +305,11 @@ func runNewMode(ctx context.Context, cmd *cobra.Command, io NewNodeAddChildIO, b
 		}
 	}
 
-	if _, err := fmt.Fprintln(cmd.OutOrStdout(), "Created "+sanitizePath(params.Target)+" in "+sanitizePath(binderPath)); err != nil {
+	prefix := ""
+	if dryRun {
+		prefix = "dry-run: "
+	}
+	if _, err := fmt.Fprintln(cmd.OutOrStdout(), prefix+"Created "+sanitizePath(params.Target)+" in "+sanitizePath(binderPath)); err != nil {
 		return fmt.Errorf("writing output: %w", err)
 	}
 

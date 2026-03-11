@@ -40,6 +40,7 @@ func newEditCmdWithGetCWD(io EditIO, getwd func() (string, error)) *cobra.Comman
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			nodeID := args[0]
+			dryRun := isDryRun(cmd)
 
 			editor := os.Getenv("EDITOR")
 			if len(strings.Fields(editor)) == 0 {
@@ -88,16 +89,23 @@ func newEditCmdWithGetCWD(io EditIO, getwd func() (string, error)) *cobra.Comman
 					if !errors.Is(readErr, os.ErrNotExist) {
 						return fmt.Errorf("reading notes file: %w", readErr)
 					}
-					if createErr := io.CreateNotesFile(notesPath); createErr != nil {
-						return fmt.Errorf("creating notes file: %w", createErr)
+					if !dryRun {
+						if createErr := io.CreateNotesFile(notesPath); createErr != nil {
+							return fmt.Errorf("creating notes file: %w", createErr)
+						}
+						notesCreated = true
 					}
-					notesCreated = true
 				}
 			} else {
 				editPath = draftPath
 				if _, readErr := io.ReadNodeFile(draftPath); readErr != nil {
 					return fmt.Errorf("reading node file: %w", readErr)
 				}
+			}
+
+			if dryRun {
+				_, err := fmt.Fprintln(cmd.OutOrStdout(), "dry-run: would open "+sanitizePath(editPath)+" in $EDITOR")
+				return err
 			}
 
 			if err := io.OpenEditor(editor, editPath); err != nil {
