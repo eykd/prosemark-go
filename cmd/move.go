@@ -93,7 +93,7 @@ func newMoveCmdWithGetCWD(io MoveIO, getwd func() (string, error)) *cobra.Comman
 
 			changed := !bytes.Equal(binderBytes, modifiedBytes) && !dryRun
 
-			if err := emitOpResult(cmd, jsonMode, changed, dryRun, diags); err != nil {
+			if err := emitOpResult(cmd, jsonMode, changed, dryRun, diags, ""); err != nil {
 				return err
 			}
 

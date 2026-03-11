@@ -75,7 +75,7 @@ func newDeleteCmdWithGetCWD(io DeleteIO, getwd func() (string, error)) *cobra.Co
 
 			changed := !bytes.Equal(binderBytes, modifiedBytes) && !dryRun
 
-			if err := emitOpResult(cmd, jsonMode, changed, dryRun, diags); err != nil {
+			if err := emitOpResult(cmd, jsonMode, changed, dryRun, diags, ""); err != nil {
 				return err
 			}
 

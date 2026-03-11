@@ -174,9 +174,9 @@ func dryRunPrefix(dryRun bool) string {
 // emitOpResult writes the operation result as JSON (when jsonMode is true) or
 // prints diagnostics to stderr (when jsonMode is false). It is the shared
 // output path for mutation commands (add, delete, move).
-func emitOpResult(cmd *cobra.Command, jsonMode, changed, dryRun bool, diags []binder.Diagnostic) error {
+func emitOpResult(cmd *cobra.Command, jsonMode, changed, dryRun bool, diags []binder.Diagnostic, target string) error {
 	if jsonMode {
-		out := binder.OpResult{Version: "1", Changed: changed, DryRun: dryRun, Diagnostics: diags}
+		out := binder.OpResult{Version: "1", Changed: changed, DryRun: dryRun, Target: target, Diagnostics: diags}
 		if err := json.NewEncoder(cmd.OutOrStdout()).Encode(out); err != nil {
 			return fmt.Errorf("encoding output: %w", err)
 		}

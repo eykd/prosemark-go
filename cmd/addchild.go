@@ -156,7 +156,7 @@ func newAddChildCmdWithGetCWD(io NewNodeAddChildIO, getwd func() (string, error)
 				})
 			}
 
-			result, err := execAddChild(ctx, cmd, binderBytes, proj, params, jsonMode, dryRun)
+			result, err := execAddChild(ctx, cmd, binderBytes, proj, params, jsonMode, dryRun, "")
 			if err != nil {
 				return err
 			}
@@ -246,12 +246,12 @@ type addResult struct {
 
 // execAddChild applies AddChild, prepares diagnostics, and emits the operation result.
 // Callers inspect the returned addResult to handle errors and write the binder.
-func execAddChild(ctx context.Context, cmd *cobra.Command, binderBytes []byte, proj *binder.Project, params binder.AddChildParams, jsonMode, dryRun bool) (addResult, error) {
+func execAddChild(ctx context.Context, cmd *cobra.Command, binderBytes []byte, proj *binder.Project, params binder.AddChildParams, jsonMode, dryRun bool, target string) (addResult, error) {
 	modifiedBytes, diags := ops.AddChild(ctx, binderBytes, proj, params)
 	diags = prepareDiagnostics(diags)
 	bytesModified := !bytes.Equal(binderBytes, modifiedBytes)
 	changed := bytesModified && !dryRun
-	if err := emitOpResult(cmd, jsonMode, changed, dryRun, diags); err != nil {
+	if err := emitOpResult(cmd, jsonMode, changed, dryRun, diags, target); err != nil {
 		return addResult{}, err
 	}
 	return addResult{
@@ -286,7 +286,7 @@ func runNewMode(ctx context.Context, cmd *cobra.Command, io NewNodeAddChildIO, b
 		}
 	}
 
-	result, err := execAddChild(ctx, cmd, binderBytes, proj, params, opts.jsonMode, dryRun)
+	result, err := execAddChild(ctx, cmd, binderBytes, proj, params, opts.jsonMode, dryRun, params.Target)
 	if err != nil {
 		if !dryRun {
 			_ = io.DeleteFile(nodePath)

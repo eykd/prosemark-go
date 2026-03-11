@@ -112,6 +112,7 @@ type OpResult struct {
 	Version     string       `json:"version"`          // "1"
 	Changed     bool         `json:"changed"`          // true if binder bytes were modified
 	DryRun      bool         `json:"dryRun,omitempty"` // true if operation was a dry run
+	Target      string       `json:"target,omitempty"` // created node filename (--new mode only)
 	Diagnostics []Diagnostic `json:"diagnostics"`      // merged parse + op diagnostics
 }
 
