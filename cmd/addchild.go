@@ -290,6 +290,9 @@ func runNewMode(ctx context.Context, cmd *cobra.Command, io NewNodeAddChildIO, b
 
 	result, err := execAddChild(ctx, cmd, binderBytes, proj, params, opts.jsonMode, dryRun)
 	if err != nil {
+		if !dryRun {
+			_ = io.DeleteFile(nodePath)
+		}
 		return err
 	}
 
