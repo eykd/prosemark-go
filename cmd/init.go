@@ -1,10 +1,12 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 
+	"github.com/eykd/prosemark-go/internal/binder"
 	"github.com/spf13/cobra"
 )
 
@@ -19,8 +21,11 @@ func NewInitCmd(io InitIO) *cobra.Command {
 	return newInitCmdWithGetCWD(io, os.Getwd)
 }
 
-func newInitCmdWithGetCWD(io InitIO, getwd func() (string, error)) *cobra.Command {
-	var force bool
+func newInitCmdWithGetCWD(initIO InitIO, getwd func() (string, error)) *cobra.Command {
+	var (
+		force    bool
+		jsonMode bool
+	)
 
 	cmd := &cobra.Command{
 		Use:          "init",
@@ -28,6 +33,8 @@ func newInitCmdWithGetCWD(io InitIO, getwd func() (string, error)) *cobra.Comman
 		Args:         cobra.NoArgs,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			dryRun := isDryRun(cmd)
+
 			project, err := resolveProjectDirFromCmd(cmd, getwd)
 			if err != nil {
 				return err
@@ -36,7 +43,7 @@ func newInitCmdWithGetCWD(io InitIO, getwd func() (string, error)) *cobra.Comman
 			binderPath := filepath.Join(project, "_binder.md")
 			configPath := filepath.Join(project, ".prosemark.yml")
 
-			binderExists, err := io.StatFile(binderPath)
+			binderExists, err := initIO.StatFile(binderPath)
 			if err != nil {
 				return fmt.Errorf("checking %s: %w", binderPath, err)
 			}
@@ -44,37 +51,69 @@ func newInitCmdWithGetCWD(io InitIO, getwd func() (string, error)) *cobra.Comman
 				return fmt.Errorf("_binder.md already exists in %s; use --force to overwrite", project)
 			}
 
+			changed := !dryRun
+
 			const binderContent = "<!-- prosemark-binder:v1 -->\n"
-			if err := io.WriteFileAtomic(binderPath, binderContent); err != nil {
-				return fmt.Errorf("writing _binder.md: %w", err)
+			if changed {
+				if err := initIO.WriteFileAtomic(binderPath, binderContent); err != nil {
+					return fmt.Errorf("writing _binder.md: %w", err)
+				}
 			}
 
-			configExists, err := io.StatFile(configPath)
+			configExists, err := initIO.StatFile(configPath)
 			if err != nil {
 				return fmt.Errorf("checking %s: %w", configPath, err)
 			}
 
 			needsWarning := force && (binderExists || configExists)
+			writeConfig := !configExists || force
 
-			if !configExists || force {
+			var diags []binder.Diagnostic
+			diags = append(diags, binder.Diagnostic{
+				Severity: "info",
+				Code:     "OPI001",
+				Message:  "created _binder.md",
+			})
+			if writeConfig {
+				diags = append(diags, binder.Diagnostic{
+					Severity: "info",
+					Code:     "OPI002",
+					Message:  "created .prosemark.yml",
+				})
+			}
+
+			if changed && writeConfig {
 				const configContent = "version: \"1\"\n"
-				if err := io.WriteFileAtomic(configPath, configContent); err != nil {
+				if err := initIO.WriteFileAtomic(configPath, configContent); err != nil {
 					return fmt.Errorf(
 						"writing .prosemark.yml (partial init; re-run with --force to recover): %w", err)
 				}
+			}
+
+			if jsonMode {
+				out := binder.OpResult{Version: "1", Changed: changed, DryRun: dryRun, Diagnostics: diags}
+				_ = json.NewEncoder(cmd.OutOrStdout()).Encode(out)
+				return nil
 			}
 
 			if needsWarning {
 				fmt.Fprintln(cmd.ErrOrStderr(), "warning: overwriting existing files")
 			}
 
-			fmt.Fprintln(cmd.OutOrStdout(), "Initialized "+sanitizePath(project))
+			printDiagnostics(cmd, diags)
+
+			prefix := ""
+			if dryRun {
+				prefix = "dry-run: "
+			}
+			fmt.Fprintln(cmd.OutOrStdout(), prefix+"Initialized "+sanitizePath(project))
 			return nil
 		},
 	}
 
 	cmd.Flags().String("project", "", "project directory (default: current directory)")
 	cmd.Flags().BoolVar(&force, "force", false, "overwrite existing files")
+	cmd.Flags().BoolVar(&jsonMode, "json", false, "Output result as JSON")
 
 	return cmd
 }
