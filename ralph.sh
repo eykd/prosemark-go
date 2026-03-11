@@ -137,6 +137,26 @@ log_block() {
 }
 
 ##############################################################################
+# Git push helper
+##############################################################################
+
+# Push current branch to its upstream remote after each commit
+push_to_upstream() {
+    local branch
+    branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null) || return 0
+    log INFO "Pushing $branch to upstream"
+    if ! git push 2>/dev/null; then
+        log WARN "git push failed for $branch - attempting to set upstream"
+        if ! git push --set-upstream origin "$branch" 2>/dev/null; then
+            log ERROR "Failed to push $branch to origin"
+            return 1
+        fi
+    fi
+    log DEBUG "Push successful"
+    return 0
+}
+
+##############################################################################
 # Usage and help
 ##############################################################################
 
@@ -1873,6 +1893,9 @@ Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>" 2>/dev/null || {
             }
         fi
 
+        # Push after GREEN commit (whether Claude committed or fallback)
+        push_to_upstream
+
         # --- REFACTOR: Improve code quality ---
         if ! execute_tdd_step "$STEP_REFACTOR" "$task_json" "$cycle"; then
             log WARN "REFACTOR step failed - continuing with GREEN state"
@@ -1913,6 +1936,9 @@ Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>" 2>/dev/null || {
 Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>" 2>/dev/null || {
                 log DEBUG "No additional changes to commit after bead close"
             }
+
+            # Push bead close commit
+            push_to_upstream
 
             # Clean up review file
             rm -f "$REVIEW_OUTPUT_FILE"
@@ -2154,6 +2180,7 @@ execute_atdd_cycle() {
         git commit -m "chore: close bead $task_id (acceptance tests already passing)
 
 Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>" 2>/dev/null || true
+        push_to_upstream
         return 0
     fi
 
@@ -2212,6 +2239,9 @@ Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>" 2>/dev/null || {
             }
         fi
 
+        # Push after GREEN commit (whether Claude committed or fallback)
+        push_to_upstream
+
         # --- REFACTOR: Improve code quality ---
         if ! execute_tdd_step "$STEP_REFACTOR" "$task_json" "$cycle"; then
             log WARN "REFACTOR step failed - continuing with GREEN state"
@@ -2227,6 +2257,7 @@ Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>" 2>/dev/null || {
             git commit -m "chore: close bead $task_id (acceptance tests passing)
 
 Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>" 2>/dev/null || true
+            push_to_upstream
             rm -f "$ACCEPTANCE_OUTPUT_FILE"
             return 0
         fi
