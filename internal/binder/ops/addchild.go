@@ -52,6 +52,15 @@ func AddChild(ctx context.Context, src []byte, project *binder.Project, params b
 	// Percent-decode target for storage in the binder.
 	decodedTarget := percentDecodeOpTarget(params.Target)
 
+	// Validate title content before use (OPE012).
+	if strings.ContainsAny(params.Title, "\n\r") {
+		return src, append(parseDiags, binder.Diagnostic{
+			Severity: "error",
+			Code:     binder.CodeInvalidTitleContent,
+			Message:  fmt.Sprintf("title %q contains newline characters", params.Title),
+		})
+	}
+
 	// Derive title from stem when empty.
 	title := params.Title
 	if title == "" {

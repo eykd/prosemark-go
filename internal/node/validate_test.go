@@ -229,6 +229,34 @@ func TestValidateNewNodeInput(t *testing.T) {
 			synopsis: "synopsis\twith\ttab",
 			wantErr:  false,
 		},
+		{
+			name:     "title with newline (0x0A) is rejected",
+			target:   "",
+			title:    "Line1\nLine2",
+			synopsis: "",
+			wantErr:  true,
+		},
+		{
+			name:     "title with carriage return (0x0D) is rejected",
+			target:   "",
+			title:    "Line1\rLine2",
+			synopsis: "",
+			wantErr:  true,
+		},
+		{
+			name:     "title with CRLF is rejected",
+			target:   "",
+			title:    "Line1\r\nLine2",
+			synopsis: "",
+			wantErr:  true,
+		},
+		{
+			name:     "title with vertical tab (0x0B) is rejected",
+			target:   "",
+			title:    "a\x0Bb",
+			synopsis: "",
+			wantErr:  false,
+		},
 	}
 
 	for _, tt := range tests {

@@ -156,6 +156,7 @@ const (
 	CodeIOOrParseFailure    = "OPE009"
 	CodeConflictingFlags    = "OPE010"
 	CodeMissingConfirmation = "OPE011"
+	CodeInvalidTitleContent = "OPE012"
 )
 
 // Operation warnings (exit 0; mutation proceeds).

@@ -17,6 +17,11 @@ func ValidateFieldValue(s string) error {
 	return nil
 }
 
+// containsNewline reports whether s contains LF (0x0A) or CR (0x0D).
+func containsNewline(s string) bool {
+	return strings.ContainsAny(s, "\n\r")
+}
+
 // ValidateNewNodeInput validates the --target, --title, and --synopsis inputs
 // for --new mode. target may be empty (caller will generate one); at least one
 // of title or synopsis must be non-empty.
@@ -34,6 +39,9 @@ func ValidateNewNodeInput(target, title, synopsis string) error {
 	}
 	if len(title) > 500 {
 		return fmt.Errorf("--title must be 500 characters or fewer")
+	}
+	if containsNewline(title) {
+		return fmt.Errorf("--title must not contain newline characters")
 	}
 	if err := ValidateFieldValue(title); err != nil {
 		return fmt.Errorf("--title must not contain control characters")

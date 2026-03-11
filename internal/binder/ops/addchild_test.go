@@ -329,6 +329,45 @@ func TestAddChild_TitleBracketEscape(t *testing.T) {
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
+// Title newline rejection
+// ──────────────────────────────────────────────────────────────────────────────
+
+// TestAddChild_TitleWithNewline_Rejected verifies that titles containing
+// newline characters produce a diagnostic error rather than corrupting the
+// binder or frontmatter output.
+func TestAddChild_TitleWithNewline_Rejected(t *testing.T) {
+	tests := []struct {
+		name  string
+		title string
+	}{
+		{"LF in title", "Line1\nLine2"},
+		{"CR in title", "Line1\rLine2"},
+		{"CRLF in title", "Line1\r\nLine2"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			src := binderSrc()
+			params := binder.AddChildParams{
+				ParentSelector: ".",
+				Target:         "chapter.md",
+				Title:          tt.title,
+				Position:       "last",
+			}
+
+			out, diags := AddChild(context.Background(), src, nil, params)
+			if !hasDiagCode(diags, binder.CodeInvalidTitleContent) {
+				t.Errorf("expected diagnostic %s for title %q, got diags: %v",
+					binder.CodeInvalidTitleContent, tt.title, diags)
+			}
+			// Binder must not be mutated on validation error.
+			if !bytes.Equal(out, src) {
+				t.Errorf("expected unmodified binder on error, got:\n%q", out)
+			}
+		})
+	}
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
 // Title derivation
 // ──────────────────────────────────────────────────────────────────────────────
 
