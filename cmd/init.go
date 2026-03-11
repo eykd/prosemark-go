@@ -10,6 +10,16 @@ import (
 	"github.com/spf13/cobra"
 )
 
+const (
+	// initBinderContent is the initial content for a new _binder.md file.
+	initBinderContent = "<!-- prosemark-binder:v1 -->\n"
+	// initConfigContent is the initial content for a new .prosemark.yml file.
+	initConfigContent = "version: \"1\"\n"
+
+	diagCodeBinderCreated = "OPI001"
+	diagCodeConfigCreated = "OPI002"
+)
+
 // InitIO handles I/O for the init command.
 type InitIO interface {
 	StatFile(path string) (bool, error)
@@ -53,9 +63,8 @@ func newInitCmdWithGetCWD(initIO InitIO, getwd func() (string, error)) *cobra.Co
 
 			changed := !dryRun
 
-			const binderContent = "<!-- prosemark-binder:v1 -->\n"
 			if changed {
-				if err := initIO.WriteFileAtomic(binderPath, binderContent); err != nil {
+				if err := initIO.WriteFileAtomic(binderPath, initBinderContent); err != nil {
 					return fmt.Errorf("writing _binder.md: %w", err)
 				}
 			}
@@ -68,23 +77,17 @@ func newInitCmdWithGetCWD(initIO InitIO, getwd func() (string, error)) *cobra.Co
 			needsWarning := force && (binderExists || configExists)
 			writeConfig := !configExists || force
 
-			var diags []binder.Diagnostic
-			diags = append(diags, binder.Diagnostic{
-				Severity: "info",
-				Code:     "OPI001",
-				Message:  "created _binder.md",
-			})
+			diags := []binder.Diagnostic{
+				{Severity: "info", Code: diagCodeBinderCreated, Message: "created _binder.md"},
+			}
 			if writeConfig {
 				diags = append(diags, binder.Diagnostic{
-					Severity: "info",
-					Code:     "OPI002",
-					Message:  "created .prosemark.yml",
+					Severity: "info", Code: diagCodeConfigCreated, Message: "created .prosemark.yml",
 				})
 			}
 
 			if changed && writeConfig {
-				const configContent = "version: \"1\"\n"
-				if err := initIO.WriteFileAtomic(configPath, configContent); err != nil {
+				if err := initIO.WriteFileAtomic(configPath, initConfigContent); err != nil {
 					return fmt.Errorf(
 						"writing .prosemark.yml (partial init; re-run with --force to recover): %w", err)
 				}
