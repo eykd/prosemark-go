@@ -146,6 +146,10 @@ func emitOPE009AndError(cmd *cobra.Command, jsonMode bool, origErr error) error 
 	return fmt.Errorf("operation failed: %w", origErr)
 }
 
+// dryRunHelpSuffix is the help text appended to mutation subcommand Long
+// descriptions to document --dry-run support.
+const dryRunHelpSuffix = "\n\nUse --dry-run to preview changes without modifying any files."
+
 // dryRunPrefix returns "dry-run: " when dryRun is true, or "" otherwise.
 // Used by mutation commands to prefix human-readable output in dry-run mode.
 func dryRunPrefix(dryRun bool) string {

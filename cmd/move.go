@@ -39,7 +39,7 @@ func newMoveCmdWithGetCWD(io MoveIO, getwd func() (string, error)) *cobra.Comman
 	cmd := &cobra.Command{
 		Use:   "move",
 		Short: "Move a node within a binder",
-		Long:  "Move a node within a binder.\n\nUse --dry-run to preview changes without modifying any files.",
+		Long:  "Move a node within a binder." + dryRunHelpSuffix,
 		Example: `  # Move a node to a new parent
   pmk move --id abc123 --parent def456
 

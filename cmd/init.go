@@ -40,7 +40,7 @@ func newInitCmdWithGetCWD(initIO InitIO, getwd func() (string, error)) *cobra.Co
 	cmd := &cobra.Command{
 		Use:   "init",
 		Short: "Initialize a prosemark project in the current directory",
-		Long:  "Initialize a prosemark project in the current directory.\n\nUse --dry-run to preview changes without modifying any files.",
+		Long:  "Initialize a prosemark project in the current directory." + dryRunHelpSuffix,
 		Example: `  # Initialize a new prosemark project
   pmk init
 
