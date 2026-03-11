@@ -27,10 +27,11 @@ type Node struct {
 
 // Diagnostic is a structured error or warning record emitted during parse or operations.
 type Diagnostic struct {
-	Severity string    `json:"severity"` // "error" | "warning"
-	Code     string    `json:"code"`     // e.g. "BNDE001", "OPW002"
-	Message  string    `json:"message"`
-	Location *Location `json:"location,omitempty"` // nil if no source location
+	Severity   string    `json:"severity"` // "error" | "warning"
+	Code       string    `json:"code"`     // e.g. "BNDE001", "OPW002"
+	Message    string    `json:"message"`
+	Suggestion string    `json:"suggestion,omitempty"` // actionable fix hint
+	Location   *Location `json:"location,omitempty"`   // nil if no source location
 }
 
 // Location identifies a source position within a binder file.
