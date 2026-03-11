@@ -1,6 +1,9 @@
 package cmd
 
-import "github.com/eykd/prosemark-go/internal/binder"
+import (
+	"github.com/eykd/prosemark-go/internal/binder"
+	"github.com/eykd/prosemark-go/internal/node"
+)
 
 // Exit code constants for CLI operations.
 const (
@@ -37,6 +40,32 @@ func ExitCodeForDiagnostics(diags []binder.Diagnostic) int {
 			continue
 		}
 		if code, ok := diagnosticExitMap[d.Code]; ok {
+			return code
+		}
+		return ExitUsage
+	}
+	return ExitSuccess
+}
+
+// auditExitMap maps audit diagnostic codes to exit codes.
+var auditExitMap = map[node.AuditCode]int{
+	node.AUD001: ExitValidation,
+	node.AUD002: ExitValidation,
+	node.AUD003: ExitValidation,
+	node.AUD004: ExitValidation,
+	node.AUD005: ExitValidation,
+	node.AUD007: ExitValidation,
+	node.AUD008: ExitValidation,
+}
+
+// ExitCodeForAuditDiagnostics returns the exit code for the first error diagnostic.
+// Warning-only or empty input returns 0. Unmapped error codes default to 1.
+func ExitCodeForAuditDiagnostics(diags []node.AuditDiagnostic) int {
+	for _, d := range diags {
+		if d.Severity != node.SeverityError {
+			continue
+		}
+		if code, ok := auditExitMap[d.Code]; ok {
 			return code
 		}
 		return ExitUsage
