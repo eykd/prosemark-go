@@ -61,23 +61,24 @@ func newInitCmdWithGetCWD(initIO InitIO, getwd func() (string, error)) *cobra.Co
 
 			binderExists, err := initIO.StatFile(binderPath)
 			if err != nil {
-				return fmt.Errorf("checking %s: %w", binderPath, err)
+				return emitOPE009AndError(cmd, jsonMode, fmt.Errorf("checking %s: %w", binderPath, err))
 			}
 			if binderExists && !force {
-				return fmt.Errorf("_binder.md already exists in %s; use --force to overwrite", project)
+				return emitOPE009AndError(cmd, jsonMode,
+					fmt.Errorf("_binder.md already exists in %s; use --force to overwrite", project))
 			}
 
 			changed := !dryRun
 
 			if changed {
 				if err := initIO.WriteFileAtomic(binderPath, initBinderContent); err != nil {
-					return fmt.Errorf("writing _binder.md: %w", err)
+					return emitOPE009AndError(cmd, jsonMode, fmt.Errorf("writing _binder.md: %w", err))
 				}
 			}
 
 			configExists, err := initIO.StatFile(configPath)
 			if err != nil {
-				return fmt.Errorf("checking %s: %w", configPath, err)
+				return emitOPE009AndError(cmd, jsonMode, fmt.Errorf("checking %s: %w", configPath, err))
 			}
 
 			needsWarning := force && (binderExists || configExists)
@@ -94,8 +95,8 @@ func newInitCmdWithGetCWD(initIO InitIO, getwd func() (string, error)) *cobra.Co
 
 			if changed && writeConfig {
 				if err := initIO.WriteFileAtomic(configPath, initConfigContent); err != nil {
-					return fmt.Errorf(
-						"writing .prosemark.yml (partial init; re-run with --force to recover): %w", err)
+					return emitOPE009AndError(cmd, jsonMode,
+						fmt.Errorf("writing .prosemark.yml (partial init; re-run with --force to recover): %w", err))
 				}
 			}
 
