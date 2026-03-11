@@ -45,11 +45,11 @@ func Move(ctx context.Context, src []byte, project *binder.Project, params binde
 
 	// Require --yes confirmation (OPE009).
 	if !params.Yes {
-		return src, []binder.Diagnostic{{
+		return src, append(parseDiags, binder.Diagnostic{
 			Severity: "error",
 			Code:     binder.CodeIOOrParseFailure,
 			Message:  "move requires --yes confirmation",
-		}}
+		})
 	}
 
 	var allDiags []binder.Diagnostic
