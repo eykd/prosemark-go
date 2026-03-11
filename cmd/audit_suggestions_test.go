@@ -13,7 +13,7 @@ func TestAttachAuditSuggestions_MappedCodes(t *testing.T) {
 		want string
 	}{
 		{"AUD001", node.AUD001, "Check that the referenced file exists on disk. Run 'pmk parse --json' to list binder entries."},
-		{"AUD002", node.AUD002, "Add the orphaned file to the binder with 'pmk add-child', or remove it from the project directory."},
+		{"AUD002", node.AUD002, "Add the orphaned file to the binder with 'pmk add', or remove it from the project directory."},
 		{"AUD003", node.AUD003, "Remove the duplicate entry from '_binder.md'. Each file should appear only once."},
 		{"AUD004", node.AUD004, "Rename the file to match its frontmatter id, or update the frontmatter id to match the filename."},
 		{"AUD005", node.AUD005, "Add the missing frontmatter fields (id, created, updated) to the node file."},
