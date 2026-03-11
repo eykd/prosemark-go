@@ -126,8 +126,8 @@ func newDeleteCmdWithGetCWD(io DeleteIO, getwd func() (string, error)) *cobra.Co
 // operation and removes them from disk. It returns the list of removed target
 // paths (relative to binder dir).
 func deleteRemoveNodeFiles(ctx context.Context, io DeleteIO, originalBytes, modifiedBytes []byte, proj *binder.Project) ([]string, error) {
-	origTargets := deleteCollectTargets(originalBytes, proj)
-	modTargets := deleteCollectTargets(modifiedBytes, proj)
+	origTargets := deleteCollectTargets(ctx, originalBytes, proj)
+	modTargets := deleteCollectTargets(ctx, modifiedBytes, proj)
 
 	modSet := make(map[string]struct{}, len(modTargets))
 	for _, t := range modTargets {
@@ -148,24 +148,24 @@ func deleteRemoveNodeFiles(ctx context.Context, io DeleteIO, originalBytes, modi
 }
 
 // deleteCollectTargets parses binder bytes and returns all node targets.
-func deleteCollectTargets(src []byte, proj *binder.Project) []string {
-	result, _, err := binder.Parse(context.Background(), src, proj)
+func deleteCollectTargets(ctx context.Context, src []byte, proj *binder.Project) []string {
+	result, _, err := binder.Parse(ctx, src, proj)
 	if err != nil {
 		return nil
 	}
-	var targets []string
-	deleteWalkTargets(result.Root, &targets)
-	return targets
+	return deleteWalkTargets(result.Root)
 }
 
 // deleteWalkTargets recursively collects all node targets in the tree.
-func deleteWalkTargets(n *binder.Node, targets *[]string) {
+func deleteWalkTargets(n *binder.Node) []string {
+	var targets []string
 	for _, child := range n.Children {
 		if child.Target != "" {
-			*targets = append(*targets, child.Target)
+			targets = append(targets, child.Target)
 		}
-		deleteWalkTargets(child, targets)
+		targets = append(targets, deleteWalkTargets(child)...)
 	}
+	return targets
 }
 
 // fileDeleteIO implements DeleteIO using OS file I/O.

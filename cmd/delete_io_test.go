@@ -113,7 +113,7 @@ func TestFileDeleteIO_RemoveFile(t *testing.T) {
 
 func TestDeleteCollectTargets_ParseError(t *testing.T) {
 	// Non-UTF-8 bytes trigger a parse error; should return nil, not panic.
-	got := deleteCollectTargets([]byte{0xff, 0xfe}, nil)
+	got := deleteCollectTargets(context.Background(), []byte{0xff, 0xfe}, nil)
 	if got != nil {
 		t.Errorf("expected nil for unparseable input, got %v", got)
 	}
