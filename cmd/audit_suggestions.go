@@ -4,7 +4,7 @@ import "github.com/eykd/prosemark-go/internal/node"
 
 var auditSuggestionMap = map[string]string{
 	string(node.AUD001): "Check that the referenced file exists on disk. Run 'pmk parse --json' to list binder entries.",
-	string(node.AUD002): "Add the orphaned file to the binder with 'pmk add-child', or remove it from the project directory.",
+	string(node.AUD002): "Add the orphaned file to the binder with 'pmk add', or remove it from the project directory.",
 	string(node.AUD003): "Remove the duplicate entry from '_binder.md'. Each file should appear only once.",
 	string(node.AUD004): "Rename the file to match its frontmatter id, or update the frontmatter id to match the filename.",
 	string(node.AUD005): "Add the missing frontmatter fields (id, created, updated) to the node file.",
