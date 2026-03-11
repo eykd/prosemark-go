@@ -75,6 +75,81 @@ func TestRootCmd_NoArgs_ShowsHelp(t *testing.T) {
 	}
 }
 
+// TestResolveProjectDirFromCmd_PMKProjectEnvVar verifies that PMK_PROJECT
+// env var is used as the project directory when --project flag is not set.
+func TestResolveProjectDirFromCmd_PMKProjectEnvVar(t *testing.T) {
+	tests := []struct {
+		name      string
+		envValue  string
+		flagValue string
+		flagSet   bool
+		wantDir   string
+		wantGetwd bool // true if getwd should be called
+		wantErr   bool
+	}{
+		{
+			name:      "env var used when flag not set",
+			envValue:  "/from/env",
+			flagSet:   false,
+			wantDir:   "/from/env",
+			wantGetwd: false,
+		},
+		{
+			name:      "flag takes precedence over env var",
+			envValue:  "/from/env",
+			flagValue: "/from/flag",
+			flagSet:   true,
+			wantDir:   "/from/flag",
+			wantGetwd: false,
+		},
+		{
+			name:      "falls back to getwd when neither set",
+			envValue:  "",
+			flagSet:   false,
+			wantDir:   "/from/cwd",
+			wantGetwd: true,
+		},
+		{
+			name:      "empty env var is ignored, falls back to getwd",
+			envValue:  "",
+			flagSet:   false,
+			wantDir:   "/from/cwd",
+			wantGetwd: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv(envPMKProject, tt.envValue)
+
+			cmd := &cobra.Command{}
+			cmd.Flags().String("project", "", "project directory")
+			if tt.flagSet {
+				if err := cmd.Flags().Set("project", tt.flagValue); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			getwdCalled := false
+			getwd := func() (string, error) {
+				getwdCalled = true
+				return "/from/cwd", nil
+			}
+
+			got, err := resolveProjectDirFromCmd(cmd, getwd)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if !tt.wantErr && got != tt.wantDir {
+				t.Errorf("got %q, want %q", got, tt.wantDir)
+			}
+			if tt.wantGetwd != getwdCalled {
+				t.Errorf("getwd called = %v, want %v", getwdCalled, tt.wantGetwd)
+			}
+		})
+	}
+}
+
 func TestResolveBinderPath_ReturnsErrorWhenGetCWDFails(t *testing.T) {
 	_, err := resolveBinderPath("", func() (string, error) { return "", errors.New("getwd failed") })
 	if err == nil {

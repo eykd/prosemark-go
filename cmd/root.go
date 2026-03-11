@@ -21,6 +21,9 @@ const dryRunAnnotationKey = "dry-run"
 // dryRunNoOp is the annotation value indicating --dry-run is accepted but has no effect.
 const dryRunNoOp = "no-op"
 
+// envPMKProject is the environment variable for the default project directory.
+const envPMKProject = "PMK_PROJECT"
+
 // dryRunNoOpAnnotation returns the annotation map for read-only commands
 // where --dry-run is accepted as a no-op (FR-018).
 func dryRunNoOpAnnotation() map[string]string {
@@ -99,7 +102,7 @@ func resolveProjectDirFromCmd(cmd *cobra.Command, getwd func() (string, error)) 
 		return "", fmt.Errorf("--project flag cannot be empty")
 	}
 	if project == "" {
-		project = os.Getenv("PMK_PROJECT")
+		project = os.Getenv(envPMKProject)
 	}
 	if project == "" {
 		cwd, err := getwd()
