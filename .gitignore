@@ -43,3 +43,7 @@ beads_prosemark-go/
 config.yaml
 
 .sprite
+
+# Prosemark project files (test fixtures / local state)
+.prosemark.yml
+_binder.md
