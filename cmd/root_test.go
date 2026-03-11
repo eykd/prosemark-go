@@ -256,6 +256,74 @@ func TestRootCmd_DryRunFlag_SetToTrue(t *testing.T) {
 	}
 }
 
+// rootHelpOutput executes the root command with --help and returns the output.
+func rootHelpOutput(t *testing.T) string {
+	t.Helper()
+	root := NewRootCmd()
+	out := new(bytes.Buffer)
+	root.SetOut(out)
+	root.SetErr(new(bytes.Buffer))
+	root.SetArgs([]string{"--help"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	return out.String()
+}
+
+func TestRootCmd_LongHelp_ContainsExitCodesTable(t *testing.T) {
+	helpOutput := rootHelpOutput(t)
+
+	// Must contain an "Exit Codes" section header
+	if !strings.Contains(helpOutput, "Exit Codes") {
+		t.Error("help output missing \"Exit Codes\" section")
+	}
+
+	// Must document each exit code 0-6 with its meaning
+	exitCodes := []struct {
+		code    string
+		meaning string
+	}{
+		{"0", "Success"},
+		{"1", "Usage error"},
+		{"2", "Validation error"},
+		{"3", "Not found"},
+		{"5", "Conflict"},
+		{"6", "Transient"},
+	}
+	for _, ec := range exitCodes {
+		if !strings.Contains(helpOutput, ec.code) || !strings.Contains(helpOutput, ec.meaning) {
+			t.Errorf("help output missing exit code %s (%s)", ec.code, ec.meaning)
+		}
+	}
+}
+
+func TestRootCmd_LongHelp_ContainsStateModel(t *testing.T) {
+	helpOutput := rootHelpOutput(t)
+
+	// Must contain a "State Model" section
+	if !strings.Contains(helpOutput, "State Model") {
+		t.Error("help output missing \"State Model\" section")
+	}
+
+	// Must mention both state files
+	for _, file := range []string{".prosemark.yml", "_binder.md"} {
+		if !strings.Contains(helpOutput, file) {
+			t.Errorf("help output missing state file %q", file)
+		}
+	}
+}
+
+func TestRootCmd_LongHelp_ContainsEnvironmentVariables(t *testing.T) {
+	helpOutput := rootHelpOutput(t)
+
+	for _, envVar := range []string{"EDITOR", "PMK_PROJECT"} {
+		if !strings.Contains(helpOutput, envVar) {
+			t.Errorf("help output missing environment variable %q", envVar)
+		}
+	}
+}
+
 func TestRootCmd_EditCmd_BinderParseError_ShowsCannotParse(t *testing.T) {
 	dir := t.TempDir()
 	binderPath := filepath.Join(dir, "_binder.md")
