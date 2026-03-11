@@ -263,6 +263,19 @@ func execAddChild(ctx context.Context, cmd *cobra.Command, binderBytes []byte, p
 	}, nil
 }
 
+// rollbackNewNode deletes the node file and restores the binder to its
+// pre-operation state. primaryErr is returned as-is unless the binder
+// restoration also fails, in which case both errors are reported.
+func rollbackNewNode(ctx context.Context, io NewNodeAddChildIO, nodePath, binderPath string, binderBytes []byte, binderChanged bool, primaryErr error) error {
+	_ = io.DeleteFile(nodePath)
+	if binderChanged {
+		if rollbackErr := io.WriteBinderAtomic(ctx, binderPath, binderBytes); rollbackErr != nil {
+			return fmt.Errorf("%w; binder rollback also failed: %v", primaryErr, rollbackErr)
+		}
+	}
+	return primaryErr
+}
+
 // runNewMode handles the --new flag workflow: creates a UUID node file, updates
 // the binder, and optionally opens an editor to populate the file.
 // params.Target must already be set to a valid UUID filename before calling.
@@ -313,22 +326,10 @@ func runNewMode(ctx context.Context, cmd *cobra.Command, io NewNodeAddChildIO, b
 
 	if opts.editMode && !dryRun {
 		if len(strings.Fields(opts.editor)) == 0 {
-			_ = io.DeleteFile(nodePath)
-			if result.changed {
-				if rollbackErr := io.WriteBinderAtomic(ctx, binderPath, binderBytes); rollbackErr != nil {
-					return fmt.Errorf("$EDITOR is not set; binder rollback also failed: %v", rollbackErr)
-				}
-			}
-			return fmt.Errorf("$EDITOR is not set")
+			return rollbackNewNode(ctx, io, nodePath, binderPath, binderBytes, result.changed, fmt.Errorf("$EDITOR is not set"))
 		}
 		if err := io.OpenEditor(opts.editor, nodePath); err != nil {
-			_ = io.DeleteFile(nodePath)
-			if result.changed {
-				if rollbackErr := io.WriteBinderAtomic(ctx, binderPath, binderBytes); rollbackErr != nil {
-					return fmt.Errorf("opening editor: %w; binder rollback also failed: %v", err, rollbackErr)
-				}
-			}
-			return fmt.Errorf("opening editor: %w", err)
+			return rollbackNewNode(ctx, io, nodePath, binderPath, binderBytes, result.changed, fmt.Errorf("opening editor: %w", err))
 		}
 		// Re-read the file after the editor exits so body text is preserved,
 		// then stamp the 'updated' frontmatter field and write back atomically.
