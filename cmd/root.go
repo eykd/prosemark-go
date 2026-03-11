@@ -150,6 +150,10 @@ func emitOPE009AndError(cmd *cobra.Command, jsonMode bool, origErr error) error 
 // descriptions to document --dry-run support.
 const dryRunHelpSuffix = "\n\nUse --dry-run to preview changes without modifying any files."
 
+// dryRunNoOpHelpSuffix is the help text appended to read-only subcommand Long
+// descriptions to document that --dry-run is accepted but has no effect.
+const dryRunNoOpHelpSuffix = "\n\nThe --dry-run flag is accepted but has no effect (no-op) on this read-only command."
+
 // dryRunPrefix returns "dry-run: " when dryRun is true, or "" otherwise.
 // Used by mutation commands to prefix human-readable output in dry-run mode.
 func dryRunPrefix(dryRun bool) string {

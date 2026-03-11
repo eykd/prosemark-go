@@ -48,7 +48,7 @@ func newDoctorCmdWithGetCWD(io DoctorIO, getwd func() (string, error)) *cobra.Co
 	cmd := &cobra.Command{
 		Use:   "doctor",
 		Short: "Validate project structural integrity and frontmatter contracts",
-		Long:  "Validate project structural integrity and frontmatter contracts.\n\nThe --dry-run flag is accepted but has no effect (no-op) on this read-only command.",
+		Long:  "Validate project structural integrity and frontmatter contracts." + dryRunNoOpHelpSuffix,
 		Example: `  # Check the current project for issues
   pmk doctor
 

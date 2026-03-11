@@ -377,6 +377,58 @@ func TestMutationSubcommands_Help_DocumentsDryRun(t *testing.T) {
 	}
 }
 
+// TestReadOnlySubcommands_Help_HasLongDescription verifies that read-only
+// subcommands have a Long description providing context beyond the Short line.
+func TestReadOnlySubcommands_Help_HasLongDescription(t *testing.T) {
+	readOnlyCmds := []string{"doctor", "edit", "parse"}
+
+	for _, name := range readOnlyCmds {
+		t.Run(name, func(t *testing.T) {
+			root := NewRootCmd()
+			sub, _, err := root.Find([]string{name})
+			if err != nil {
+				t.Fatalf("subcommand %q not found: %v", name, err)
+			}
+
+			if sub.Long == "" {
+				t.Errorf("%s has no Long description", name)
+			}
+		})
+	}
+}
+
+// TestReadOnlySubcommands_Help_DocumentsDryRunNoOp verifies that read-only
+// subcommands that accept --dry-run document it as a no-op in their Long
+// description, so users understand it has no effect on read-only operations.
+func TestReadOnlySubcommands_Help_DocumentsDryRunNoOp(t *testing.T) {
+	readOnlyCmds := []string{"doctor", "edit", "parse"}
+
+	for _, name := range readOnlyCmds {
+		t.Run(name, func(t *testing.T) {
+			root := NewRootCmd()
+			sub, _, err := root.Find([]string{name})
+			if err != nil {
+				t.Fatalf("subcommand %q not found: %v", name, err)
+			}
+
+			long := sub.Long
+			if long == "" {
+				t.Fatalf("%s has no Long description", name)
+			}
+
+			if !strings.Contains(long, "--dry-run") {
+				t.Errorf("%s Long description does not mention --dry-run:\n%s",
+					name, long)
+			}
+
+			if !strings.Contains(long, "no-op") && !strings.Contains(long, "no effect") {
+				t.Errorf("%s Long description does not indicate --dry-run is a no-op:\n%s",
+					name, long)
+			}
+		})
+	}
+}
+
 // TestSubcommands_Help_ContainsExamples verifies that every subcommand has an
 // Example field with at least 2 usage examples in standard Cobra format.
 func TestSubcommands_Help_ContainsExamples(t *testing.T) {

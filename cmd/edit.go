@@ -36,7 +36,7 @@ func newEditCmdWithGetCWD(io EditIO, getwd func() (string, error)) *cobra.Comman
 	cmd := &cobra.Command{
 		Use:   "edit <id>",
 		Short: "Open a node file in $EDITOR",
-		Long:  "Open a node file in $EDITOR for editing.\n\nThe --dry-run flag is accepted but has no effect (no-op) on this read-only command.",
+		Long:  "Open a node file in $EDITOR for editing." + dryRunNoOpHelpSuffix,
 		Example: `  # Open a node for editing
   pmk edit abc123
 
@@ -44,6 +44,7 @@ func newEditCmdWithGetCWD(io EditIO, getwd func() (string, error)) *cobra.Comman
   pmk edit abc123 --dry-run`,
 		Args:         cobra.ExactArgs(1),
 		SilenceUsage: true,
+		Annotations:  dryRunNoOpAnnotation(),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			nodeID := args[0]
 			dryRun := isDryRun(cmd)
