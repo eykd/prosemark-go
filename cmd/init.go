@@ -108,12 +108,16 @@ func newInitCmdWithGetCWD(initIO InitIO, getwd func() (string, error)) *cobra.Co
 			}
 
 			if needsWarning {
-				fmt.Fprintln(cmd.ErrOrStderr(), "warning: overwriting existing files")
+				if _, err := fmt.Fprintln(cmd.ErrOrStderr(), "warning: overwriting existing files"); err != nil {
+					return fmt.Errorf("writing output: %w", err)
+				}
 			}
 
 			printDiagnostics(cmd, diags)
 
-			fmt.Fprintln(cmd.OutOrStdout(), dryRunPrefix(dryRun)+"Initialized "+sanitizePath(project))
+			if _, err := fmt.Fprintln(cmd.OutOrStdout(), dryRunPrefix(dryRun)+"Initialized "+sanitizePath(project)); err != nil {
+				return fmt.Errorf("writing output: %w", err)
+			}
 			return nil
 		},
 	}
