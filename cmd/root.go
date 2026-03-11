@@ -99,6 +99,9 @@ func resolveProjectDirFromCmd(cmd *cobra.Command, getwd func() (string, error)) 
 		return "", fmt.Errorf("--project flag cannot be empty")
 	}
 	if project == "" {
+		project = os.Getenv("PMK_PROJECT")
+	}
+	if project == "" {
 		cwd, err := getwd()
 		if err != nil {
 			return "", fmt.Errorf("getting working directory: %w", err)
