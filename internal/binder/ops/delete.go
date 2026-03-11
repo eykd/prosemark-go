@@ -22,11 +22,11 @@ var deleteInlineLinkRE = regexp.MustCompile(`\[[^\]]*\]\([^)]*\)`)
 // bytes are unchanged on error (atomic abort semantics). Parse errors are
 // surfaced as diagnostics, not as a returned error.
 func Delete(ctx context.Context, src []byte, project *binder.Project, params binder.DeleteParams) ([]byte, []binder.Diagnostic) {
-	// Require --yes confirmation (OPE009).
+	// Require --yes confirmation (OPE011).
 	if !params.Yes {
 		return src, []binder.Diagnostic{{
 			Severity: "error",
-			Code:     binder.CodeIOOrParseFailure,
+			Code:     binder.CodeMissingConfirmation,
 			Message:  "delete requires --yes confirmation",
 		}}
 	}

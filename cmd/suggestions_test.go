@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/eykd/prosemark-go/internal/binder"
@@ -41,6 +42,21 @@ func TestAttachSuggestions_MappedCodes(t *testing.T) {
 				t.Errorf("attachSuggestions() suggestion = %q, want %q", diags[0].Suggestion, tt.want)
 			}
 		})
+	}
+}
+
+func TestAttachSuggestions_OPE011_MentionsYesFlag(t *testing.T) {
+	diags := []binder.Diagnostic{
+		{Severity: "error", Code: binder.CodeMissingConfirmation, Message: "requires --yes"},
+	}
+
+	attachSuggestions(diags)
+
+	if diags[0].Suggestion == "" {
+		t.Fatal("expected non-empty suggestion for OPE011 (CodeMissingConfirmation)")
+	}
+	if got := diags[0].Suggestion; !strings.Contains(got, "--yes") {
+		t.Errorf("suggestion for OPE011 should mention --yes, got: %q", got)
 	}
 }
 

@@ -43,11 +43,11 @@ func Move(ctx context.Context, src []byte, project *binder.Project, params binde
 		return src, append(parseDiags, selDiags...)
 	}
 
-	// Require --yes confirmation (OPE009).
+	// Require --yes confirmation (OPE011).
 	if !params.Yes {
 		return src, append(parseDiags, binder.Diagnostic{
 			Severity: "error",
-			Code:     binder.CodeIOOrParseFailure,
+			Code:     binder.CodeMissingConfirmation,
 			Message:  "move requires --yes confirmation",
 		})
 	}

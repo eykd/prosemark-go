@@ -437,7 +437,7 @@ func TestMove_ErrorCodesAbortMutation(t *testing.T) {
 			wantCode: binder.CodeSelectorNoMatch,
 		},
 		{
-			name: "OPE009_missing_yes_confirmation",
+			name: "OPE011_missing_yes_confirmation",
 			src:  baseSrc,
 			params: binder.MoveParams{
 				SourceSelector:            "alpha",
@@ -445,7 +445,7 @@ func TestMove_ErrorCodesAbortMutation(t *testing.T) {
 				Position:                  "last",
 				Yes:                       false,
 			},
-			wantCode: binder.CodeIOOrParseFailure,
+			wantCode: binder.CodeMissingConfirmation,
 		},
 	}
 
@@ -697,6 +697,32 @@ func TestMove_After_SiblingNotFound_OPE007(t *testing.T) {
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
+// Missing --yes: must emit OPE011, not OPE009
+// ──────────────────────────────────────────────────────────────────────────────
+
+// TestMove_MissingYes_EmitsOPE011 verifies that when --yes is missing,
+// Move returns OPE011 (CodeMissingConfirmation) instead of OPE009.
+// OPE009 is reserved for I/O and parse failures, not usage errors.
+func TestMove_MissingYes_EmitsOPE011(t *testing.T) {
+	src := binderSrc("- [Alpha](alpha.md)", "- [Beta](beta.md)")
+	out, diags := Move(context.Background(), src, nil, binder.MoveParams{
+		SourceSelector:            "alpha",
+		DestinationParentSelector: "beta",
+		Position:                  "last",
+		Yes:                       false,
+	})
+	if !hasDiagCode(diags, binder.CodeMissingConfirmation) {
+		t.Errorf("expected OPE011 (CodeMissingConfirmation), got: %v", diags)
+	}
+	if hasDiagCode(diags, binder.CodeIOOrParseFailure) {
+		t.Error("missing --yes must NOT emit OPE009; OPE009 is reserved for I/O/parse failures")
+	}
+	if !bytes.Equal(out, src) {
+		t.Error("expected src unchanged when --yes is missing")
+	}
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
 // Parse error path (OPE009) via moveParseBinderFn mock
 // ──────────────────────────────────────────────────────────────────────────────
 
@@ -764,8 +790,8 @@ func TestMove_ConfirmationFailure_PreservesParseWarnings(t *testing.T) {
 	}
 
 	// Must contain the confirmation error.
-	if !hasDiagCode(diags, binder.CodeIOOrParseFailure) {
-		t.Errorf("expected OPE009 confirmation diagnostic, got: %v", diags)
+	if !hasDiagCode(diags, binder.CodeMissingConfirmation) {
+		t.Errorf("expected OPE011 confirmation diagnostic, got: %v", diags)
 	}
 
 	// Must also contain the parse warning (the bug: these are currently lost).

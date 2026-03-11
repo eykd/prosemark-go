@@ -74,6 +74,16 @@ func TestExitCodeForDiagnostics_MappedCodes(t *testing.T) {
 	}
 }
 
+func TestExitCodeForDiagnostics_OPE011_MapsToUsage(t *testing.T) {
+	diags := []binder.Diagnostic{
+		{Severity: "error", Code: binder.CodeMissingConfirmation, Message: "requires --yes"},
+	}
+	got := ExitCodeForDiagnostics(diags)
+	if got != ExitUsage {
+		t.Errorf("ExitCodeForDiagnostics(%s) = %d, want %d (ExitUsage)", binder.CodeMissingConfirmation, got, ExitUsage)
+	}
+}
+
 func TestExitCodeForDiagnostics_FirstErrorWins(t *testing.T) {
 	diags := []binder.Diagnostic{
 		{Severity: "warning", Code: "OPW001", Message: "skip me"},

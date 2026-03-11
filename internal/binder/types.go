@@ -144,16 +144,17 @@ const (
 
 // Operation errors (non-zero exit; abort mutation).
 const (
-	CodeSelectorNoMatch   = "OPE001"
-	CodeAmbiguousBareStem = "OPE002"
-	CodeCycleDetected     = "OPE003"
-	CodeInvalidTargetPath = "OPE004"
-	CodeTargetIsBinder    = "OPE005"
-	CodeNodeInCodeFence   = "OPE006"
-	CodeSiblingNotFound   = "OPE007"
-	CodeIndexOutOfBounds  = "OPE008"
-	CodeIOOrParseFailure  = "OPE009"
-	CodeConflictingFlags  = "OPE010"
+	CodeSelectorNoMatch     = "OPE001"
+	CodeAmbiguousBareStem   = "OPE002"
+	CodeCycleDetected       = "OPE003"
+	CodeInvalidTargetPath   = "OPE004"
+	CodeTargetIsBinder      = "OPE005"
+	CodeNodeInCodeFence     = "OPE006"
+	CodeSiblingNotFound     = "OPE007"
+	CodeIndexOutOfBounds    = "OPE008"
+	CodeIOOrParseFailure    = "OPE009"
+	CodeConflictingFlags    = "OPE010"
+	CodeMissingConfirmation = "OPE011"
 )
 
 // Operation warnings (exit 0; mutation proceeds).

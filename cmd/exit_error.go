@@ -17,19 +17,20 @@ const (
 
 // diagnosticExitMap maps diagnostic codes to exit codes.
 var diagnosticExitMap = map[string]int{
-	binder.CodeConflictingFlags:  ExitUsage,
-	binder.CodeInvalidTargetPath: ExitValidation,
-	binder.CodeTargetIsBinder:    ExitValidation,
-	binder.CodeIllegalPathChars:  ExitValidation,
-	binder.CodePathEscapesRoot:   ExitValidation,
-	binder.CodeAmbiguousWikilink: ExitValidation,
-	binder.CodeSelectorNoMatch:   ExitNotFound,
-	binder.CodeSiblingNotFound:   ExitNotFound,
-	binder.CodeIndexOutOfBounds:  ExitNotFound,
-	binder.CodeAmbiguousBareStem: ExitConflict,
-	binder.CodeCycleDetected:     ExitConflict,
-	binder.CodeNodeInCodeFence:   ExitConflict,
-	binder.CodeIOOrParseFailure:  ExitTransient,
+	binder.CodeConflictingFlags:    ExitUsage,
+	binder.CodeInvalidTargetPath:   ExitValidation,
+	binder.CodeTargetIsBinder:      ExitValidation,
+	binder.CodeIllegalPathChars:    ExitValidation,
+	binder.CodePathEscapesRoot:     ExitValidation,
+	binder.CodeAmbiguousWikilink:   ExitValidation,
+	binder.CodeSelectorNoMatch:     ExitNotFound,
+	binder.CodeSiblingNotFound:     ExitNotFound,
+	binder.CodeIndexOutOfBounds:    ExitNotFound,
+	binder.CodeAmbiguousBareStem:   ExitConflict,
+	binder.CodeCycleDetected:       ExitConflict,
+	binder.CodeNodeInCodeFence:     ExitConflict,
+	binder.CodeIOOrParseFailure:    ExitTransient,
+	binder.CodeMissingConfirmation: ExitUsage,
 }
 
 // ExitCodeForDiagnostics returns the exit code for the first error diagnostic.

@@ -305,13 +305,13 @@ func TestDelete_ErrorCodesAbortMutation(t *testing.T) {
 			wantCode: binder.CodeSelectorNoMatch,
 		},
 		{
-			name: "OPE009_missing_yes_confirmation",
+			name: "OPE011_missing_yes_confirmation",
 			src:  baseSrc,
 			params: binder.DeleteParams{
 				Selector: "alpha",
 				Yes:      false,
 			},
-			wantCode: binder.CodeIOOrParseFailure,
+			wantCode: binder.CodeMissingConfirmation,
 		},
 	}
 
@@ -463,6 +463,26 @@ func TestDelete_BareFilenameSelector_AfterDotSlashAdd_Succeeds(t *testing.T) {
 	}
 	if bytes.Contains(out, []byte("a.md")) {
 		t.Errorf("node not removed from output:\n%s", out)
+	}
+}
+
+// TestDelete_MissingYes_EmitsOPE011 verifies that when --yes is missing,
+// Delete returns OPE011 (CodeMissingConfirmation) instead of OPE009.
+// OPE009 is reserved for I/O and parse failures, not usage errors.
+func TestDelete_MissingYes_EmitsOPE011(t *testing.T) {
+	src := binderSrc("- [Alpha](alpha.md)")
+	out, diags := Delete(context.Background(), src, nil, binder.DeleteParams{
+		Selector: "alpha",
+		Yes:      false,
+	})
+	if !hasDiagCode(diags, binder.CodeMissingConfirmation) {
+		t.Errorf("expected OPE011 (CodeMissingConfirmation), got: %v", diags)
+	}
+	if hasDiagCode(diags, binder.CodeIOOrParseFailure) {
+		t.Error("missing --yes must NOT emit OPE009; OPE009 is reserved for I/O/parse failures")
+	}
+	if !bytes.Equal(out, src) {
+		t.Error("expected src unchanged when --yes is missing")
 	}
 }
 

@@ -240,13 +240,83 @@ func TestNewMoveCmd_MissingYesFlagReturnsError(t *testing.T) {
 	c.SetArgs([]string{"--source", "chapter-two.md", "--dest", "chapter-one.md", "--project", "."})
 
 	if err := c.Execute(); err == nil {
-		t.Error("expected error when --yes flag is missing (OPE009)")
+		t.Error("expected error when --yes flag is missing (OPE011)")
 	}
 	if out.Len() > 0 {
-		t.Errorf("expected no stdout for OPE009 error, got: %s", out.String())
+		t.Errorf("expected no stdout for OPE011 error, got: %s", out.String())
 	}
-	if !strings.Contains(errOut.String(), "OPE009") {
-		t.Errorf("expected errOut to contain OPE009, got: %s", errOut.String())
+	if !strings.Contains(errOut.String(), "OPE011") {
+		t.Errorf("expected errOut to contain OPE011, got: %s", errOut.String())
+	}
+}
+
+// TestNewMoveCmd_MissingYes_ExitCode1_AndSuggestion verifies that
+// missing --yes returns exit code 1 (usage) with a suggestion mentioning --yes,
+// not exit code 6 (transient) with a misleading _binder.md suggestion.
+func TestNewMoveCmd_MissingYes_ExitCode1_AndSuggestion(t *testing.T) {
+	mock := &mockMoveIO{
+		binderBytes: moveBinder(),
+		project:     &binder.Project{Files: []string{"chapter-one.md", "chapter-two.md"}, BinderDir: "."},
+	}
+	c := NewMoveCmd(mock)
+	out := new(bytes.Buffer)
+	errOut := new(bytes.Buffer)
+	c.SetOut(out)
+	c.SetErr(errOut)
+	c.SetArgs([]string{"--source", "chapter-two.md", "--dest", "chapter-one.md", "--project", "."})
+
+	err := c.Execute()
+	if err == nil {
+		t.Fatal("expected error when --yes flag is missing")
+	}
+
+	// Exit code must be 1 (usage), not 6 (transient).
+	var exitErr *ExitError
+	if !errors.As(err, &exitErr) {
+		t.Fatalf("expected *ExitError, got %T: %v", err, err)
+	}
+	if exitErr.Code != ExitUsage {
+		t.Errorf("exit code = %d, want %d (ExitUsage)", exitErr.Code, ExitUsage)
+	}
+
+	// Stderr must mention --yes, not _binder.md.
+	stderr := errOut.String()
+	if !strings.Contains(stderr, "--yes") {
+		t.Errorf("expected stderr to mention --yes, got: %s", stderr)
+	}
+	if strings.Contains(stderr, "_binder.md") {
+		t.Errorf("stderr must NOT suggest checking _binder.md for missing --yes: %s", stderr)
+	}
+}
+
+// TestNewMoveCmd_MissingYes_JSON_EmitsOPE011 verifies that the JSON output
+// for missing --yes contains OPE011 (not OPE009) with a --yes suggestion.
+func TestNewMoveCmd_MissingYes_JSON_EmitsOPE011(t *testing.T) {
+	mock := &mockMoveIO{
+		binderBytes: moveBinder(),
+		project:     &binder.Project{Files: []string{"chapter-one.md", "chapter-two.md"}, BinderDir: "."},
+	}
+	c := NewMoveCmd(mock)
+	out := new(bytes.Buffer)
+	c.SetOut(out)
+	c.SetErr(new(bytes.Buffer))
+	c.SetArgs([]string{"--source", "chapter-two.md", "--dest", "chapter-one.md", "--json", "--project", "."})
+
+	_ = c.Execute()
+
+	var result binder.OpResult
+	if err := json.Unmarshal(out.Bytes(), &result); err != nil {
+		t.Fatalf("expected valid JSON, got: %s", out.String())
+	}
+	if len(result.Diagnostics) == 0 {
+		t.Fatal("expected at least one diagnostic")
+	}
+	d := result.Diagnostics[0]
+	if d.Code != binder.CodeMissingConfirmation {
+		t.Errorf("diagnostic code = %q, want %q (CodeMissingConfirmation)", d.Code, binder.CodeMissingConfirmation)
+	}
+	if !strings.Contains(d.Suggestion, "--yes") {
+		t.Errorf("suggestion should mention --yes, got: %q", d.Suggestion)
 	}
 }
 
