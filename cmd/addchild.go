@@ -255,9 +255,7 @@ func runNewMode(ctx context.Context, cmd *cobra.Command, io NewNodeAddChildIO, b
 	}
 
 	modifiedBytes, diags := ops.AddChild(ctx, binderBytes, proj, params)
-	if diags == nil {
-		diags = []binder.Diagnostic{}
-	}
+	diags = prepareDiagnostics(diags)
 
 	printDiagnostics(cmd, diags)
 
