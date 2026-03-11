@@ -46,8 +46,13 @@ func NewDoctorCmd(io DoctorIO) *cobra.Command {
 // newDoctorCmdWithGetCWD creates the doctor subcommand with an injectable getwd function.
 func newDoctorCmdWithGetCWD(io DoctorIO, getwd func() (string, error)) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:          "doctor",
-		Short:        "Validate project structural integrity and frontmatter contracts",
+		Use:   "doctor",
+		Short: "Validate project structural integrity and frontmatter contracts",
+		Example: `  # Check the current project for issues
+  pmk doctor
+
+  # Output diagnostics as JSON
+  pmk doctor --json`,
 		Args:         cobra.NoArgs,
 		SilenceUsage: true,
 		Annotations:  dryRunNoOpAnnotation(),

@@ -31,8 +31,13 @@ func NewParseCmd(reader ParseReader) *cobra.Command {
 
 func newParseCmdWithGetCWD(reader ParseReader, getwd func() (string, error)) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:          "parse",
-		Short:        "Parse a binder file and output JSON",
+		Use:   "parse",
+		Short: "Parse a binder file and output JSON",
+		Example: `  # Parse the binder in the current directory
+  pmk parse
+
+  # Parse a binder at a specific path
+  pmk parse --binder /path/to/_binder.md`,
 		Args:         cobra.NoArgs,
 		SilenceUsage: true,
 		Annotations:  dryRunNoOpAnnotation(),

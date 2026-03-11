@@ -34,8 +34,13 @@ func NewEditCmd(io EditIO) *cobra.Command {
 
 func newEditCmdWithGetCWD(io EditIO, getwd func() (string, error)) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:          "edit <id>",
-		Short:        "Open a node file in $EDITOR",
+		Use:   "edit <id>",
+		Short: "Open a node file in $EDITOR",
+		Example: `  # Open a node for editing
+  pmk edit abc123
+
+  # Preview which file would be opened
+  pmk edit abc123 --dry-run`,
 		Args:         cobra.ExactArgs(1),
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {

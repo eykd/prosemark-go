@@ -38,8 +38,13 @@ func newInitCmdWithGetCWD(initIO InitIO, getwd func() (string, error)) *cobra.Co
 	)
 
 	cmd := &cobra.Command{
-		Use:          "init",
-		Short:        "Initialize a prosemark project in the current directory",
+		Use:   "init",
+		Short: "Initialize a prosemark project in the current directory",
+		Example: `  # Initialize a new prosemark project
+  pmk init
+
+  # Preview initialization without creating files
+  pmk init --dry-run`,
 		Args:         cobra.NoArgs,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {

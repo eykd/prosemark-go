@@ -32,8 +32,13 @@ func newDeleteCmdWithGetCWD(io DeleteIO, getwd func() (string, error)) *cobra.Co
 	)
 
 	cmd := &cobra.Command{
-		Use:          "delete",
-		Short:        "Delete a node from a binder",
+		Use:   "delete",
+		Short: "Delete a node from a binder",
+		Example: `  # Delete a node by its ID
+  pmk delete --id abc123
+
+  # Preview deletion without modifying files
+  pmk delete --id abc123 --dry-run`,
 		Args:         cobra.NoArgs,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
