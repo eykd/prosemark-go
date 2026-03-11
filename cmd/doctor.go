@@ -115,17 +115,31 @@ func newDoctorCmdWithGetCWD(io DoctorIO, getwd func() (string, error)) *cobra.Co
 						Path:     d.Path,
 					}
 				}
+				attachAuditSuggestions(jsonDiags)
 				out := doctorOutput{Version: "1", Diagnostics: jsonDiags}
 				if err := json.NewEncoder(cmd.OutOrStdout()).Encode(out); err != nil {
 					return fmt.Errorf("encoding output: %w", err)
 				}
 			} else {
-				for _, d := range diags {
+				jsonDiags := make([]DoctorDiagnosticJSON, len(diags))
+				for i, d := range diags {
+					jsonDiags[i] = DoctorDiagnosticJSON{
+						Severity: string(d.Severity),
+						Code:     string(d.Code),
+						Message:  d.Message,
+						Path:     d.Path,
+					}
+				}
+				attachAuditSuggestions(jsonDiags)
+				for _, d := range jsonDiags {
 					fmt.Fprintf(cmd.ErrOrStderr(), "%s %-7s %s\n",
-						string(d.Code),
-						string(d.Severity),
+						d.Code,
+						d.Severity,
 						sanitizePath(d.Message),
 					)
+					if d.Suggestion != "" {
+						fmt.Fprintf(cmd.ErrOrStderr(), "  suggestion: %s\n", d.Suggestion)
+					}
 				}
 			}
 

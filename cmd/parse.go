@@ -71,6 +71,7 @@ func newParseCmdWithGetCWD(reader ParseReader, getwd func() (string, error)) *co
 			if diags == nil {
 				diags = []binder.Diagnostic{}
 			}
+			attachSuggestions(diags)
 
 			out := parseOutput{
 				Version:     result.Version,
