@@ -107,6 +107,36 @@ func TestAddChildCmd_DryRun_ExitCodeOnError(t *testing.T) {
 	}
 }
 
+func TestAddChildCmd_DryRun_ExistingTarget_ShowsSkipped(t *testing.T) {
+	// When --dry-run is set and the target already exists in the binder,
+	// the output should show "already in ... (skipped)", not "dry-run: Added ...".
+	mock := &mockAddChildIO{
+		binderBytes: acBinder(),
+		project:     &binder.Project{Files: []string{"chapter-one.md"}, BinderDir: "."},
+	}
+	sub := NewAddChildCmd(mock)
+	root := withDryRunFlag(sub)
+	out := new(bytes.Buffer)
+	sub.SetOut(out)
+	// chapter-one.md is already in acBinder(), so this is a no-op.
+	root.SetArgs([]string{"add", "--parent", ".", "--target", "chapter-one.md", "--project", ".", "--dry-run"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	got := out.String()
+	if strings.HasPrefix(got, "dry-run:") {
+		t.Errorf("target already in binder: should not show dry-run prefix, got: %q", got)
+	}
+	if !strings.Contains(got, "already in") {
+		t.Errorf("expected 'already in' message for existing target, got: %q", got)
+	}
+	if !strings.Contains(got, "(skipped)") {
+		t.Errorf("expected '(skipped)' suffix for existing target, got: %q", got)
+	}
+}
+
 // --- delete dry-run tests ---
 
 func TestDeleteCmd_DryRun_SkipsWrite(t *testing.T) {
