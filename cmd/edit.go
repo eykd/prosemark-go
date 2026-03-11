@@ -48,11 +48,6 @@ func newEditCmdWithGetCWD(io EditIO, getwd func() (string, error)) *cobra.Comman
 			nodeID := args[0]
 			dryRun := isDryRun(cmd)
 
-			editor := os.Getenv("EDITOR")
-			if len(strings.Fields(editor)) == 0 {
-				return fmt.Errorf("$EDITOR is not set")
-			}
-
 			project, _ := cmd.Flags().GetString("project")
 			binderPath, err := resolveBinderPath(project, getwd)
 			if err != nil {
@@ -112,6 +107,11 @@ func newEditCmdWithGetCWD(io EditIO, getwd func() (string, error)) *cobra.Comman
 			if dryRun {
 				_, err := fmt.Fprintln(cmd.OutOrStdout(), "dry-run: would open "+sanitizePath(editPath)+" in $EDITOR")
 				return err
+			}
+
+			editor := os.Getenv("EDITOR")
+			if len(strings.Fields(editor)) == 0 {
+				return fmt.Errorf("$EDITOR is not set")
 			}
 
 			if err := io.OpenEditor(editor, editPath); err != nil {

@@ -92,6 +92,7 @@ func newAddChildCmdWithGetCWD(io NewNodeAddChildIO, getwd func() (string, error)
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			dryRun := isDryRun(cmd)
+			editor := os.Getenv("EDITOR")
 
 			binderPath, err := resolveBinderPathFromCmd(cmd, getwd)
 			if err != nil {
@@ -147,7 +148,7 @@ func newAddChildCmdWithGetCWD(io NewNodeAddChildIO, getwd func() (string, error)
 					}
 					params.Target = id
 				}
-				return runNewMode(ctx, cmd, io, binderPath, binderBytes, proj, params, synopsis, editMode)
+				return runNewMode(ctx, cmd, io, binderPath, binderBytes, proj, params, synopsis, editMode, editor)
 			}
 
 			modifiedBytes, diags := ops.AddChild(ctx, binderBytes, proj, params)
@@ -232,7 +233,7 @@ func refreshNodeUpdated(io nodeRefresher, path string) error {
 // runNewMode handles the --new flag workflow: creates a UUID node file, updates
 // the binder, and optionally opens an editor to populate the file.
 // params.Target must already be set to a valid UUID filename before calling.
-func runNewMode(ctx context.Context, cmd *cobra.Command, io NewNodeAddChildIO, binderPath string, binderBytes []byte, proj *binder.Project, params binder.AddChildParams, synopsis string, editMode bool) error {
+func runNewMode(ctx context.Context, cmd *cobra.Command, io NewNodeAddChildIO, binderPath string, binderBytes []byte, proj *binder.Project, params binder.AddChildParams, synopsis string, editMode bool, editor string) error {
 	dryRun := isDryRun(cmd)
 	uuidStem := strings.TrimSuffix(params.Target, ".md")
 	binderDir := filepath.Dir(binderPath)
@@ -279,7 +280,6 @@ func runNewMode(ctx context.Context, cmd *cobra.Command, io NewNodeAddChildIO, b
 	}
 
 	if editMode && !dryRun {
-		editor := os.Getenv("EDITOR")
 		if len(strings.Fields(editor)) == 0 {
 			return fmt.Errorf("$EDITOR is not set")
 		}
