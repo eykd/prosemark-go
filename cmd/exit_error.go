@@ -36,7 +36,7 @@ var diagnosticExitMap = map[string]int{
 // Warning-only or empty input returns 0. Unmapped error codes default to 1.
 func ExitCodeForDiagnostics(diags []binder.Diagnostic) int {
 	for _, d := range diags {
-		if d.Severity != "error" {
+		if !hasSeverityError(d.Severity) {
 			continue
 		}
 		if code, ok := diagnosticExitMap[d.Code]; ok {
@@ -62,7 +62,7 @@ var auditExitMap = map[node.AuditCode]int{
 // Warning-only or empty input returns 0. Unmapped error codes default to 1.
 func ExitCodeForAuditDiagnostics(diags []node.AuditDiagnostic) int {
 	for _, d := range diags {
-		if d.Severity != node.SeverityError {
+		if !hasSeverityError(string(d.Severity)) {
 			continue
 		}
 		if code, ok := auditExitMap[d.Code]; ok {
