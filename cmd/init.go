@@ -103,7 +103,9 @@ func newInitCmdWithGetCWD(initIO InitIO, getwd func() (string, error)) *cobra.Co
 
 			if jsonMode {
 				out := binder.OpResult{Version: "1", Changed: changed, DryRun: dryRun, Diagnostics: diags}
-				_ = json.NewEncoder(cmd.OutOrStdout()).Encode(out)
+				if err := json.NewEncoder(cmd.OutOrStdout()).Encode(out); err != nil {
+					return fmt.Errorf("encoding output: %w", err)
+				}
 				return nil
 			}
 

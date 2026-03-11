@@ -77,9 +77,16 @@ func newDoctorCmdWithGetCWD(io DoctorIO, getwd func() (string, error)) *cobra.Co
 			}
 
 			// List UUID files in project root.
+			var dirScanDiags []node.AuditDiagnostic
 			uuidFiles, err := io.ListUUIDFiles(projectDir)
 			if err != nil {
 				uuidFiles = []string{}
+				dirScanDiags = []node.AuditDiagnostic{{
+					Code:     "AUDW002",
+					Severity: node.SeverityWarning,
+					Message:  fmt.Sprintf("directory scan failed: %v", err),
+					Path:     projectDir,
+				}}
 			}
 
 			// Collect binder refs and binder-level diagnostics (escape warnings, duplicates).
@@ -103,6 +110,7 @@ func newDoctorCmdWithGetCWD(io DoctorIO, getwd func() (string, error)) *cobra.Co
 			configDiags := checkProjectConfig(io, projectDir)
 			diags := node.RunDoctor(cmd.Context(), data)
 			diags = append(diags, configDiags...)
+			diags = append(diags, dirScanDiags...)
 
 			// Emit diagnostics.
 			jsonDiags := toDoctorDiagnosticJSON(diags)
