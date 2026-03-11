@@ -50,6 +50,7 @@ func newDoctorCmdWithGetCWD(io DoctorIO, getwd func() (string, error)) *cobra.Co
 		Short:        "Validate project structural integrity and frontmatter contracts",
 		Args:         cobra.NoArgs,
 		SilenceUsage: true,
+		Annotations:  map[string]string{"dry-run": "no-op"},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			jsonMode, _ := cmd.Flags().GetBool("json")
 
