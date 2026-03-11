@@ -171,7 +171,7 @@ func newAddChildCmdWithGetCWD(io NewNodeAddChildIO, getwd func() (string, error)
 			}
 
 			if !jsonMode {
-				if changed || dryRun {
+				if changed || (dryRun && bytesModified) {
 					if _, err := fmt.Fprintln(cmd.OutOrStdout(), dryRunPrefix(dryRun)+"Added "+sanitizePath(target)+" to "+sanitizePath(binderPath)); err != nil {
 						return fmt.Errorf("writing output: %w", err)
 					}
