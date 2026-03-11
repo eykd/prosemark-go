@@ -246,12 +246,13 @@ type addResult struct {
 
 // execAddChild applies AddChild, prepares diagnostics, and emits the operation result.
 // Callers inspect the returned addResult to handle errors and write the binder.
-func execAddChild(ctx context.Context, cmd *cobra.Command, binderBytes []byte, proj *binder.Project, params binder.AddChildParams, jsonMode, dryRun bool, target string) (addResult, error) {
+// jsonTarget is the target path to include in JSON output; pass "" to omit it.
+func execAddChild(ctx context.Context, cmd *cobra.Command, binderBytes []byte, proj *binder.Project, params binder.AddChildParams, jsonMode, dryRun bool, jsonTarget string) (addResult, error) {
 	modifiedBytes, diags := ops.AddChild(ctx, binderBytes, proj, params)
 	diags = prepareDiagnostics(diags)
 	bytesModified := !bytes.Equal(binderBytes, modifiedBytes)
 	changed := bytesModified && !dryRun
-	if err := emitOpResult(cmd, jsonMode, changed, dryRun, diags, target); err != nil {
+	if err := emitOpResult(cmd, jsonMode, changed, dryRun, diags, jsonTarget); err != nil {
 		return addResult{}, err
 	}
 	return addResult{
