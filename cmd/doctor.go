@@ -147,25 +147,27 @@ func newDoctorCmdWithGetCWD(io DoctorIO, getwd func() (string, error)) *cobra.Co
 	return cmd
 }
 
-// checkProjectConfig validates .prosemark.yml existence and YAML integrity.
-// Returns an AUD008 error diagnostic if the file is missing, unreadable, or contains invalid YAML.
+// checkProjectConfig validates .prosemark.yml existence, YAML integrity, and version field.
+// Returns an AUD008 error diagnostic if the file is missing, unreadable, contains invalid YAML,
+// or has an unrecognized version value.
 func checkProjectConfig(io DoctorIO, projectDir string) []node.AuditDiagnostic {
-	configPath := filepath.Join(projectDir, ".prosemark.yml")
+	const configFile = ".prosemark.yml"
+	configPath := filepath.Join(projectDir, configFile)
 	content, exists, err := io.ReadNodeFile(configPath)
 
 	var msg string
 	if err != nil || !exists {
-		msg = ".prosemark.yml is missing or unreadable"
+		msg = configFile + " is missing or unreadable"
 	} else {
 		var cfg struct {
 			Version string `yaml:"version"`
 		}
 		if err := yaml.Unmarshal(content, &cfg); err != nil {
-			msg = ".prosemark.yml contains invalid YAML"
+			msg = configFile + " contains invalid YAML"
 		} else if cfg.Version == "" {
-			msg = ".prosemark.yml missing version field"
+			msg = configFile + " missing version field"
 		} else if cfg.Version != "1" {
-			msg = fmt.Sprintf(".prosemark.yml has unrecognized version %q", cfg.Version)
+			msg = fmt.Sprintf("%s has unrecognized version %q", configFile, cfg.Version)
 		}
 	}
 
@@ -176,7 +178,7 @@ func checkProjectConfig(io DoctorIO, projectDir string) []node.AuditDiagnostic {
 		Code:     node.AUD008,
 		Severity: node.SeverityError,
 		Message:  msg,
-		Path:     ".prosemark.yml",
+		Path:     configFile,
 	}}
 }
 
