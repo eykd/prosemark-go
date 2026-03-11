@@ -3,19 +3,52 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"sync"
+	"syscall"
 )
+
+// flockResult holds an OS-level file lock and its release function.
+type flockResult struct {
+	release func() error
+}
+
+// acquireFlockImpl acquires an exclusive OS-level file lock on path+".lock".
+func acquireFlockImpl(path string) (flockResult, error) {
+	lockFile, err := os.OpenFile(path+".lock", os.O_CREATE|os.O_RDWR, 0600)
+	if err != nil {
+		return flockResult{}, fmt.Errorf("opening lock file: %w", err)
+	}
+	if err := syscall.Flock(int(lockFile.Fd()), syscall.LOCK_EX); err != nil {
+		_ = lockFile.Close()
+		return flockResult{}, fmt.Errorf("acquiring file lock: %w", err)
+	}
+	return flockResult{
+		release: func() error {
+			flockErr := syscall.Flock(int(lockFile.Fd()), syscall.LOCK_UN)
+			closeErr := lockFile.Close()
+			if flockErr != nil {
+				return flockErr
+			}
+			return closeErr
+		},
+	}, nil
+}
 
 // binderLockRegistry maintains per-path exclusive mutexes for binder files,
 // serializing concurrent read-modify-write cycles to prevent lost updates.
 type binderLockRegistry struct {
-	mu    sync.Mutex
-	locks map[string]*sync.Mutex
+	mu           sync.Mutex
+	locks        map[string]*sync.Mutex
+	acquireFlock func(path string) (flockResult, error)
 }
 
 func newBinderLockRegistry() *binderLockRegistry {
-	return &binderLockRegistry{locks: make(map[string]*sync.Mutex)}
+	return &binderLockRegistry{
+		locks:        make(map[string]*sync.Mutex),
+		acquireFlock: acquireFlockImpl,
+	}
 }
 
 // getLock returns the exclusive mutex for path, creating it if necessary.
@@ -28,27 +61,37 @@ func (r *binderLockRegistry) getLock(path string) *sync.Mutex {
 	return r.locks[path]
 }
 
-// lock acquires the exclusive lock for path, respecting ctx cancellation.
-// Returns an unlock function and nil on success, or a non-nil error if ctx
-// is cancelled before the lock is acquired.
+// lock acquires both an in-memory mutex (for in-process coordination) and an
+// OS-level flock (for cross-process coordination) on path. Returns an unlock
+// function and nil on success, or a non-nil error if ctx is cancelled.
 func (r *binderLockRegistry) lock(ctx context.Context, path string) (func() error, error) {
 	mu := r.getLock(path)
-	if mu.TryLock() {
-		return func() error { mu.Unlock(); return nil }, nil
+	if !mu.TryLock() {
+		done := make(chan struct{})
+		go func() {
+			mu.Lock()
+			close(done)
+		}()
+		select {
+		case <-done:
+		case <-ctx.Done():
+			go func() { <-done; mu.Unlock() }()
+			return nil, fmt.Errorf("acquiring binder lock: %w", ctx.Err())
+		}
 	}
-	done := make(chan struct{})
-	go func() {
-		mu.Lock()
-		close(done)
-	}()
-	select {
-	case <-done:
-		return func() error { mu.Unlock(); return nil }, nil
-	case <-ctx.Done():
-		// Release the lock once the background goroutine acquires it.
-		go func() { <-done; mu.Unlock() }()
-		return nil, fmt.Errorf("acquiring binder lock: %w", ctx.Err())
+
+	// Acquire OS-level file lock for cross-process safety.
+	flock, err := r.acquireFlock(path)
+	if err != nil {
+		mu.Unlock()
+		return nil, err
 	}
+
+	return func() error {
+		releaseErr := flock.release()
+		mu.Unlock()
+		return releaseErr
+	}, nil
 }
 
 // globalBinderLocks is the package-level registry for binder file locks.
