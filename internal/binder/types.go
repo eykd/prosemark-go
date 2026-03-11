@@ -108,9 +108,10 @@ type MoveParams struct {
 // OpResult is the CLI JSON output of any mutation operation.
 // Matches op-result.schema.json.
 type OpResult struct {
-	Version     string       `json:"version"`     // "1"
-	Changed     bool         `json:"changed"`     // true if binder bytes were modified
-	Diagnostics []Diagnostic `json:"diagnostics"` // merged parse + op diagnostics
+	Version     string       `json:"version"`               // "1"
+	Changed     bool         `json:"changed"`               // true if binder bytes were modified
+	DryRun      bool         `json:"dryRun,omitempty"`      // true if operation was a dry run
+	Diagnostics []Diagnostic `json:"diagnostics"`           // merged parse + op diagnostics
 }
 
 // SelectorResult holds the nodes matched by a selector evaluation.

@@ -37,6 +37,7 @@ func NewRootCmd() *cobra.Command {
 		SilenceErrors: true,
 		RunE:          rootRunE,
 	}
+	root.PersistentFlags().Bool("dry-run", false, "preview changes without writing to disk")
 	root.AddCommand(NewParseCmd(newDefaultParseReader()))
 	root.AddCommand(NewAddChildCmd(newDefaultAddChildIO()))
 	root.AddCommand(NewDeleteCmd(newDefaultDeleteIO()))
