@@ -349,3 +349,53 @@ func TestRootCmd_EditCmd_BinderParseError_ShowsCannotParse(t *testing.T) {
 		t.Errorf("expected error to contain %q, got err=%q stderr=%q", want, err.Error(), errOut.String())
 	}
 }
+
+// TestSubcommands_Help_ContainsExamples verifies that every subcommand has an
+// Example field with at least 2 usage examples in standard Cobra format.
+func TestSubcommands_Help_ContainsExamples(t *testing.T) {
+	subcommands := []string{"add", "delete", "doctor", "edit", "init", "move", "parse"}
+
+	for _, name := range subcommands {
+		t.Run(name, func(t *testing.T) {
+			root := NewRootCmd()
+			out := new(bytes.Buffer)
+			root.SetOut(out)
+			root.SetErr(new(bytes.Buffer))
+			root.SetArgs([]string{name, "--help"})
+			_ = root.Execute()
+
+			helpOutput := out.String()
+
+			// Help output must contain an Examples section.
+			if !strings.Contains(helpOutput, "Examples:") {
+				t.Fatalf("%s --help missing Examples section:\n%s", name, helpOutput)
+			}
+
+			// Extract the Examples section and count example lines.
+			// Cobra examples are indented lines; count lines containing "pmk".
+			examplesIdx := strings.Index(helpOutput, "Examples:")
+			afterExamples := helpOutput[examplesIdx:]
+			lines := strings.Split(afterExamples, "\n")
+
+			var exampleCount int
+			for _, line := range lines[1:] { // skip the "Examples:" header
+				trimmed := strings.TrimSpace(line)
+				if trimmed == "" {
+					continue
+				}
+				// Stop at the next section header (non-indented, ends with colon).
+				if !strings.HasPrefix(line, " ") && !strings.HasPrefix(line, "\t") {
+					break
+				}
+				if strings.Contains(trimmed, "pmk") {
+					exampleCount++
+				}
+			}
+
+			if exampleCount < 2 {
+				t.Errorf("%s --help has %d usage examples, want at least 2:\n%s",
+					name, exampleCount, helpOutput)
+			}
+		})
+	}
+}
