@@ -7,6 +7,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/eykd/prosemark-go/internal/binder"
+	"github.com/spf13/cobra"
 )
 
 func TestNewRootCmd_RegistersParseSubcommand(t *testing.T) {
@@ -426,6 +429,95 @@ func TestReadOnlySubcommands_Help_DocumentsDryRunNoOp(t *testing.T) {
 					name, long)
 			}
 		})
+	}
+}
+
+// TestPrintDiagnostics_SuggestionDisplay verifies that printDiagnostics shows
+// suggestions on a separate indented line in human mode, and omits the line
+// when Suggestion is empty.
+func TestPrintDiagnostics_SuggestionDisplay(t *testing.T) {
+	tests := []struct {
+		name       string
+		suggestion string
+		wantLine   string // expected suggestion line in output (empty = none)
+	}{
+		{
+			name:       "with suggestion",
+			suggestion: "Run 'pmk init' to create a project",
+			wantLine:   "  suggestion: Run 'pmk init' to create a project\n",
+		},
+		{
+			name:       "empty suggestion omits line",
+			suggestion: "",
+			wantLine:   "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := &cobra.Command{}
+			errBuf := new(bytes.Buffer)
+			cmd.SetErr(errBuf)
+
+			diags := []binder.Diagnostic{
+				{
+					Severity:   "error",
+					Code:       "BNDE001",
+					Message:    "something went wrong",
+					Suggestion: tt.suggestion,
+				},
+			}
+
+			printDiagnostics(cmd, diags)
+			output := errBuf.String()
+
+			if tt.wantLine != "" {
+				if !strings.Contains(output, tt.wantLine) {
+					t.Errorf("expected suggestion line %q in output, got:\n%s", tt.wantLine, output)
+				}
+			} else {
+				if strings.Contains(output, "suggestion:") {
+					t.Errorf("expected no suggestion line, but got:\n%s", output)
+				}
+			}
+		})
+	}
+}
+
+// TestPrintDiagnostics_MultipleDiags_SuggestionsOnlyWherePresent verifies that
+// in a batch of diagnostics, only those with non-empty Suggestion get a
+// suggestion line, and the suggestion follows its parent diagnostic.
+func TestPrintDiagnostics_MultipleDiags_SuggestionsOnlyWherePresent(t *testing.T) {
+	cmd := &cobra.Command{}
+	errBuf := new(bytes.Buffer)
+	cmd.SetErr(errBuf)
+
+	diags := []binder.Diagnostic{
+		{Severity: "error", Code: "BNDE001", Message: "first error", Suggestion: "fix it"},
+		{Severity: "warning", Code: "OPW001", Message: "a warning", Suggestion: ""},
+		{Severity: "error", Code: "BNDE002", Message: "second error", Suggestion: "try again"},
+	}
+
+	printDiagnostics(cmd, diags)
+	output := errBuf.String()
+	lines := strings.Split(strings.TrimRight(output, "\n"), "\n")
+
+	// Expect 5 lines: diag1, suggestion1, diag2, diag3, suggestion3
+	if len(lines) != 5 {
+		t.Fatalf("expected 5 lines, got %d:\n%s", len(lines), output)
+	}
+
+	// Second line should be the suggestion for the first diagnostic
+	wantSug1 := "  suggestion: fix it"
+	if lines[1] != wantSug1 {
+		t.Errorf("line 2 = %q, want %q", lines[1], wantSug1)
+	}
+
+	// Fourth line is the third diagnostic (no suggestion after warning)
+	// Fifth line should be the suggestion for the third diagnostic
+	wantSug3 := "  suggestion: try again"
+	if lines[4] != wantSug3 {
+		t.Errorf("line 5 = %q, want %q", lines[4], wantSug3)
 	}
 }
 
