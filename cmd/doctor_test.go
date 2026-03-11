@@ -381,6 +381,70 @@ func TestNewDoctorCmd_Scenarios(t *testing.T) {
 	}
 }
 
+// ─── ListUUIDFiles error diagnostic ──────────────────────────────────────────
+
+// TestNewDoctorCmd_ListUUIDFilesError_EmitsWarning verifies that when
+// ListUUIDFiles returns an error, the doctor command emits a warning diagnostic
+// so the user knows the directory scan failed, rather than silently swallowing
+// the error.
+func TestNewDoctorCmd_ListUUIDFilesError_EmitsWarning(t *testing.T) {
+	mock := &mockDoctorIO{
+		binderBytes:  doctorBinderEmpty(),
+		uuidFilesErr: errors.New("permission denied"),
+		nodeFiles: map[string]nodeFileEntry{
+			".prosemark.yml": {content: []byte("version: \"1\"\n"), exists: true},
+		},
+	}
+	c := NewDoctorCmd(mock)
+	out := new(bytes.Buffer)
+	errOut := new(bytes.Buffer)
+	c.SetOut(out)
+	c.SetErr(errOut)
+	c.SetArgs([]string{"--project", "."})
+
+	_ = c.Execute()
+
+	// A warning about the failed directory scan MUST appear in stderr.
+	if !strings.Contains(errOut.String(), "permission denied") {
+		t.Errorf("stderr = %q, want warning about ListUUIDFiles failure containing 'permission denied'", errOut.String())
+	}
+}
+
+// TestNewDoctorCmd_ListUUIDFilesError_JSONEmitsWarning verifies that when
+// ListUUIDFiles returns an error, the --json output contains a warning
+// diagnostic about the failed directory scan.
+func TestNewDoctorCmd_ListUUIDFilesError_JSONEmitsWarning(t *testing.T) {
+	mock := &mockDoctorIO{
+		binderBytes:  doctorBinderEmpty(),
+		uuidFilesErr: errors.New("permission denied"),
+		nodeFiles: map[string]nodeFileEntry{
+			".prosemark.yml": {content: []byte("version: \"1\"\n"), exists: true},
+		},
+	}
+	c := NewDoctorCmd(mock)
+	out := new(bytes.Buffer)
+	c.SetOut(out)
+	c.SetErr(new(bytes.Buffer))
+	c.SetArgs([]string{"--project", ".", "--json"})
+
+	_ = c.Execute()
+
+	var result doctorOutput
+	if err := json.Unmarshal(out.Bytes(), &result); err != nil {
+		t.Fatalf("output not valid JSON: %v\noutput: %q", err, out.String())
+	}
+	found := false
+	for _, d := range result.Diagnostics {
+		if d.Severity == "warning" && strings.Contains(d.Message, "permission denied") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected warning diagnostic about ListUUIDFiles failure, got: %v", result.Diagnostics)
+	}
+}
+
 // ─── JSON output schema validation ──────────────────────────────────────────
 
 // TestNewDoctorCmd_JSONOutput_ContainsRequiredFields verifies --json mode outputs

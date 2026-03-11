@@ -470,6 +470,23 @@ func TestInitCmd_StderrWriteError_Warning(t *testing.T) {
 	}
 }
 
+// TestInitCmd_JSONEncodeError verifies that a write failure during --json
+// output is NOT silently discarded. The command must return an error when
+// json.Encode fails (e.g., stdout is closed or a pipe breaks).
+func TestInitCmd_JSONEncodeError(t *testing.T) {
+	mock := newMockInitIO()
+	sub := newInitCmdWithGetCWD(mock, func() (string, error) { return ".", nil })
+	root := withDryRunFlag(sub)
+	sub.SetOut(&errWriter{err: errors.New("stdout closed")})
+	sub.SetErr(new(bytes.Buffer))
+	root.SetArgs([]string{"init", "--project", ".", "--json"})
+
+	err := root.Execute()
+	if err == nil {
+		t.Error("expected error when JSON encoding fails in init --json mode, got nil")
+	}
+}
+
 func TestNewRootCmd_RegistersInitSubcommand(t *testing.T) {
 	root := NewRootCmd()
 	var found bool
