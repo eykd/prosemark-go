@@ -52,6 +52,16 @@ func rootRunE(cmd *cobra.Command, _ []string) error {
 	return cmd.Help()
 }
 
+// isDryRun returns true when the --dry-run persistent flag is set on cmd.
+// Returns false if the flag is not defined (e.g. in unit tests without a root parent).
+func isDryRun(cmd *cobra.Command) bool {
+	f := cmd.Flags().Lookup("dry-run")
+	if f == nil {
+		return false
+	}
+	return f.Value.String() == "true"
+}
+
 // resolveProjectDirFromCmd validates the --project flag and resolves the project directory.
 // It returns an error if the flag was explicitly set to an empty string.
 func resolveProjectDirFromCmd(cmd *cobra.Command, getwd func() (string, error)) (string, error) {

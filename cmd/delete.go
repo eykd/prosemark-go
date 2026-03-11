@@ -38,6 +38,8 @@ func newDeleteCmdWithGetCWD(io DeleteIO, getwd func() (string, error)) *cobra.Co
 		Args:         cobra.NoArgs,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			dryRun := isDryRun(cmd)
+
 			binderPath, err := resolveBinderPathFromCmd(cmd, getwd)
 			if err != nil {
 				return err
@@ -57,7 +59,7 @@ func newDeleteCmdWithGetCWD(io DeleteIO, getwd func() (string, error)) *cobra.Co
 
 			params := binder.DeleteParams{
 				Selector: selector,
-				Yes:      yes,
+				Yes:      yes || dryRun,
 			}
 
 			modifiedBytes, diags := ops.Delete(ctx, binderBytes, proj, params)
@@ -66,9 +68,12 @@ func newDeleteCmdWithGetCWD(io DeleteIO, getwd func() (string, error)) *cobra.Co
 			}
 
 			changed := !bytes.Equal(binderBytes, modifiedBytes)
+			if dryRun {
+				changed = false
+			}
 
 			if jsonMode {
-				out := binder.OpResult{Version: "1", Changed: changed, Diagnostics: diags}
+				out := binder.OpResult{Version: "1", Changed: changed, DryRun: dryRun, Diagnostics: diags}
 				if err := json.NewEncoder(cmd.OutOrStdout()).Encode(out); err != nil {
 					return fmt.Errorf("encoding output: %w", err)
 				}
@@ -80,14 +85,18 @@ func newDeleteCmdWithGetCWD(io DeleteIO, getwd func() (string, error)) *cobra.Co
 				return &ExitError{Code: ExitCodeForDiagnostics(diags), Err: fmt.Errorf("delete has errors")}
 			}
 
-			if changed {
+			if !dryRun && !bytes.Equal(binderBytes, modifiedBytes) {
 				if err = io.WriteBinderAtomic(ctx, binderPath, modifiedBytes); err != nil {
 					return fmt.Errorf("writing binder: %w", err)
 				}
 			}
 
 			if !jsonMode {
-				if _, err := fmt.Fprintln(cmd.OutOrStdout(), "Deleted "+sanitizePath(selector)+" from "+sanitizePath(binderPath)); err != nil {
+				prefix := ""
+				if dryRun {
+					prefix = "dry-run: "
+				}
+				if _, err := fmt.Fprintln(cmd.OutOrStdout(), prefix+"Deleted "+sanitizePath(selector)+" from "+sanitizePath(binderPath)); err != nil {
 					return fmt.Errorf("writing output: %w", err)
 				}
 			}

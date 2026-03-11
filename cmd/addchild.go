@@ -86,6 +86,8 @@ func newAddChildCmdWithGetCWD(io NewNodeAddChildIO, getwd func() (string, error)
 		Args:         cobra.NoArgs,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			dryRun := isDryRun(cmd)
+
 			binderPath, err := resolveBinderPathFromCmd(cmd, getwd)
 			if err != nil {
 				return err
@@ -149,9 +151,12 @@ func newAddChildCmdWithGetCWD(io NewNodeAddChildIO, getwd func() (string, error)
 			}
 
 			changed := !bytes.Equal(binderBytes, modifiedBytes)
+			if dryRun {
+				changed = false
+			}
 
 			if jsonMode {
-				out := binder.OpResult{Version: "1", Changed: changed, Diagnostics: diags}
+				out := binder.OpResult{Version: "1", Changed: changed, DryRun: dryRun, Diagnostics: diags}
 				if err := json.NewEncoder(cmd.OutOrStdout()).Encode(out); err != nil {
 					return fmt.Errorf("encoding output: %w", err)
 				}
@@ -163,15 +168,19 @@ func newAddChildCmdWithGetCWD(io NewNodeAddChildIO, getwd func() (string, error)
 				return &ExitError{Code: ExitCodeForDiagnostics(diags), Err: fmt.Errorf("add has errors")}
 			}
 
-			if changed {
+			if !dryRun && changed {
 				if err = io.WriteBinderAtomic(ctx, binderPath, modifiedBytes); err != nil {
 					return fmt.Errorf("writing binder: %w", err)
 				}
 			}
 
 			if !jsonMode {
-				if changed {
-					if _, err := fmt.Fprintln(cmd.OutOrStdout(), "Added "+sanitizePath(target)+" to "+sanitizePath(binderPath)); err != nil {
+				prefix := ""
+				if dryRun {
+					prefix = "dry-run: "
+				}
+				if !dryRun && !bytes.Equal(binderBytes, modifiedBytes) || dryRun {
+					if _, err := fmt.Fprintln(cmd.OutOrStdout(), prefix+"Added "+sanitizePath(target)+" to "+sanitizePath(binderPath)); err != nil {
 						return fmt.Errorf("writing output: %w", err)
 					}
 				} else {
