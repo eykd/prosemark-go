@@ -20,6 +20,11 @@ type mockDeleteIO struct {
 	writeErr     error
 	writtenBytes []byte
 	writtenPath  string
+
+	// File removal tracking for --rm flag.
+	removeFileErr   error
+	removedFiles    []string
+	removeFileCalls int
 }
 
 func (m *mockDeleteIO) ReadBinder(_ context.Context, _ string) ([]byte, error) {
@@ -37,6 +42,12 @@ func (m *mockDeleteIO) WriteBinderAtomic(_ context.Context, path string, data []
 	m.writtenPath = path
 	m.writtenBytes = data
 	return m.writeErr
+}
+
+func (m *mockDeleteIO) RemoveFile(_ context.Context, path string) error {
+	m.removeFileCalls++
+	m.removedFiles = append(m.removedFiles, path)
+	return m.removeFileErr
 }
 
 // delBinder returns a minimal binder with one child node for delete tests.
@@ -323,5 +334,133 @@ func TestNewRootCmd_RegistersDeleteSubcommand(t *testing.T) {
 	}
 	if !found {
 		t.Error("expected \"delete\" subcommand registered on root command")
+	}
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// --rm flag: delete node file from disk
+// ──────────────────────────────────────────────────────────────────────────────
+
+func TestNewDeleteCmd_HasRmFlag(t *testing.T) {
+	c := NewDeleteCmd(nil)
+	if c.Flags().Lookup("rm") == nil {
+		t.Error("expected --rm flag on delete command")
+	}
+}
+
+func TestNewDeleteCmd_RmRemovesNodeFileOnSuccess(t *testing.T) {
+	mock := &mockDeleteIO{
+		binderBytes: delBinder(),
+		project:     &binder.Project{Files: []string{"chapter-one.md"}, BinderDir: "/proj"},
+	}
+	c := NewDeleteCmd(mock)
+	c.SetOut(new(bytes.Buffer))
+	c.SetArgs([]string{"--selector", "chapter-one", "--yes", "--rm", "--project", "/proj"})
+
+	if err := c.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if mock.removeFileCalls != 1 {
+		t.Errorf("RemoveFile called %d times, want 1", mock.removeFileCalls)
+	}
+	if len(mock.removedFiles) != 1 || mock.removedFiles[0] != "/proj/chapter-one.md" {
+		t.Errorf("removed files = %v, want [\"/proj/chapter-one.md\"]", mock.removedFiles)
+	}
+}
+
+func TestNewDeleteCmd_NoRmDoesNotRemoveFile(t *testing.T) {
+	mock := &mockDeleteIO{
+		binderBytes: delBinder(),
+		project:     &binder.Project{Files: []string{"chapter-one.md"}, BinderDir: "/proj"},
+	}
+	c := NewDeleteCmd(mock)
+	c.SetOut(new(bytes.Buffer))
+	c.SetArgs([]string{"--selector", "chapter-one", "--yes", "--project", "/proj"})
+
+	if err := c.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if mock.removeFileCalls != 0 {
+		t.Errorf("RemoveFile should not be called without --rm, called %d times", mock.removeFileCalls)
+	}
+}
+
+func TestNewDeleteCmd_RmWithDryRunDoesNotRemoveFile(t *testing.T) {
+	mock := &mockDeleteIO{
+		binderBytes: delBinder(),
+		project:     &binder.Project{Files: []string{"chapter-one.md"}, BinderDir: "."},
+	}
+	sub := NewDeleteCmd(mock)
+	root := withDryRunFlag(sub)
+	root.SetOut(new(bytes.Buffer))
+	root.SetErr(new(bytes.Buffer))
+	root.SetArgs([]string{"delete", "--selector", "chapter-one", "--yes", "--rm", "--project", ".", "--dry-run"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if mock.removeFileCalls != 0 {
+		t.Errorf("RemoveFile should not be called with --dry-run, called %d times", mock.removeFileCalls)
+	}
+}
+
+func TestNewDeleteCmd_RmRemoveFileError(t *testing.T) {
+	mock := &mockDeleteIO{
+		binderBytes:   delBinder(),
+		project:       &binder.Project{Files: []string{"chapter-one.md"}, BinderDir: "/proj"},
+		removeFileErr: errors.New("permission denied"),
+	}
+	c := NewDeleteCmd(mock)
+	c.SetOut(new(bytes.Buffer))
+	c.SetArgs([]string{"--selector", "chapter-one", "--yes", "--rm", "--project", "/proj"})
+
+	err := c.Execute()
+	if err == nil {
+		t.Error("expected error when RemoveFile fails")
+	}
+	if err != nil && !strings.Contains(err.Error(), "permission denied") {
+		t.Errorf("error = %v, want to contain 'permission denied'", err)
+	}
+}
+
+func TestNewDeleteCmd_RmConfirmationMessageIncludesFileRemoval(t *testing.T) {
+	mock := &mockDeleteIO{
+		binderBytes: delBinder(),
+		project:     &binder.Project{Files: []string{"chapter-one.md"}, BinderDir: "/proj"},
+	}
+	c := NewDeleteCmd(mock)
+	out := new(bytes.Buffer)
+	c.SetOut(out)
+	c.SetArgs([]string{"--selector", "chapter-one", "--yes", "--rm", "--project", "/proj"})
+
+	if err := c.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !strings.Contains(out.String(), "removed chapter-one.md") {
+		t.Errorf("confirmation should mention file removal, got: %s", out.String())
+	}
+}
+
+func TestNewDeleteCmd_RmCascadeRemovesAllSubtreeFiles(t *testing.T) {
+	// Binder with parent + child nodes.
+	src := []byte("<!-- prosemark-binder:v1 -->\n- [Act One](act-one.md)\n  - [Scene One](scene-one.md)\n")
+	mock := &mockDeleteIO{
+		binderBytes: src,
+		project:     &binder.Project{Files: []string{"act-one.md", "scene-one.md"}, BinderDir: "/proj"},
+	}
+	c := NewDeleteCmd(mock)
+	c.SetOut(new(bytes.Buffer))
+	c.SetArgs([]string{"--selector", "act-one", "--yes", "--rm", "--project", "/proj"})
+
+	if err := c.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if mock.removeFileCalls != 2 {
+		t.Errorf("RemoveFile called %d times, want 2 (parent + child)", mock.removeFileCalls)
 	}
 }

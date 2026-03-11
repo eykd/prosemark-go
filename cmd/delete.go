@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 
@@ -17,6 +18,7 @@ type DeleteIO interface {
 	ReadBinder(ctx context.Context, path string) ([]byte, error)
 	ScanProject(ctx context.Context, binderPath string) (*binder.Project, error)
 	WriteBinderAtomic(ctx context.Context, path string, data []byte) error
+	RemoveFile(ctx context.Context, path string) error
 }
 
 // NewDeleteCmd creates the delete subcommand.
@@ -29,6 +31,7 @@ func newDeleteCmdWithGetCWD(io DeleteIO, getwd func() (string, error)) *cobra.Co
 		selector string
 		yes      bool
 		jsonMode bool
+		rm       bool
 	)
 
 	cmd := &cobra.Command{
@@ -86,9 +89,23 @@ func newDeleteCmdWithGetCWD(io DeleteIO, getwd func() (string, error)) *cobra.Co
 				}
 			}
 
+			// Remove node files from disk when --rm is set and not dry-run.
+			var removedTargets []string
+			if rm && changed {
+				removedTargets, err = deleteRemoveNodeFiles(ctx, io, binderBytes, modifiedBytes, proj)
+				if err != nil {
+					return err
+				}
+			}
+
 			if !jsonMode {
 				if _, err := fmt.Fprintln(cmd.OutOrStdout(), dryRunPrefix(dryRun)+"Deleted "+sanitizePath(selector)+" from "+sanitizePath(binderPath)); err != nil {
 					return fmt.Errorf("writing output: %w", err)
+				}
+				for _, target := range removedTargets {
+					if _, err := fmt.Fprintln(cmd.OutOrStdout(), "removed "+sanitizePath(target)); err != nil {
+						return fmt.Errorf("writing output: %w", err)
+					}
 				}
 			}
 
@@ -100,8 +117,55 @@ func newDeleteCmdWithGetCWD(io DeleteIO, getwd func() (string, error)) *cobra.Co
 	cmd.Flags().StringVar(&selector, "selector", "", "Selector for node to delete")
 	cmd.Flags().BoolVar(&yes, "yes", false, "Required confirmation flag")
 	cmd.Flags().BoolVar(&jsonMode, "json", false, "Output result as JSON")
+	cmd.Flags().BoolVar(&rm, "rm", false, "Also remove deleted node files from disk")
 
 	return cmd
+}
+
+// deleteRemoveNodeFiles identifies node files that were removed by the delete
+// operation and removes them from disk. It returns the list of removed target
+// paths (relative to binder dir).
+func deleteRemoveNodeFiles(ctx context.Context, io DeleteIO, originalBytes, modifiedBytes []byte, proj *binder.Project) ([]string, error) {
+	origTargets := deleteCollectTargets(originalBytes, proj)
+	modTargets := deleteCollectTargets(modifiedBytes, proj)
+
+	modSet := make(map[string]struct{}, len(modTargets))
+	for _, t := range modTargets {
+		modSet[t] = struct{}{}
+	}
+
+	var removed []string
+	for _, t := range origTargets {
+		if _, ok := modSet[t]; !ok {
+			fullPath := filepath.Join(proj.BinderDir, t)
+			if err := io.RemoveFile(ctx, fullPath); err != nil {
+				return removed, fmt.Errorf("removing node file %s: %w", t, err)
+			}
+			removed = append(removed, t)
+		}
+	}
+	return removed, nil
+}
+
+// deleteCollectTargets parses binder bytes and returns all node targets.
+func deleteCollectTargets(src []byte, proj *binder.Project) []string {
+	result, _, err := binder.Parse(context.Background(), src, proj)
+	if err != nil {
+		return nil
+	}
+	var targets []string
+	deleteWalkTargets(result.Root, &targets)
+	return targets
+}
+
+// deleteWalkTargets recursively collects all node targets in the tree.
+func deleteWalkTargets(n *binder.Node, targets *[]string) {
+	for _, child := range n.Children {
+		if child.Target != "" {
+			*targets = append(*targets, child.Target)
+		}
+		deleteWalkTargets(child, targets)
+	}
 }
 
 // fileDeleteIO implements DeleteIO using OS file I/O.
@@ -129,4 +193,14 @@ func (w *fileDeleteIO) WriteBinderAtomic(ctx context.Context, path string, data 
 // WriteBinderAtomicImpl performs the atomic write via OS temp file rename.
 func (w *fileDeleteIO) WriteBinderAtomicImpl(_ context.Context, path string, data []byte) error {
 	return writeBinderCheckedImpl(path, data)
+}
+
+// RemoveFile removes a file from disk.
+func (w *fileDeleteIO) RemoveFile(ctx context.Context, path string) error {
+	return w.RemoveFileImpl(ctx, path)
+}
+
+// RemoveFileImpl performs the OS file removal.
+func (w *fileDeleteIO) RemoveFileImpl(_ context.Context, path string) error {
+	return os.Remove(path)
 }
