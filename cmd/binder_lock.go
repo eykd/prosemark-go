@@ -107,6 +107,18 @@ func (binderLocker) LockBinder(ctx context.Context, path string) (func() error, 
 	return globalBinderLocks.lock(ctx, path)
 }
 
+// checkBinderWritable returns an error if path exists and is read-only.
+func checkBinderWritable(path string) error {
+	fi, err := os.Stat(path)
+	if err != nil {
+		return nil // File doesn't exist yet — writable by default.
+	}
+	if fi.Mode().Perm()&0200 == 0 {
+		return fmt.Errorf("binder file is read-only")
+	}
+	return nil
+}
+
 // mergeBinderLines merges concurrent add-child writes that started from the
 // same stale snapshot. Lines from incoming appear first (preserving the
 // caller's computed insertion order), followed by any lines from current that
@@ -132,10 +144,10 @@ func mergeBinderLines(current, incoming []byte) []byte {
 
 	// Append lines from current that are not sufficiently covered by incoming.
 	// These represent entries added by concurrent commands after our snapshot.
-	currentSeen := make(map[string]int, len(currentLines))
+	currentCount := make(map[string]int, len(currentLines))
 	for _, line := range currentLines {
-		currentSeen[line]++
-		if currentSeen[line] > incomingCount[line] {
+		currentCount[line]++
+		if currentCount[line] > incomingCount[line] {
 			result = append(result, line)
 		}
 	}

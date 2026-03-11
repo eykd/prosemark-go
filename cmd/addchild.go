@@ -336,10 +336,8 @@ func writeBinderAtomicMergeImpl(path string, data []byte) error {
 	}
 	defer func() { _ = unlock() }()
 
-	if fi, statErr := os.Stat(path); statErr == nil {
-		if fi.Mode().Perm()&0200 == 0 {
-			return fmt.Errorf("binder file is read-only")
-		}
+	if err := checkBinderWritable(path); err != nil {
+		return err
 	}
 
 	current, readErr := os.ReadFile(path)
@@ -384,10 +382,8 @@ func writeFileAtomicDirectImpl(path, tmpPrefix string, data []byte) error {
 // writeBinderCheckedImpl checks that path is writable (if it exists) then
 // writes data atomically. Shared by all file-IO WriteBinderAtomicImpl methods.
 func writeBinderCheckedImpl(path string, data []byte) error {
-	if fi, statErr := os.Stat(path); statErr == nil {
-		if fi.Mode().Perm()&0200 == 0 {
-			return fmt.Errorf("binder file is read-only")
-		}
+	if err := checkBinderWritable(path); err != nil {
+		return err
 	}
 	return writeBinderDirectImpl(path, data)
 }
