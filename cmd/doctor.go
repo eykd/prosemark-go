@@ -26,10 +26,11 @@ type DoctorIO interface {
 
 // DoctorDiagnosticJSON is the JSON output type for a single doctor diagnostic.
 type DoctorDiagnosticJSON struct {
-	Severity string `json:"severity"`
-	Code     string `json:"code"`
-	Message  string `json:"message"`
-	Path     string `json:"path"`
+	Severity   string `json:"severity"`
+	Code       string `json:"code"`
+	Message    string `json:"message"`
+	Path       string `json:"path"`
+	Suggestion string `json:"suggestion,omitempty"`
 }
 
 // doctorOutput is the wrapped JSON output for the doctor command.
