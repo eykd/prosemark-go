@@ -251,7 +251,7 @@ func TestValidateNewNodeInput(t *testing.T) {
 			wantErr:  true,
 		},
 		{
-			name:     "title with vertical tab (0x0B) is rejected",
+			name:     "title with vertical tab (0x0B) is allowed",
 			target:   "",
 			title:    "a\x0Bb",
 			synopsis: "",

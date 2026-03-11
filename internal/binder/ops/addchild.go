@@ -53,7 +53,7 @@ func AddChild(ctx context.Context, src []byte, project *binder.Project, params b
 	decodedTarget := percentDecodeOpTarget(params.Target)
 
 	// Validate title content before use (OPE012).
-	if strings.ContainsAny(params.Title, "\n\r") {
+	if titleContainsNewline(params.Title) {
 		return src, append(parseDiags, binder.Diagnostic{
 			Severity: "error",
 			Code:     binder.CodeInvalidTitleContent,
@@ -494,6 +494,11 @@ func majorityLineEnding(ends []string) string {
 		return "\r\n"
 	}
 	return "\n"
+}
+
+// titleContainsNewline reports whether s contains LF (0x0A) or CR (0x0D).
+func titleContainsNewline(s string) bool {
+	return strings.ContainsAny(s, "\n\r")
 }
 
 // escapeTitle backslash-escapes '[' and ']' in a title string.
