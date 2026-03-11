@@ -89,10 +89,7 @@ func newMoveCmdWithGetCWD(io MoveIO, getwd func() (string, error)) *cobra.Comman
 			}
 
 			modifiedBytes, diags := ops.Move(ctx, binderBytes, proj, params)
-			if diags == nil {
-				diags = []binder.Diagnostic{}
-			}
-			attachSuggestions(diags)
+			diags = prepareDiagnostics(diags)
 
 			changed := !bytes.Equal(binderBytes, modifiedBytes) && !dryRun
 

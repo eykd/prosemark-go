@@ -78,6 +78,26 @@ func TestAttachSuggestions_PreservesExistingFields(t *testing.T) {
 	}
 }
 
+func TestPrepareDiagnostics_NilBecomesEmpty(t *testing.T) {
+	got := prepareDiagnostics(nil)
+	if got == nil {
+		t.Fatal("prepareDiagnostics(nil) returned nil, want non-nil empty slice")
+	}
+	if len(got) != 0 {
+		t.Errorf("prepareDiagnostics(nil) returned %d items, want 0", len(got))
+	}
+}
+
+func TestPrepareDiagnostics_AttachesSuggestions(t *testing.T) {
+	diags := []binder.Diagnostic{
+		{Severity: "error", Code: binder.CodeSelectorNoMatch, Message: "not found"},
+	}
+	got := prepareDiagnostics(diags)
+	if got[0].Suggestion == "" {
+		t.Error("prepareDiagnostics should attach suggestions to mapped codes")
+	}
+}
+
 func TestAttachSuggestions_MultipleDiagnostics(t *testing.T) {
 	diags := []binder.Diagnostic{
 		{Severity: "error", Code: binder.CodeSelectorNoMatch, Message: "first"},

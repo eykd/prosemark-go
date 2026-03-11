@@ -25,3 +25,14 @@ func attachSuggestions(diags []binder.Diagnostic) {
 		}
 	}
 }
+
+// prepareDiagnostics normalises a diagnostic slice (nil → empty) and attaches
+// human-readable suggestions. Every command that produces binder diagnostics
+// should call this before emitting output.
+func prepareDiagnostics(diags []binder.Diagnostic) []binder.Diagnostic {
+	if diags == nil {
+		diags = []binder.Diagnostic{}
+	}
+	attachSuggestions(diags)
+	return diags
+}

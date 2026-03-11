@@ -68,10 +68,7 @@ func newParseCmdWithGetCWD(reader ParseReader, getwd func() (string, error)) *co
 					Message:  fmt.Sprintf("parse error: %v", parseErr),
 				})
 			}
-			if diags == nil {
-				diags = []binder.Diagnostic{}
-			}
-			attachSuggestions(diags)
+			diags = prepareDiagnostics(diags)
 
 			out := parseOutput{
 				Version:     result.Version,

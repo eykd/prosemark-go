@@ -68,10 +68,7 @@ func newDeleteCmdWithGetCWD(io DeleteIO, getwd func() (string, error)) *cobra.Co
 			}
 
 			modifiedBytes, diags := ops.Delete(ctx, binderBytes, proj, params)
-			if diags == nil {
-				diags = []binder.Diagnostic{}
-			}
-			attachSuggestions(diags)
+			diags = prepareDiagnostics(diags)
 
 			changed := !bytes.Equal(binderBytes, modifiedBytes) && !dryRun
 

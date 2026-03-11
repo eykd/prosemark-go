@@ -99,7 +99,7 @@ func newInitCmdWithGetCWD(initIO InitIO, getwd func() (string, error)) *cobra.Co
 				}
 			}
 
-			attachSuggestions(diags)
+			diags = prepareDiagnostics(diags)
 
 			if jsonMode {
 				out := binder.OpResult{Version: "1", Changed: changed, DryRun: dryRun, Diagnostics: diags}

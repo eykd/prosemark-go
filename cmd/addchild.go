@@ -151,10 +151,7 @@ func newAddChildCmdWithGetCWD(io NewNodeAddChildIO, getwd func() (string, error)
 			}
 
 			modifiedBytes, diags := ops.AddChild(ctx, binderBytes, proj, params)
-			if diags == nil {
-				diags = []binder.Diagnostic{}
-			}
-			attachSuggestions(diags)
+			diags = prepareDiagnostics(diags)
 
 			bytesModified := !bytes.Equal(binderBytes, modifiedBytes)
 			changed := bytesModified && !dryRun
