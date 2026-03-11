@@ -46,6 +46,17 @@ func decodeDoctorDiags(t *testing.T, buf *bytes.Buffer) []DoctorDiagnosticJSON {
 	return raw.Diagnostics
 }
 
+// requireDiagsContainCode asserts that at least one diagnostic has the given code.
+func requireDiagsContainCode(t *testing.T, diags []binder.Diagnostic, code string) {
+	t.Helper()
+	for _, d := range diags {
+		if d.Code == code {
+			return
+		}
+	}
+	t.Errorf("expected diagnostic with code %q, but none found; diags: %+v", code, diags)
+}
+
 // requireSuggestionOnCode asserts that at least one diagnostic with the given code
 // has a non-empty Suggestion field.
 func requireSuggestionOnCode(t *testing.T, diags []binder.Diagnostic, code string) {
@@ -154,24 +165,13 @@ func TestParseCmd_AttachesSuggestions(t *testing.T) {
 	_ = cmd.Execute()
 
 	diags := decodeDiags(t, out)
-	// The parse output should have suggestions attached to any diagnostic whose
-	// code is in the suggestion map.
-	hasSuggestion := false
-	for _, d := range diags {
-		if _, mapped := suggestionMap[d.Code]; mapped && d.Suggestion != "" {
-			hasSuggestion = true
-			break
-		}
+	if len(diags) == 0 {
+		t.Fatal("expected diagnostics from test fixture")
 	}
-	if len(diags) > 0 && !hasSuggestion {
-		// If there are diagnostics with mapped codes but no suggestions, that's a failure.
-		for _, d := range diags {
-			if _, mapped := suggestionMap[d.Code]; mapped {
-				t.Errorf("diagnostic code %q should have a suggestion but has none; diags: %+v", d.Code, diags)
-				return
-			}
-		}
-	}
+	// Unconditionally assert the expected diagnostic code is present.
+	requireDiagsContainCode(t, diags, binder.CodeIllegalPathChars)
+	// Assert the suggestion was attached for the mapped code.
+	requireSuggestionOnCode(t, diags, binder.CodeIllegalPathChars)
 }
 
 // ─── Init ───────────────────────────────────────────────────────────────────
