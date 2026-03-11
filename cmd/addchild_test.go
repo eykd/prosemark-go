@@ -1144,6 +1144,91 @@ func TestNewAddChildCmd_AbsoluteTargetReturnsError(t *testing.T) {
 	}
 }
 
+// ─── --new --json flag tests ──────────────────────────────────────────────────
+
+// TestNewAddChildCmd_NewMode_JSONOutputOnSuccess verifies that when --new and
+// --json are both set, stdout contains a valid OpResult JSON (not human text).
+func TestNewAddChildCmd_NewMode_JSONOutputOnSuccess(t *testing.T) {
+	mock := &mockAddChildIOWithNew{
+		mockAddChildIO: mockAddChildIO{
+			binderBytes: emptyBinder(),
+			project:     &binder.Project{Files: []string{}, BinderDir: "."},
+		},
+	}
+	c := NewAddChildCmd(mock)
+	out := new(bytes.Buffer)
+	c.SetOut(out)
+	c.SetArgs([]string{"--new", "--title", "Chapter One", "--parent", ".", "--json", "--project", "."})
+
+	if err := c.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var result binder.OpResult
+	if err := json.Unmarshal(out.Bytes(), &result); err != nil {
+		t.Fatalf("output is not valid JSON: %v\noutput: %s", err, out.String())
+	}
+	if result.Version != "1" {
+		t.Errorf("version = %q, want \"1\"", result.Version)
+	}
+	if !result.Changed {
+		t.Error("expected Changed=true when new node is added")
+	}
+}
+
+// TestNewAddChildCmd_NewMode_JSONNoHumanText verifies that --new --json does
+// NOT emit human-readable "Created ..." text on stdout.
+func TestNewAddChildCmd_NewMode_JSONNoHumanText(t *testing.T) {
+	mock := &mockAddChildIOWithNew{
+		mockAddChildIO: mockAddChildIO{
+			binderBytes: emptyBinder(),
+			project:     &binder.Project{Files: []string{}, BinderDir: "."},
+		},
+	}
+	c := NewAddChildCmd(mock)
+	out := new(bytes.Buffer)
+	c.SetOut(out)
+	c.SetArgs([]string{"--new", "--title", "Chapter One", "--parent", ".", "--json", "--project", "."})
+
+	if err := c.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if strings.Contains(out.String(), "Created") {
+		t.Errorf("stdout should not contain human-readable text when --json is set, got: %s", out.String())
+	}
+}
+
+// TestNewAddChildCmd_NewMode_JSONDiagnosticsOnError verifies that when --new
+// --json encounters an op error, diagnostics are emitted as JSON on stdout.
+func TestNewAddChildCmd_NewMode_JSONDiagnosticsOnError(t *testing.T) {
+	// Use a binder with "chapter-one.md" already present and try to add
+	// the same target, which would trigger a duplicate-skipped diagnostic.
+	// Instead, use a nonexistent parent to trigger OPE001.
+	mock := &mockAddChildIOWithNew{
+		mockAddChildIO: mockAddChildIO{
+			binderBytes: emptyBinder(),
+			project:     &binder.Project{Files: []string{}, BinderDir: "."},
+		},
+	}
+	c := NewAddChildCmd(mock)
+	out := new(bytes.Buffer)
+	errOut := new(bytes.Buffer)
+	c.SetOut(out)
+	c.SetErr(errOut)
+	c.SetArgs([]string{"--new", "--title", "Orphan", "--parent", "nonexistent.md", "--json", "--project", "."})
+
+	_ = c.Execute() // error expected
+
+	var result binder.OpResult
+	if err := json.Unmarshal(out.Bytes(), &result); err != nil {
+		t.Fatalf("expected JSON OpResult on stdout even on error, got: %s", out.String())
+	}
+	if len(result.Diagnostics) == 0 {
+		t.Error("expected diagnostics in JSON output for --new --json error case")
+	}
+}
+
 // TestNewAddChildCmd_NewMode_DiagnosticSuggestionsAttached verifies that
 // runNewMode calls prepareDiagnostics so that diagnostics carry their
 // human-readable Suggestion field (printed to stderr).
