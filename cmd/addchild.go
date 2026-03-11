@@ -148,7 +148,7 @@ func newAddChildCmdWithGetCWD(io NewNodeAddChildIO, getwd func() (string, error)
 					}
 					params.Target = id
 				}
-				return runNewMode(ctx, cmd, io, binderPath, binderBytes, proj, params, synopsis, editMode, editor)
+				return runNewMode(ctx, cmd, io, binderPath, binderBytes, proj, params, synopsis, editMode, editor, jsonMode)
 			}
 
 			modifiedBytes, diags := ops.AddChild(ctx, binderBytes, proj, params)
@@ -233,7 +233,7 @@ func refreshNodeUpdated(io nodeRefresher, path string) error {
 // runNewMode handles the --new flag workflow: creates a UUID node file, updates
 // the binder, and optionally opens an editor to populate the file.
 // params.Target must already be set to a valid UUID filename before calling.
-func runNewMode(ctx context.Context, cmd *cobra.Command, io NewNodeAddChildIO, binderPath string, binderBytes []byte, proj *binder.Project, params binder.AddChildParams, synopsis string, editMode bool, editor string) error {
+func runNewMode(ctx context.Context, cmd *cobra.Command, io NewNodeAddChildIO, binderPath string, binderBytes []byte, proj *binder.Project, params binder.AddChildParams, synopsis string, editMode bool, editor string, jsonMode bool) error {
 	dryRun := isDryRun(cmd)
 	uuidStem := strings.TrimSuffix(params.Target, ".md")
 	binderDir := filepath.Dir(binderPath)
@@ -257,7 +257,12 @@ func runNewMode(ctx context.Context, cmd *cobra.Command, io NewNodeAddChildIO, b
 	modifiedBytes, diags := ops.AddChild(ctx, binderBytes, proj, params)
 	diags = prepareDiagnostics(diags)
 
-	printDiagnostics(cmd, diags)
+	bytesModified := !bytes.Equal(binderBytes, modifiedBytes)
+	changed := bytesModified && !dryRun
+
+	if err := emitOpResult(cmd, jsonMode, changed, dryRun, diags); err != nil {
+		return err
+	}
 
 	if hasDiagnosticError(diags) {
 		var rollbackErr error
@@ -266,8 +271,6 @@ func runNewMode(ctx context.Context, cmd *cobra.Command, io NewNodeAddChildIO, b
 		}
 		return &ExitError{Code: ExitCodeForDiagnostics(diags), Err: errors.Join(fmt.Errorf("add has errors"), rollbackErr)}
 	}
-
-	changed := !bytes.Equal(binderBytes, modifiedBytes) && !dryRun
 	if changed {
 		if writeErr := io.WriteBinderAtomic(ctx, binderPath, modifiedBytes); writeErr != nil {
 			if rollbackErr := io.DeleteFile(nodePath); rollbackErr != nil {
@@ -297,8 +300,10 @@ func runNewMode(ctx context.Context, cmd *cobra.Command, io NewNodeAddChildIO, b
 		}
 	}
 
-	if _, err := fmt.Fprintln(cmd.OutOrStdout(), dryRunPrefix(dryRun)+"Created "+sanitizePath(params.Target)+" in "+sanitizePath(binderPath)); err != nil {
-		return fmt.Errorf("writing output: %w", err)
+	if !jsonMode {
+		if _, err := fmt.Fprintln(cmd.OutOrStdout(), dryRunPrefix(dryRun)+"Created "+sanitizePath(params.Target)+" in "+sanitizePath(binderPath)); err != nil {
+			return fmt.Errorf("writing output: %w", err)
+		}
 	}
 
 	return nil
