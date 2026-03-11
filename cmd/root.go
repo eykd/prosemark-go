@@ -182,6 +182,9 @@ func emitOpResult(cmd *cobra.Command, jsonMode, changed, dryRun bool, diags []bi
 func printDiagnostics(cmd *cobra.Command, diags []binder.Diagnostic) {
 	for _, d := range diags {
 		fmt.Fprintf(cmd.ErrOrStderr(), "%s: %s (%s)\n", d.Severity, d.Message, d.Code)
+		if d.Suggestion != "" {
+			fmt.Fprintf(cmd.ErrOrStderr(), "  suggestion: %s\n", d.Suggestion)
+		}
 	}
 }
 
