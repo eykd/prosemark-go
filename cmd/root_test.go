@@ -521,6 +521,29 @@ func TestPrintDiagnostics_MultipleDiags_SuggestionsOnlyWherePresent(t *testing.T
 	}
 }
 
+// TestEmitOPE009AndError_JSONEncodeError verifies that when JSON encoding fails
+// (e.g. broken stdout), the encoding error is surfaced in the returned error
+// rather than silently discarded.
+func TestEmitOPE009AndError_JSONEncodeError(t *testing.T) {
+	writeErr := errors.New("write error")
+	origErr := errors.New("original I/O failure")
+
+	cmd := &cobra.Command{}
+	cmd.SetOut(&errWriter{err: writeErr})
+
+	got := emitOPE009AndError(cmd, true, origErr)
+
+	// The returned error must contain the original error.
+	if !strings.Contains(got.Error(), origErr.Error()) {
+		t.Errorf("returned error %q does not contain original error %q", got, origErr)
+	}
+
+	// The returned error must also surface the encoding failure.
+	if !strings.Contains(got.Error(), "encoding") && !strings.Contains(got.Error(), writeErr.Error()) {
+		t.Errorf("returned error %q does not surface the JSON encoding error %q", got, writeErr)
+	}
+}
+
 // TestSubcommands_Help_ContainsExamples verifies that every subcommand has an
 // Example field with at least 2 usage examples in standard Cobra format.
 func TestSubcommands_Help_ContainsExamples(t *testing.T) {

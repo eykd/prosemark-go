@@ -139,7 +139,9 @@ func emitOPE009AndError(cmd *cobra.Command, jsonMode bool, origErr error) error 
 	if jsonMode {
 		diags := []binder.Diagnostic{{Severity: "error", Code: binder.CodeIOOrParseFailure, Message: origErr.Error()}}
 		out := binder.OpResult{Version: "1", Changed: false, Diagnostics: diags}
-		_ = json.NewEncoder(cmd.OutOrStdout()).Encode(out)
+		if encErr := json.NewEncoder(cmd.OutOrStdout()).Encode(out); encErr != nil {
+			return fmt.Errorf("encoding OPE009 diagnostic: %w: %w", encErr, origErr)
+		}
 	} else {
 		fmt.Fprintf(cmd.ErrOrStderr(), "error: I/O or parse failure: %v (OPE009)\n", origErr)
 	}
