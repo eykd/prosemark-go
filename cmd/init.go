@@ -105,11 +105,7 @@ func newInitCmdWithGetCWD(initIO InitIO, getwd func() (string, error)) *cobra.Co
 
 			printDiagnostics(cmd, diags)
 
-			prefix := ""
-			if dryRun {
-				prefix = "dry-run: "
-			}
-			fmt.Fprintln(cmd.OutOrStdout(), prefix+"Initialized "+sanitizePath(project))
+			fmt.Fprintln(cmd.OutOrStdout(), dryRunPrefix(dryRun)+"Initialized "+sanitizePath(project))
 			return nil
 		},
 	}

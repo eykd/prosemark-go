@@ -3,7 +3,6 @@ package cmd
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 
@@ -90,13 +89,8 @@ func newMoveCmdWithGetCWD(io MoveIO, getwd func() (string, error)) *cobra.Comman
 
 			changed := !bytes.Equal(binderBytes, modifiedBytes) && !dryRun
 
-			if jsonMode {
-				out := binder.OpResult{Version: "1", Changed: changed, DryRun: dryRun, Diagnostics: diags}
-				if err := json.NewEncoder(cmd.OutOrStdout()).Encode(out); err != nil {
-					return fmt.Errorf("encoding output: %w", err)
-				}
-			} else {
-				printDiagnostics(cmd, diags)
+			if err := emitOpResult(cmd, jsonMode, changed, dryRun, diags); err != nil {
+				return err
 			}
 
 			if hasDiagnosticError(diags) {
@@ -110,11 +104,7 @@ func newMoveCmdWithGetCWD(io MoveIO, getwd func() (string, error)) *cobra.Comman
 			}
 
 			if !jsonMode {
-				prefix := ""
-				if dryRun {
-					prefix = "dry-run: "
-				}
-				if _, err := fmt.Fprintln(cmd.OutOrStdout(), prefix+"Moved "+sanitizePath(source)+" in "+sanitizePath(binderPath)); err != nil {
+				if _, err := fmt.Fprintln(cmd.OutOrStdout(), dryRunPrefix(dryRun)+"Moved "+sanitizePath(source)+" in "+sanitizePath(binderPath)); err != nil {
 					return fmt.Errorf("writing output: %w", err)
 				}
 			}

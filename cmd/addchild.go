@@ -3,7 +3,6 @@ package cmd
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -153,13 +152,8 @@ func newAddChildCmdWithGetCWD(io NewNodeAddChildIO, getwd func() (string, error)
 			bytesModified := !bytes.Equal(binderBytes, modifiedBytes)
 			changed := bytesModified && !dryRun
 
-			if jsonMode {
-				out := binder.OpResult{Version: "1", Changed: changed, DryRun: dryRun, Diagnostics: diags}
-				if err := json.NewEncoder(cmd.OutOrStdout()).Encode(out); err != nil {
-					return fmt.Errorf("encoding output: %w", err)
-				}
-			} else {
-				printDiagnostics(cmd, diags)
+			if err := emitOpResult(cmd, jsonMode, changed, dryRun, diags); err != nil {
+				return err
 			}
 
 			if hasDiagnosticError(diags) {
@@ -173,12 +167,8 @@ func newAddChildCmdWithGetCWD(io NewNodeAddChildIO, getwd func() (string, error)
 			}
 
 			if !jsonMode {
-				prefix := ""
-				if dryRun {
-					prefix = "dry-run: "
-				}
 				if changed || dryRun {
-					if _, err := fmt.Fprintln(cmd.OutOrStdout(), prefix+"Added "+sanitizePath(target)+" to "+sanitizePath(binderPath)); err != nil {
+					if _, err := fmt.Fprintln(cmd.OutOrStdout(), dryRunPrefix(dryRun)+"Added "+sanitizePath(target)+" to "+sanitizePath(binderPath)); err != nil {
 						return fmt.Errorf("writing output: %w", err)
 					}
 				} else {
@@ -305,11 +295,7 @@ func runNewMode(ctx context.Context, cmd *cobra.Command, io NewNodeAddChildIO, b
 		}
 	}
 
-	prefix := ""
-	if dryRun {
-		prefix = "dry-run: "
-	}
-	if _, err := fmt.Fprintln(cmd.OutOrStdout(), prefix+"Created "+sanitizePath(params.Target)+" in "+sanitizePath(binderPath)); err != nil {
+	if _, err := fmt.Fprintln(cmd.OutOrStdout(), dryRunPrefix(dryRun)+"Created "+sanitizePath(params.Target)+" in "+sanitizePath(binderPath)); err != nil {
 		return fmt.Errorf("writing output: %w", err)
 	}
 

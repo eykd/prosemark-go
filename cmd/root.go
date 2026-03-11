@@ -129,6 +129,30 @@ func emitOPE009AndError(cmd *cobra.Command, jsonMode bool, origErr error) error 
 	return fmt.Errorf("operation failed: %w", origErr)
 }
 
+// dryRunPrefix returns "dry-run: " when dryRun is true, or "" otherwise.
+// Used by mutation commands to prefix human-readable output in dry-run mode.
+func dryRunPrefix(dryRun bool) string {
+	if dryRun {
+		return "dry-run: "
+	}
+	return ""
+}
+
+// emitOpResult writes the operation result as JSON (when jsonMode is true) or
+// prints diagnostics to stderr (when jsonMode is false). It is the shared
+// output path for mutation commands (add, delete, move).
+func emitOpResult(cmd *cobra.Command, jsonMode, changed, dryRun bool, diags []binder.Diagnostic) error {
+	if jsonMode {
+		out := binder.OpResult{Version: "1", Changed: changed, DryRun: dryRun, Diagnostics: diags}
+		if err := json.NewEncoder(cmd.OutOrStdout()).Encode(out); err != nil {
+			return fmt.Errorf("encoding output: %w", err)
+		}
+	} else {
+		printDiagnostics(cmd, diags)
+	}
+	return nil
+}
+
 // printDiagnostics writes each diagnostic to stderr in human-readable form.
 func printDiagnostics(cmd *cobra.Command, diags []binder.Diagnostic) {
 	for _, d := range diags {

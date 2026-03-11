@@ -3,7 +3,6 @@ package cmd
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 
@@ -69,13 +68,8 @@ func newDeleteCmdWithGetCWD(io DeleteIO, getwd func() (string, error)) *cobra.Co
 
 			changed := !bytes.Equal(binderBytes, modifiedBytes) && !dryRun
 
-			if jsonMode {
-				out := binder.OpResult{Version: "1", Changed: changed, DryRun: dryRun, Diagnostics: diags}
-				if err := json.NewEncoder(cmd.OutOrStdout()).Encode(out); err != nil {
-					return fmt.Errorf("encoding output: %w", err)
-				}
-			} else {
-				printDiagnostics(cmd, diags)
+			if err := emitOpResult(cmd, jsonMode, changed, dryRun, diags); err != nil {
+				return err
 			}
 
 			if hasDiagnosticError(diags) {
@@ -89,11 +83,7 @@ func newDeleteCmdWithGetCWD(io DeleteIO, getwd func() (string, error)) *cobra.Co
 			}
 
 			if !jsonMode {
-				prefix := ""
-				if dryRun {
-					prefix = "dry-run: "
-				}
-				if _, err := fmt.Fprintln(cmd.OutOrStdout(), prefix+"Deleted "+sanitizePath(selector)+" from "+sanitizePath(binderPath)); err != nil {
+				if _, err := fmt.Fprintln(cmd.OutOrStdout(), dryRunPrefix(dryRun)+"Deleted "+sanitizePath(selector)+" from "+sanitizePath(binderPath)); err != nil {
 					return fmt.Errorf("writing output: %w", err)
 				}
 			}
