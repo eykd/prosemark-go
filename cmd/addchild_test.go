@@ -1265,3 +1265,32 @@ func TestNewAddChildCmd_NewMode_DiagnosticSuggestionsAttached(t *testing.T) {
 		t.Errorf("expected stderr to contain suggestion for OPE001 diagnostic, got: %q", stderr)
 	}
 }
+
+// TestNewAddChildCmd_NewMode_ExecAddChildError_RollsBackNodeFile verifies that
+// when execAddChild returns an error (e.g. stdout write fails during JSON
+// encoding), runNewMode rolls back the node file it already created.
+// RED: currently runNewMode does not clean up the node file on execAddChild error.
+func TestNewAddChildCmd_NewMode_ExecAddChildError_RollsBackNodeFile(t *testing.T) {
+	mock := &mockAddChildIOWithNew{
+		mockAddChildIO: mockAddChildIO{
+			binderBytes: emptyBinder(),
+			project:     &binder.Project{Files: []string{}, BinderDir: "."},
+		},
+	}
+	c := NewAddChildCmd(mock)
+	// Use errWriter to make emitOpResult fail when writing JSON to stdout.
+	c.SetOut(&errWriter{err: errors.New("stdout closed")})
+	c.SetErr(new(bytes.Buffer))
+	c.SetArgs([]string{"--new", "--title", "Chapter One", "--parent", ".", "--json", "--project", "."})
+
+	err := c.Execute()
+	if err == nil {
+		t.Fatal("expected error when stdout write fails")
+	}
+
+	// The node file was written before execAddChild was called.
+	// runNewMode should roll it back (call DeleteFile) on error.
+	if mock.deletedPath == "" {
+		t.Error("expected node file to be rolled back (DeleteFile called) when execAddChild fails, but DeleteFile was not called")
+	}
+}
