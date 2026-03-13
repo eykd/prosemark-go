@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -16,13 +17,15 @@ const (
 	// initConfigContent is the initial content for a new .prosemark.yml file.
 	initConfigContent = "version: \"1\"\n"
 
-	diagCodeBinderCreated = "OPI001"
-	diagCodeConfigCreated = "OPI002"
+	diagCodeBinderCreated  = "OPI001"
+	diagCodeConfigCreated  = "OPI002"
+	diagCodeBinderDataLoss = "OPW006"
 )
 
 // InitIO handles I/O for the init command.
 type InitIO interface {
 	StatFile(path string) (bool, error)
+	ReadFile(path string) (string, error)
 	WriteFileAtomic(path, content string) error
 }
 
@@ -68,6 +71,15 @@ func newInitCmdWithGetCWD(initIO InitIO, getwd func() (string, error)) *cobra.Co
 					fmt.Errorf("_binder.md already exists in %s; use --force to overwrite", project))
 			}
 
+			var binderNodeCount int
+			if force && binderExists {
+				content, err := initIO.ReadFile(binderPath)
+				if err != nil {
+					return emitOPE009AndError(cmd, jsonMode, fmt.Errorf("reading %s: %w", binderPath, err))
+				}
+				binderNodeCount = countBinderNodes(content)
+			}
+
 			changed := !dryRun
 
 			if changed {
@@ -100,6 +112,14 @@ func newInitCmdWithGetCWD(initIO InitIO, getwd func() (string, error)) *cobra.Co
 				}
 			}
 
+			if binderNodeCount > 0 {
+				diags = append(diags, binder.Diagnostic{
+					Severity: "warning",
+					Code:     diagCodeBinderDataLoss,
+					Message:  fmt.Sprintf("existing binder contains %d node entries that will be lost", binderNodeCount),
+				})
+			}
+
 			diags = prepareDiagnostics(diags)
 
 			if jsonMode {
@@ -108,6 +128,13 @@ func newInitCmdWithGetCWD(initIO InitIO, getwd func() (string, error)) *cobra.Co
 					return fmt.Errorf("encoding output: %w", err)
 				}
 				return nil
+			}
+
+			if binderNodeCount > 0 {
+				msg := fmt.Sprintf("warning: existing binder contains %d node entries that will be lost", binderNodeCount)
+				if _, err := fmt.Fprintln(cmd.ErrOrStderr(), msg); err != nil {
+					return fmt.Errorf("writing output: %w", err)
+				}
 			}
 
 			if needsWarning {
@@ -132,6 +159,24 @@ func newInitCmdWithGetCWD(initIO InitIO, getwd func() (string, error)) *cobra.Co
 	return cmd
 }
 
+// countBinderNodes parses binder content and returns the number of node entries.
+func countBinderNodes(content string) int {
+	result, _, err := binder.Parse(context.Background(), []byte(content), nil)
+	if err != nil || result == nil || result.Root == nil {
+		return 0
+	}
+	return countNodesRecursive(result.Root)
+}
+
+// countNodesRecursive counts all non-root nodes in the binder tree.
+func countNodesRecursive(n *binder.Node) int {
+	count := 0
+	for _, child := range n.Children {
+		count += 1 + countNodesRecursive(child)
+	}
+	return count
+}
+
 // fileInitIO implements InitIO using OS file I/O.
 type fileInitIO struct{}
 
@@ -151,6 +196,20 @@ func (f fileInitIO) StatFileImpl(path string) (bool, error) {
 		return false, nil
 	}
 	return false, err
+}
+
+// ReadFileImpl reads the contents of the file at path.
+func (f fileInitIO) ReadFileImpl(path string) (string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
+}
+
+// ReadFile reads the contents of the file at path.
+func (f fileInitIO) ReadFile(path string) (string, error) {
+	return f.ReadFileImpl(path)
 }
 
 // WriteFileAtomic writes content to path atomically via a temp file with 0600 permissions.

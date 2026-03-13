@@ -34,6 +34,32 @@ func TestFileInitIO_StatFile_NonExistentFile(t *testing.T) {
 	}
 }
 
+func TestFileInitIO_ReadFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "_binder.md")
+	want := "<!-- prosemark-binder:v1 -->\n"
+	if err := os.WriteFile(path, []byte(want), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	fio := fileInitIO{}
+	got, err := fio.ReadFile(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != want {
+		t.Errorf("ReadFile = %q, want %q", got, want)
+	}
+}
+
+func TestFileInitIO_ReadFile_NonExistent(t *testing.T) {
+	fio := fileInitIO{}
+	_, err := fio.ReadFile(filepath.Join(t.TempDir(), "nonexistent.md"))
+	if err == nil {
+		t.Error("expected error for non-existent file")
+	}
+}
+
 func TestFileInitIO_WriteFileAtomic(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "_binder.md")

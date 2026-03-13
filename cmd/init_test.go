@@ -15,6 +15,8 @@ import (
 type mockInitIO struct {
 	binderExists  bool
 	binderStatErr error
+	binderContent string
+	readFileErr   error
 	configExists  bool
 	configStatErr error
 	writeErrFor   map[string]error  // keyed by filepath.Base
@@ -37,6 +39,16 @@ func (m *mockInitIO) StatFile(path string) (bool, error) {
 	default:
 		return false, nil
 	}
+}
+
+func (m *mockInitIO) ReadFile(path string) (string, error) {
+	if m.readFileErr != nil {
+		return "", m.readFileErr
+	}
+	if filepath.Base(path) == "_binder.md" {
+		return m.binderContent, nil
+	}
+	return "", nil
 }
 
 func (m *mockInitIO) WriteFileAtomic(path, content string) error {
@@ -484,6 +496,52 @@ func TestInitCmd_JSONEncodeError(t *testing.T) {
 	err := root.Execute()
 	if err == nil {
 		t.Error("expected error when JSON encoding fails in init --json mode, got nil")
+	}
+}
+
+func TestInitCmd_ForceReadFileError(t *testing.T) {
+	mock := newMockInitIO()
+	mock.binderExists = true
+	mock.readFileErr = errors.New("permission denied")
+
+	c := newInitCmdWithGetCWD(mock, func() (string, error) { return ".", nil })
+	c.SetOut(new(bytes.Buffer))
+	c.SetErr(new(bytes.Buffer))
+	c.SetArgs([]string{"--project", ".", "--force"})
+
+	err := c.Execute()
+	if err == nil {
+		t.Fatal("expected error when ReadFile fails during force init")
+	}
+	if !strings.Contains(err.Error(), "reading") {
+		t.Errorf("error = %q, want to contain %q", err.Error(), "reading")
+	}
+}
+
+func TestInitCmd_ForceDataLossWarningStderrError(t *testing.T) {
+	mock := newMockInitIO()
+	mock.binderExists = true
+	mock.binderContent = "<!-- prosemark-binder:v1 -->\n\n- [Chapter](ch.md)\n"
+
+	c := newInitCmdWithGetCWD(mock, func() (string, error) { return ".", nil })
+	c.SetOut(new(bytes.Buffer))
+	c.SetErr(&errWriter{err: errors.New("write error")})
+	c.SetArgs([]string{"--project", ".", "--force"})
+
+	err := c.Execute()
+	if err == nil {
+		t.Fatal("expected error when stderr write fails for data loss warning")
+	}
+	if !strings.Contains(err.Error(), "writing output") {
+		t.Errorf("error = %q, want to contain %q", err.Error(), "writing output")
+	}
+}
+
+func TestCountBinderNodes_InvalidContent(t *testing.T) {
+	// Invalid UTF-8 triggers a parse error → countBinderNodes returns 0.
+	count := countBinderNodes(string([]byte{0xff, 0xfe}))
+	if count != 0 {
+		t.Errorf("countBinderNodes(invalid) = %d, want 0", count)
 	}
 }
 
