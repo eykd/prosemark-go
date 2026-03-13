@@ -85,7 +85,7 @@ func newDeleteCmdWithGetCWD(io DeleteIO, getwd func() (string, error)) *cobra.Co
 
 			if changed {
 				if err = io.WriteBinderAtomic(ctx, binderPath, modifiedBytes); err != nil {
-					return fmt.Errorf("writing binder: %w", err)
+					return &ExitError{Code: ExitTransient, Err: fmt.Errorf("writing binder: %w", err)}
 				}
 			}
 

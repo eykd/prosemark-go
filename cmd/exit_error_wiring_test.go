@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/eykd/prosemark-go/internal/binder"
@@ -231,5 +232,83 @@ func TestAddChildCmd_NonNewMode_TitleNewline_ReturnsExitError(t *testing.T) {
 	}
 	if exitErr.Code != ExitValidation {
 		t.Errorf("ExitError.Code = %d, want %d (ExitValidation)", exitErr.Code, ExitValidation)
+	}
+}
+
+// TestWriteBinderError_ReturnsExitTransient verifies that when WriteBinderAtomic
+// fails (e.g. read-only binder, missing directory), commands return an ExitError
+// with ExitTransient (6) instead of a plain error that defaults to exit code 1.
+func TestWriteBinderError_ReturnsExitTransient(t *testing.T) {
+	diskErr := fmt.Errorf("permission denied")
+
+	tests := []struct {
+		name    string
+		setupFn func() (*bytes.Buffer, error)
+	}{
+		{
+			name: "add-child write error",
+			setupFn: func() (*bytes.Buffer, error) {
+				mock := &mockAddChildIO{
+					binderBytes: acBinder(),
+					project:     &binder.Project{Files: []string{"chapter-two.md"}, BinderDir: "."},
+					writeErr:    diskErr,
+				}
+				c := NewAddChildCmd(mock)
+				out := new(bytes.Buffer)
+				c.SetOut(out)
+				c.SetErr(new(bytes.Buffer))
+				c.SetArgs([]string{"--parent", ".", "--target", "chapter-two.md", "--project", "."})
+				return out, c.Execute()
+			},
+		},
+		{
+			name: "delete write error",
+			setupFn: func() (*bytes.Buffer, error) {
+				mock := &mockDeleteIO{
+					binderBytes: delBinder(),
+					project:     &binder.Project{Files: []string{"chapter-one.md"}, BinderDir: "."},
+					writeErr:    diskErr,
+				}
+				c := NewDeleteCmd(mock)
+				out := new(bytes.Buffer)
+				c.SetOut(out)
+				c.SetErr(new(bytes.Buffer))
+				c.SetArgs([]string{"--selector", "chapter-one.md", "--yes", "--project", "."})
+				return out, c.Execute()
+			},
+		},
+		{
+			name: "move write error",
+			setupFn: func() (*bytes.Buffer, error) {
+				mock := &mockMoveIO{
+					binderBytes: moveBinder(),
+					project:     &binder.Project{Files: []string{"chapter-one.md", "chapter-two.md"}, BinderDir: "."},
+					writeErr:    diskErr,
+				}
+				c := NewMoveCmd(mock)
+				out := new(bytes.Buffer)
+				c.SetOut(out)
+				c.SetErr(new(bytes.Buffer))
+				c.SetArgs([]string{"--source", "chapter-two.md", "--dest", "chapter-one.md", "--yes", "--project", "."})
+				return out, c.Execute()
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := tt.setupFn()
+			if err == nil {
+				t.Fatal("expected error when WriteBinderAtomic fails")
+			}
+
+			var exitErr *ExitError
+			if !errors.As(err, &exitErr) {
+				t.Fatalf("expected ExitError, got %T: %v", err, err)
+			}
+			if exitErr.Code != ExitTransient {
+				t.Errorf("ExitError.Code = %d, want %d (ExitTransient)", exitErr.Code, ExitTransient)
+			}
+		})
 	}
 }

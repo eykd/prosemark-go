@@ -167,7 +167,7 @@ func newAddChildCmdWithGetCWD(io NewNodeAddChildIO, getwd func() (string, error)
 
 			if result.changed {
 				if err = io.WriteBinderAtomic(ctx, binderPath, result.modifiedBytes); err != nil {
-					return fmt.Errorf("writing binder: %w", err)
+					return &ExitError{Code: ExitTransient, Err: fmt.Errorf("writing binder: %w", err)}
 				}
 			}
 
@@ -322,9 +322,9 @@ func runNewMode(ctx context.Context, cmd *cobra.Command, io NewNodeAddChildIO, b
 	if result.changed {
 		if writeErr := io.WriteBinderAtomic(ctx, binderPath, result.modifiedBytes); writeErr != nil {
 			if rollbackErr := io.DeleteFile(nodePath); rollbackErr != nil {
-				return fmt.Errorf("writing binder: %w; rollback also failed: %v", writeErr, rollbackErr)
+				return &ExitError{Code: ExitTransient, Err: fmt.Errorf("writing binder: %w; rollback also failed: %v", writeErr, rollbackErr)}
 			}
-			return fmt.Errorf("writing binder: %w", writeErr)
+			return &ExitError{Code: ExitTransient, Err: fmt.Errorf("writing binder: %w", writeErr)}
 		}
 	}
 

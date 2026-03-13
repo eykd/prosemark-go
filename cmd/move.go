@@ -103,7 +103,7 @@ func newMoveCmdWithGetCWD(io MoveIO, getwd func() (string, error)) *cobra.Comman
 
 			if changed {
 				if err = io.WriteBinderAtomic(ctx, binderPath, modifiedBytes); err != nil {
-					return fmt.Errorf("writing binder: %w", err)
+					return &ExitError{Code: ExitTransient, Err: fmt.Errorf("writing binder: %w", err)}
 				}
 			}
 
