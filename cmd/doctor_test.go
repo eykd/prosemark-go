@@ -327,6 +327,17 @@ func TestNewDoctorCmd_Scenarios(t *testing.T) {
 			wantInErr: "AUD007",
 		},
 		{
+			// AUD009: binder contains invalid UTF-8 / binary content → exit 1.
+			name:        "AUD009: invalid UTF-8 binder content",
+			args:        []string{"--project", "."},
+			binderBytes: []byte{0xff, 0xfe, 0x00, 0x80, 0x89},
+			nodeFiles: map[string]nodeFileEntry{
+				".prosemark.yml": {content: []byte("version: \"1\"\n"), exists: true},
+			},
+			wantErr:   true,
+			wantInErr: "AUD009",
+		},
+		{
 			// Uninitialized project: binder ErrNotExist → distinct "project not initialized" message.
 			name:      "uninitialized project: binder not found",
 			args:      []string{"--project", "."},

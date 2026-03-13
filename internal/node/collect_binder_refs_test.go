@@ -183,6 +183,44 @@ func TestCollectBinderRefs_BinderParseDiagnosticsIncluded(t *testing.T) {
 	}
 }
 
+// TestCollectBinderRefs_InvalidUTF8_EmitsAUD009 verifies that binary/invalid-UTF-8
+// binder content produces an AUD009 error diagnostic.
+func TestCollectBinderRefs_InvalidUTF8_EmitsAUD009(t *testing.T) {
+	// \xff\xfe is invalid UTF-8 (not a valid start sequence).
+	invalidUTF8 := []byte("- [Title](file.md)\xff\xfe\n")
+
+	refs, diags := node.CollectBinderRefs(context.Background(), invalidUTF8)
+
+	// Must emit AUD009 for invalid UTF-8 content.
+	if !hasDiagCode(diags, node.AUD009) {
+		t.Errorf("CollectBinderRefs() missing AUD009 for invalid UTF-8; got diags=%v, refs=%v", diags, refs)
+	}
+
+	// AUD009 must be error severity.
+	for _, d := range diags {
+		if d.Code == node.AUD009 {
+			if d.Severity != node.SeverityError {
+				t.Errorf("AUD009 severity = %q, want %q", d.Severity, node.SeverityError)
+			}
+			if d.Message == "" {
+				t.Errorf("AUD009 has empty Message")
+			}
+		}
+	}
+}
+
+// TestCollectBinderRefs_PureBinary_EmitsAUD009 verifies that pure binary content
+// (no valid UTF-8 at all) produces an AUD009 error diagnostic.
+func TestCollectBinderRefs_PureBinary_EmitsAUD009(t *testing.T) {
+	pureBinary := []byte{0x00, 0x80, 0xff, 0xfe, 0x89, 0x50, 0x4e, 0x47}
+
+	refs, diags := node.CollectBinderRefs(context.Background(), pureBinary)
+
+	if !hasDiagCode(diags, node.AUD009) {
+		t.Errorf("CollectBinderRefs() missing AUD009 for pure binary; got diags=%v, refs=%v", diags, refs)
+	}
+}
+
 // TestCollectBinderRefs_BNDW001_IsWarning verifies that BNDW001 (missing pragma)
 // is surfaced with warning severity so doctor exits 0 for pragma-only issues.
 func TestCollectBinderRefs_BNDW001_IsWarning(t *testing.T) {

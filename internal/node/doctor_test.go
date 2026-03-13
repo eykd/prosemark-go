@@ -275,6 +275,71 @@ func TestRunDoctor(t *testing.T) {
 	}
 }
 
+// TestRunDoctor_AUD009_InvalidUTF8Binder verifies that RunDoctor emits AUD009
+// when the binder contains invalid UTF-8 / binary content.
+func TestRunDoctor_AUD009_InvalidUTF8Binder(t *testing.T) {
+	ctx := context.Background()
+
+	tests := []struct {
+		name      string
+		binderSrc []byte
+	}{
+		{
+			name:      "binder with embedded invalid UTF-8 bytes",
+			binderSrc: []byte("- [Title](file.md)\xff\xfe\n"),
+		},
+		{
+			name:      "binder with pure binary content",
+			binderSrc: []byte{0x00, 0x80, 0xff, 0xfe, 0x89, 0x50, 0x4e, 0x47},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			data := node.DoctorData{
+				BinderSrc:    tt.binderSrc,
+				UUIDFiles:    []string{},
+				FileContents: map[string][]byte{},
+			}
+
+			diags := node.RunDoctor(ctx, data)
+
+			if !hasDiagCode(diags, node.AUD009) {
+				t.Errorf("RunDoctor() missing AUD009 for invalid UTF-8 binder; got %v", diags)
+			}
+		})
+	}
+}
+
+// TestRunDoctor_AUD009_PrecomputedPath verifies AUD009 is propagated when
+// CollectBinderRefs pre-computes it in BinderRefDiags.
+func TestRunDoctor_AUD009_PrecomputedPath(t *testing.T) {
+	ctx := context.Background()
+
+	data := node.DoctorData{
+		BinderSrc:    []byte{0xff, 0xfe},
+		UUIDFiles:    []string{},
+		FileContents: map[string][]byte{},
+		BinderRefs:   []string{},
+		BinderRefDiags: []node.AuditDiagnostic{
+			{Code: node.AUD009, Severity: node.SeverityError, Message: "binder contains invalid UTF-8 content", Path: "_binder.md"},
+		},
+	}
+
+	diags := node.RunDoctor(ctx, data)
+
+	if !hasDiagCode(diags, node.AUD009) {
+		t.Errorf("RunDoctor() missing AUD009 from pre-computed diags; got %v", diags)
+	}
+
+	// Verify it has error severity.
+	for _, d := range diags {
+		if d.Code == node.AUD009 && d.Severity != node.SeverityError {
+			t.Errorf("AUD009 severity = %q, want %q", d.Severity, node.SeverityError)
+		}
+	}
+}
+
 // TestRunDoctor_Severity verifies that AUD002, AUD006, and AUDW001 are warnings
 // and that AUD001, AUD003, AUD004, AUD005, AUD007 are errors.
 func TestRunDoctor_Severity(t *testing.T) {

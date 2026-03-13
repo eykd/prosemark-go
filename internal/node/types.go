@@ -48,6 +48,8 @@ const (
 	AUD007 AuditCode = "AUD007"
 	// AUD008 indicates the project config .prosemark.yml is missing, unreadable, or contains invalid YAML.
 	AUD008 AuditCode = "AUD008"
+	// AUD009 indicates the binder file contains invalid UTF-8 or binary content that cannot be parsed.
+	AUD009 AuditCode = "AUD009"
 	// AUDW001 is a warning indicating a non-UUID filename linked in binder (backward-compatibility warning for Feature 001 projects).
 	AUDW001 AuditCode = "AUDW001"
 	// AUDW002 is a warning indicating the project directory scan failed (e.g. permission denied).
