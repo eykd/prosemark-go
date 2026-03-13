@@ -56,6 +56,8 @@ func Parse(ctx context.Context, src []byte, project *Project) (*ParseResult, []D
 		},
 	}
 
+	originalLen := len(src)
+
 	// Reject non-UTF-8 content before any processing.
 	if !utf8.Valid(src) {
 		return result, nil, fmt.Errorf("binder file contains invalid UTF-8 content")
@@ -83,7 +85,8 @@ func Parse(ctx context.Context, src []byte, project *Project) (*ParseResult, []D
 	diags = append(diags, p1.diags...)
 
 	// Emit BNDW001 if no effective pragma found and file has content (or no project context).
-	if !result.HasPragma && (project == nil || len(result.Lines) > 0) {
+	// A 0-byte file has no content, so suppress the warning to avoid a misleading message.
+	if !result.HasPragma && originalLen > 0 && (project == nil || len(result.Lines) > 0) {
 		diags = append(diags, Diagnostic{
 			Severity: "warning",
 			Code:     CodeMissingPragma,

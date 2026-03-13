@@ -296,15 +296,26 @@ func TestParse_EmptyInput(t *testing.T) {
 	if result.Version != "1" {
 		t.Errorf("ParseResult.Version = %q, want %q", result.Version, "1")
 	}
-	// BNDW001 must be emitted (missing pragma on empty input)
-	found := false
+	// BNDW001 must NOT be emitted for 0-byte input (no content to warn about).
 	for _, d := range diags {
 		if d.Code == binder.CodeMissingPragma {
-			found = true
+			t.Errorf("BNDW001 must not be emitted for 0-byte input; got: %+v", d)
 		}
 	}
-	if !found {
-		t.Error("expected BNDW001 for empty input (no pragma)")
+}
+
+// TestParse_EmptyInput_NoBNDW001 verifies that a 0-byte binder does NOT produce
+// BNDW001. A 0-byte file has no content, so "file has content but does not
+// begin with pragma" is misleading.
+func TestParse_EmptyInput_NoBNDW001(t *testing.T) {
+	_, diags, err := binder.Parse(context.Background(), []byte{}, nil)
+	if err != nil {
+		t.Fatalf("unexpected error on empty input: %v", err)
+	}
+	for _, d := range diags {
+		if d.Code == binder.CodeMissingPragma {
+			t.Errorf("BNDW001 must not be emitted for 0-byte input; got: %+v", d)
+		}
 	}
 }
 

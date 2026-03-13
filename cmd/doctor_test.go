@@ -793,6 +793,7 @@ func TestNewDoctorCmd_BinderParseWarnings(t *testing.T) {
 		wantErr     bool
 		wantInErr   string
 		wantNoneOut string
+		wantNoneErr string
 	}{
 		{
 			// BNDW001: binder has no pragma → warning reported, exit 0.
@@ -805,6 +806,17 @@ func TestNewDoctorCmd_BinderParseWarnings(t *testing.T) {
 			},
 			wantErr:   false, // BNDW001 is warning severity → exit 0
 			wantInErr: "BNDW001",
+		},
+		{
+			// 0-byte binder must NOT trigger BNDW001: no content means no misleading pragma warning.
+			name:        "BNDW001: suppressed for 0-byte empty binder",
+			args:        []string{"--project", "."},
+			binderBytes: []byte{}, // 0 bytes
+			nodeFiles: map[string]nodeFileEntry{
+				".prosemark.yml": {content: []byte("version: \"1\"\n"), exists: true},
+			},
+			wantErr:     false,
+			wantNoneErr: "BNDW001",
 		},
 		{
 			// Binder with valid pragma → no BNDW001 in output.
@@ -843,6 +855,9 @@ func TestNewDoctorCmd_BinderParseWarnings(t *testing.T) {
 			}
 			if tt.wantNoneOut != "" && strings.Contains(out.String(), tt.wantNoneOut) {
 				t.Errorf("stdout = %q, must NOT contain %q", out.String(), tt.wantNoneOut)
+			}
+			if tt.wantNoneErr != "" && strings.Contains(errOut.String(), tt.wantNoneErr) {
+				t.Errorf("stderr = %q, must NOT contain %q", errOut.String(), tt.wantNoneErr)
 			}
 		})
 	}
