@@ -7,10 +7,11 @@ import "encoding/json"
 // Root nodes have Type "root"; leaf/branch nodes have Type "node".
 type Node struct {
 	// JSON-exported fields (match parse-result.schema.json)
-	Type     string  `json:"type"`             // "root" | "node"
-	Target   string  `json:"target,omitempty"` // resolved relative path (absent on root)
-	Title    string  `json:"title,omitempty"`  // display text (absent on root)
-	Children []*Node `json:"children"`         // ordered children; never nil (use empty slice)
+	Type     string  `json:"type"`               // "root" | "node"
+	Target   string  `json:"target,omitempty"`   // resolved relative path (absent on root)
+	Title    string  `json:"title,omitempty"`    // display text (absent on root)
+	Selector string  `json:"selector,omitempty"` // discoverable selector ("." for root, stem for nodes)
+	Children []*Node `json:"children"`           // ordered children; never nil (use empty slice)
 
 	// Source metadata (not serialized to JSON)
 	Line        int    `json:"-"` // 1-based line number of list item

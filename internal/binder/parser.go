@@ -51,6 +51,7 @@ func Parse(ctx context.Context, src []byte, project *Project) (*ParseResult, []D
 		Version: "1",
 		Root: &Node{
 			Type:     "root",
+			Selector: ".",
 			Children: []*Node{},
 		},
 	}
@@ -290,11 +291,17 @@ func Parse(ctx context.Context, src []byte, project *Project) (*ParseResult, []D
 			}
 		}
 
+		sel := stemFromPath(target)
+		if sel == "" {
+			sel = title
+		}
+
 		node := &Node{
 			Type:       "node",
 			Children:   []*Node{},
 			Target:     target,
 			Title:      title,
+			Selector:   sel,
 			Line:       lineNum,
 			Indent:     indent,
 			ListMarker: marker,
