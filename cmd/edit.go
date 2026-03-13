@@ -75,9 +75,9 @@ func newEditCmdWithGetCWD(io EditIO, getwd func() (string, error)) *cobra.Comman
 			targetFilename := nodeID + ".md"
 			if !findNodeInTree(parsed.Root, targetFilename) {
 				return &ExitError{
-				Code: ExitNotFound,
-				Err:  fmt.Errorf("node %q not found in binder", nodeID),
-			}
+					Code: ExitNotFound,
+					Err:  fmt.Errorf("node %q not found in binder", nodeID),
+				}
 			}
 
 			binderDir := filepath.Dir(binderPath)

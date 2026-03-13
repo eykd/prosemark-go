@@ -93,6 +93,33 @@ func TestMoveCmd_DiagnosticError_ReturnsExitError(t *testing.T) {
 	}
 }
 
+// TestEditCmd_NodeNotFound_ReturnsExitError verifies that when the edit command
+// receives a node ID not present in the binder, it returns an ExitError with
+// ExitNotFound (3), consistent with other commands' not-found behavior.
+func TestEditCmd_NodeNotFound_ReturnsExitError(t *testing.T) {
+	t.Setenv("EDITOR", "vi")
+	mock := &mockEditIO{
+		binderBytes: editBinderWithNode(),
+	}
+	c := NewEditCmd(mock)
+	c.SetOut(new(bytes.Buffer))
+	c.SetErr(new(bytes.Buffer))
+	c.SetArgs([]string{"99999999-89ab-7def-0123-456789abcdef", "--project", "."})
+
+	err := c.Execute()
+	if err == nil {
+		t.Fatal("expected error for node not found in binder")
+	}
+
+	var exitErr *ExitError
+	if !errors.As(err, &exitErr) {
+		t.Fatalf("expected ExitError, got %T: %v", err, err)
+	}
+	if exitErr.Code != ExitNotFound {
+		t.Errorf("ExitError.Code = %d, want %d (ExitNotFound)", exitErr.Code, ExitNotFound)
+	}
+}
+
 // TestParseCmd_DiagnosticError_ReturnsExitError verifies that when the parse
 // command encounters a binder with parse errors, it wraps the returned error
 // in an ExitError with the exit code from ExitCodeForDiagnostics.
