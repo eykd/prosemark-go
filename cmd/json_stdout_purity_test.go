@@ -103,6 +103,40 @@ func TestJSONMode_DiagnosticErrors_NoHumanTextOnStderr(t *testing.T) {
 			},
 		},
 		{
+			name: "parse with binder read error",
+			setup: func(out, errBuf *bytes.Buffer) (*cobra.Command, []string) {
+				mock := &mockParseReader{
+					binderErr: errors.New("permission denied"),
+				}
+				sub := NewParseCmd(mock)
+				root := withRootFlags(sub, out, errBuf)
+				return root, []string{"parse", "--project", "."}
+			},
+		},
+		{
+			name: "parse with diagnostic error from invalid content",
+			setup: func(out, errBuf *bytes.Buffer) (*cobra.Command, []string) {
+				mock := &mockParseReader{
+					// Path escaping root produces BNDE002 error diagnostic
+					binderBytes: []byte("<!-- prosemark-binder:v1 -->\n- [Escape](../secret.md)\n"),
+				}
+				sub := NewParseCmd(mock)
+				root := withRootFlags(sub, out, errBuf)
+				return root, []string{"parse", "--project", "."}
+			},
+		},
+		{
+			name: "doctor with binder read error in JSON mode",
+			setup: func(out, errBuf *bytes.Buffer) (*cobra.Command, []string) {
+				mock := &mockDoctorIO{
+					binderErr: errors.New("permission denied"),
+				}
+				sub := NewDoctorCmd(mock)
+				root := withRootFlags(sub, out, errBuf)
+				return root, []string{"doctor", "--json", "--project", "."}
+			},
+		},
+		{
 			name: "init with binder-already-exists error",
 			setup: func(out, errBuf *bytes.Buffer) (*cobra.Command, []string) {
 				mock := newMockInitIO()
