@@ -45,7 +45,7 @@ func newEditCmdWithGetCWD(io EditIO, getwd func() (string, error)) *cobra.Comman
 		Args:         cobra.ExactArgs(1),
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			nodeID := args[0]
+			selector := args[0]
 			dryRun := isDryRun(cmd)
 
 			project, _ := cmd.Flags().GetString("project")
@@ -72,7 +72,7 @@ func newEditCmdWithGetCWD(io EditIO, getwd func() (string, error)) *cobra.Comman
 				return fmt.Errorf("cannot parse binder: %w", err)
 			}
 
-			resolvedID, resolveErr := resolveEditSelector(nodeID, parsed.Root)
+			resolvedID, resolveErr := resolveEditSelector(selector, parsed.Root)
 			if resolveErr != nil {
 				return resolveErr
 			}

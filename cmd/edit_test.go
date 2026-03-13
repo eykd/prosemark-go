@@ -88,6 +88,56 @@ func (m *mockEditIOWithDelete) DeleteFile(path string) error {
 	return m.deleteErr
 }
 
+// ─── Shared assertion helper ──────────────────────────────────────────────
+
+// editExpected holds the expected outcomes for an edit command test case.
+type editExpected struct {
+	err               bool
+	editorCalled      bool
+	editorPathSuffix  string
+	noteCreateAttempt bool
+	writeCalled       bool
+	writePathSuffix   string
+}
+
+// assertEditOutcome verifies mock state against expected outcomes.
+func assertEditOutcome(t *testing.T, mock *mockEditIO, err error, exp editExpected) {
+	t.Helper()
+
+	if (err != nil) != exp.err {
+		t.Errorf("error = %v, wantErr %v", err, exp.err)
+	}
+	if exp.editorCalled && len(mock.editorCalls) == 0 {
+		t.Error("expected OpenEditor to be called")
+	}
+	if !exp.editorCalled && len(mock.editorCalls) > 0 {
+		t.Errorf("expected OpenEditor NOT called, got %v", mock.editorCalls)
+	}
+	if exp.editorPathSuffix != "" && len(mock.editorCalls) > 0 {
+		gotPath := mock.editorCalls[0][1]
+		if !strings.HasSuffix(gotPath, exp.editorPathSuffix) {
+			t.Errorf("OpenEditor path = %q, want suffix %q", gotPath, exp.editorPathSuffix)
+		}
+	}
+	if exp.noteCreateAttempt && mock.notesCreated == "" {
+		t.Error("expected CreateNotesFile to be called")
+	}
+	if !exp.noteCreateAttempt && mock.notesCreated != "" {
+		t.Errorf("expected CreateNotesFile NOT called, got %q", mock.notesCreated)
+	}
+	if exp.writeCalled && mock.writtenPath == "" {
+		t.Error("expected WriteNodeFileAtomic to be called")
+	}
+	if !exp.writeCalled && mock.writtenPath != "" {
+		t.Errorf("expected WriteNodeFileAtomic NOT called, got %q", mock.writtenPath)
+	}
+	if exp.writePathSuffix != "" && mock.writtenPath != "" {
+		if !strings.HasSuffix(mock.writtenPath, exp.writePathSuffix) {
+			t.Errorf("WriteNodeFileAtomic path = %q, want suffix %q", mock.writtenPath, exp.writePathSuffix)
+		}
+	}
+}
+
 // ─── Test fixtures ─────────────────────────────────────────────────────────
 
 const editTestNodeUUID = "01234567-89ab-7def-0123-456789abcdef"
@@ -184,40 +234,37 @@ func TestNewEditCmd_Scenarios(t *testing.T) {
 		editorErr      error
 
 		// Expected outcomes
-		wantErr               bool
-		wantEditorCalled      bool
-		wantEditorPathSuffix  string
-		wantNoteCreateAttempt bool // CreateNotesFile called
-		wantWriteCalled       bool
-		wantWritePathSuffix   string
+		want editExpected
 	}{
 		{
 			// US3/1: edit draft — opens draft file, refreshes updated timestamp on close.
-			name:                 "US3/1 edit draft: opens draft, refreshes updated",
-			args:                 []string{editTestNodeUUID, "--project", "."},
-			editorEnv:            "vi",
-			binderBytes:          editBinderWithNode(),
-			nodeFileBytes:        validEditNodeContent(),
-			wantErr:              false,
-			wantEditorCalled:     true,
-			wantEditorPathSuffix: editTestNodeUUID + ".md",
-			wantWriteCalled:      true,
-			wantWritePathSuffix:  editTestNodeUUID + ".md",
+			name:          "US3/1 edit draft: opens draft, refreshes updated",
+			args:          []string{editTestNodeUUID, "--project", "."},
+			editorEnv:     "vi",
+			binderBytes:   editBinderWithNode(),
+			nodeFileBytes: validEditNodeContent(),
+			want: editExpected{
+				editorCalled:     true,
+				editorPathSuffix: editTestNodeUUID + ".md",
+				writeCalled:      true,
+				writePathSuffix:  editTestNodeUUID + ".md",
+			},
 		},
 		{
 			// US3/2: edit notes — opens notes file, refreshes draft's updated timestamp.
 			// Notes file already exists (createNotesErr = os.ErrExist → skip creation).
-			name:                 "US3/2 edit notes: opens notes file, refreshes draft updated",
-			args:                 []string{editTestNodeUUID, "--part", "notes", "--project", "."},
-			editorEnv:            "vi",
-			binderBytes:          editBinderWithNode(),
-			nodeFileBytes:        validEditNodeContent(),
-			createNotesErr:       os.ErrExist,
-			wantErr:              false,
-			wantEditorCalled:     true,
-			wantEditorPathSuffix: editTestNodeUUID + ".notes.md",
-			wantWriteCalled:      true,
-			wantWritePathSuffix:  editTestNodeUUID + ".md",
+			name:           "US3/2 edit notes: opens notes file, refreshes draft updated",
+			args:           []string{editTestNodeUUID, "--part", "notes", "--project", "."},
+			editorEnv:      "vi",
+			binderBytes:    editBinderWithNode(),
+			nodeFileBytes:  validEditNodeContent(),
+			createNotesErr: os.ErrExist,
+			want: editExpected{
+				editorCalled:     true,
+				editorPathSuffix: editTestNodeUUID + ".notes.md",
+				writeCalled:      true,
+				writePathSuffix:  editTestNodeUUID + ".md",
+			},
 		},
 		{
 			// US3/3: edit notes creates notes file when it does not yet exist.
@@ -229,79 +276,70 @@ func TestNewEditCmd_Scenarios(t *testing.T) {
 				editTestNodeUUID + ".md": validEditNodeContent(),
 				// notes file NOT present → ReadNodeFile returns ErrNotExist
 			},
-			wantErr:               false,
-			wantNoteCreateAttempt: true,
-			wantEditorCalled:      true,
-			wantEditorPathSuffix:  editTestNodeUUID + ".notes.md",
-			wantWriteCalled:       true,
-			wantWritePathSuffix:   editTestNodeUUID + ".md",
+			want: editExpected{
+				noteCreateAttempt: true,
+				editorCalled:      true,
+				editorPathSuffix:  editTestNodeUUID + ".notes.md",
+				writeCalled:       true,
+				writePathSuffix:   editTestNodeUUID + ".md",
+			},
 		},
 		{
 			// US3/4: node not in binder → error "node not in binder"; no IO.
-			name:             "US3/4 node not in binder",
-			args:             []string{"99999999-89ab-7def-0123-456789abcdef", "--project", "."},
-			editorEnv:        "vi",
-			binderBytes:      editBinderWithNode(),
-			wantErr:          true,
-			wantEditorCalled: false,
-			wantWriteCalled:  false,
+			name:        "US3/4 node not in binder",
+			args:        []string{"99999999-89ab-7def-0123-456789abcdef", "--project", "."},
+			editorEnv:   "vi",
+			binderBytes: editBinderWithNode(),
+			want:        editExpected{err: true},
 		},
 		{
 			// US3/5: draft file missing → error before editor opens.
-			name:             "US3/5 draft file missing",
-			args:             []string{editTestNodeUUID, "--project", "."},
-			editorEnv:        "vi",
-			binderBytes:      editBinderWithNode(),
-			nodeFileErr:      errors.New("open: no such file or directory"),
-			wantErr:          true,
-			wantEditorCalled: false,
-			wantWriteCalled:  false,
+			name:        "US3/5 draft file missing",
+			args:        []string{editTestNodeUUID, "--project", "."},
+			editorEnv:   "vi",
+			binderBytes: editBinderWithNode(),
+			nodeFileErr: errors.New("open: no such file or directory"),
+			want:        editExpected{err: true},
 		},
 		{
 			// US3/6: no --part flag → defaults to draft.
-			name:                 "US3/6 no --part defaults to draft",
-			args:                 []string{editTestNodeUUID, "--project", "."},
-			editorEnv:            "vi",
-			binderBytes:          editBinderWithNode(),
-			nodeFileBytes:        validEditNodeContent(),
-			wantErr:              false,
-			wantEditorCalled:     true,
-			wantEditorPathSuffix: editTestNodeUUID + ".md",
-			wantWriteCalled:      true,
-			wantWritePathSuffix:  editTestNodeUUID + ".md",
+			name:          "US3/6 no --part defaults to draft",
+			args:          []string{editTestNodeUUID, "--project", "."},
+			editorEnv:     "vi",
+			binderBytes:   editBinderWithNode(),
+			nodeFileBytes: validEditNodeContent(),
+			want: editExpected{
+				editorCalled:     true,
+				editorPathSuffix: editTestNodeUUID + ".md",
+				writeCalled:      true,
+				writePathSuffix:  editTestNodeUUID + ".md",
+			},
 		},
 		{
 			// US3/7: no $EDITOR → error immediately; no files created or modified.
-			name:                  "US3/7 no EDITOR configured",
-			args:                  []string{editTestNodeUUID, "--project", "."},
-			unsetEditor:           true,
-			binderBytes:           editBinderWithNode(),
-			wantErr:               true,
-			wantEditorCalled:      false,
-			wantNoteCreateAttempt: false,
-			wantWriteCalled:       false,
+			name:        "US3/7 no EDITOR configured",
+			args:        []string{editTestNodeUUID, "--project", "."},
+			unsetEditor: true,
+			binderBytes: editBinderWithNode(),
+			want:        editExpected{err: true},
 		},
 		{
 			// Editor exits non-zero → updated field must NOT be refreshed.
-			name:             "editor exits non-zero: no timestamp refresh",
-			args:             []string{editTestNodeUUID, "--project", "."},
-			editorEnv:        "vi",
-			binderBytes:      editBinderWithNode(),
-			nodeFileBytes:    validEditNodeContent(),
-			editorErr:        errors.New("editor exited with status 1"),
-			wantErr:          true,
-			wantEditorCalled: true,
-			wantWriteCalled:  false,
+			name:          "editor exits non-zero: no timestamp refresh",
+			args:          []string{editTestNodeUUID, "--project", "."},
+			editorEnv:     "vi",
+			binderBytes:   editBinderWithNode(),
+			nodeFileBytes: validEditNodeContent(),
+			editorErr:     errors.New("editor exited with status 1"),
+			want:          editExpected{err: true, editorCalled: true},
 		},
 		{
 			// ReadBinder error → fail before any other IO.
-			name:             "ReadBinder error",
-			args:             []string{editTestNodeUUID, "--project", "."},
-			editorEnv:        "vi",
-			binderErr:        errors.New("cannot read binder"),
-			wantErr:          true,
-			wantEditorCalled: false,
-			wantWriteCalled:  false,
+			name:      "ReadBinder error",
+			args:      []string{editTestNodeUUID, "--project", "."},
+			editorEnv: "vi",
+			binderErr: errors.New("cannot read binder"),
+			want:      editExpected{err: true},
 		},
 	}
 
@@ -333,38 +371,7 @@ func TestNewEditCmd_Scenarios(t *testing.T) {
 
 			err := c.Execute()
 
-			if (err != nil) != tt.wantErr {
-				t.Errorf("error = %v, wantErr %v (stdout=%q stderr=%q)", err, tt.wantErr, out, errOut)
-			}
-			if tt.wantEditorCalled && len(mock.editorCalls) == 0 {
-				t.Error("expected OpenEditor to be called")
-			}
-			if !tt.wantEditorCalled && len(mock.editorCalls) > 0 {
-				t.Errorf("expected OpenEditor NOT called, got %v", mock.editorCalls)
-			}
-			if tt.wantEditorPathSuffix != "" && len(mock.editorCalls) > 0 {
-				gotPath := mock.editorCalls[0][1]
-				if !strings.HasSuffix(gotPath, tt.wantEditorPathSuffix) {
-					t.Errorf("OpenEditor path = %q, want suffix %q", gotPath, tt.wantEditorPathSuffix)
-				}
-			}
-			if tt.wantNoteCreateAttempt && mock.notesCreated == "" {
-				t.Error("expected CreateNotesFile to be called")
-			}
-			if !tt.wantNoteCreateAttempt && mock.notesCreated != "" {
-				t.Errorf("expected CreateNotesFile NOT called, got %q", mock.notesCreated)
-			}
-			if tt.wantWriteCalled && mock.writtenPath == "" {
-				t.Error("expected WriteNodeFileAtomic to be called")
-			}
-			if !tt.wantWriteCalled && mock.writtenPath != "" {
-				t.Errorf("expected WriteNodeFileAtomic NOT called, got %q", mock.writtenPath)
-			}
-			if tt.wantWritePathSuffix != "" && mock.writtenPath != "" {
-				if !strings.HasSuffix(mock.writtenPath, tt.wantWritePathSuffix) {
-					t.Errorf("WriteNodeFileAtomic path = %q, want suffix %q", mock.writtenPath, tt.wantWritePathSuffix)
-				}
-			}
+			assertEditOutcome(t, mock, err, tt.want)
 		})
 	}
 }
@@ -547,6 +554,157 @@ func TestNewEditCmd_UpdatedTimestampRefreshed(t *testing.T) {
 	// The written content should differ from the fixture (timestamp changed).
 	if bytes.Equal(mock.writtenBytes, validEditNodeContent()) {
 		t.Error("expected written content to differ from original (updated timestamp should be refreshed)")
+	}
+}
+
+// ─── Title-based selector tests ─────────────────────────────────────────────
+
+const editTestNodeUUID2 = "aaaaaaaa-bbbb-7ccc-dddd-eeeeeeeeeeee"
+
+// editBinderWithTwoNodes returns a binder containing two nodes with distinct titles.
+func editBinderWithTwoNodes() []byte {
+	return []byte(
+		"<!-- prosemark-binder:v1 -->\n" +
+			"- [Chapter One](" + editTestNodeUUID + ".md)\n" +
+			"- [Chapter Two](" + editTestNodeUUID2 + ".md)\n",
+	)
+}
+
+// editBinderWithDuplicateTitles returns a binder with two nodes that have the same title.
+func editBinderWithDuplicateTitles() []byte {
+	return []byte(
+		"<!-- prosemark-binder:v1 -->\n" +
+			"- [Chapter One](" + editTestNodeUUID + ".md)\n" +
+			"- [Chapter One](" + editTestNodeUUID2 + ".md)\n",
+	)
+}
+
+func validEditNodeContent2() []byte {
+	return []byte(
+		"---\n" +
+			"id: " + editTestNodeUUID2 + "\n" +
+			"title: Chapter Two\n" +
+			"created: 2026-01-01T00:00:00Z\n" +
+			"updated: 2026-01-01T00:00:00Z\n" +
+			"---\n" +
+			"Body text two.\n",
+	)
+}
+
+func TestNewEditCmd_TitleBasedSelector(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+
+		binderBytes   []byte
+		nodeFiles     map[string][]byte
+		nodeFileBytes []byte
+
+		want editExpected
+	}{
+		{
+			// Title selector: "Chapter One" resolves to the correct node UUID.
+			name:        "title selector resolves to correct node",
+			args:        []string{"Chapter One", "--project", "."},
+			binderBytes: editBinderWithTwoNodes(),
+			nodeFiles: map[string][]byte{
+				editTestNodeUUID + ".md":  validEditNodeContent(),
+				editTestNodeUUID2 + ".md": validEditNodeContent2(),
+			},
+			want: editExpected{
+				editorCalled:     true,
+				editorPathSuffix: editTestNodeUUID + ".md",
+				writeCalled:      true,
+				writePathSuffix:  editTestNodeUUID + ".md",
+			},
+		},
+		{
+			// Case-insensitive title matching: "chapter two" resolves to "Chapter Two".
+			name:        "case-insensitive title match",
+			args:        []string{"chapter two", "--project", "."},
+			binderBytes: editBinderWithTwoNodes(),
+			nodeFiles: map[string][]byte{
+				editTestNodeUUID + ".md":  validEditNodeContent(),
+				editTestNodeUUID2 + ".md": validEditNodeContent2(),
+			},
+			want: editExpected{
+				editorCalled:     true,
+				editorPathSuffix: editTestNodeUUID2 + ".md",
+				writeCalled:      true,
+				writePathSuffix:  editTestNodeUUID2 + ".md",
+			},
+		},
+		{
+			// Title that matches no node produces a not-found error.
+			name:        "title matches no node",
+			args:        []string{"Nonexistent Chapter", "--project", "."},
+			binderBytes: editBinderWithTwoNodes(),
+			want:        editExpected{err: true},
+		},
+		{
+			// Ambiguous title (multiple nodes with the same title, different targets)
+			// should produce an error.
+			name:        "ambiguous title with different targets",
+			args:        []string{"Chapter One", "--project", "."},
+			binderBytes: editBinderWithDuplicateTitles(),
+			want:        editExpected{err: true},
+		},
+		{
+			// UUID still works as before (backwards compatibility).
+			name:        "UUID selector still works",
+			args:        []string{editTestNodeUUID, "--project", "."},
+			binderBytes: editBinderWithTwoNodes(),
+			nodeFiles: map[string][]byte{
+				editTestNodeUUID + ".md":  validEditNodeContent(),
+				editTestNodeUUID2 + ".md": validEditNodeContent2(),
+			},
+			want: editExpected{
+				editorCalled:     true,
+				editorPathSuffix: editTestNodeUUID + ".md",
+				writeCalled:      true,
+				writePathSuffix:  editTestNodeUUID + ".md",
+			},
+		},
+		{
+			// Title selector with --part notes opens the correct notes file.
+			name:        "title selector with --part notes",
+			args:        []string{"Chapter Two", "--part", "notes", "--project", "."},
+			binderBytes: editBinderWithTwoNodes(),
+			nodeFiles: map[string][]byte{
+				editTestNodeUUID + ".md":  validEditNodeContent(),
+				editTestNodeUUID2 + ".md": validEditNodeContent2(),
+			},
+			want: editExpected{
+				noteCreateAttempt: true,
+				editorCalled:      true,
+				editorPathSuffix:  editTestNodeUUID2 + ".notes.md",
+				writeCalled:       true,
+				writePathSuffix:   editTestNodeUUID2 + ".md",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("EDITOR", "vi")
+
+			mock := &mockEditIO{
+				binderBytes:   tt.binderBytes,
+				nodeFiles:     tt.nodeFiles,
+				nodeFileBytes: tt.nodeFileBytes,
+			}
+
+			c := NewEditCmd(mock)
+			out := new(bytes.Buffer)
+			errOut := new(bytes.Buffer)
+			c.SetOut(out)
+			c.SetErr(errOut)
+			c.SetArgs(tt.args)
+
+			err := c.Execute()
+
+			assertEditOutcome(t, mock, err, tt.want)
+		})
 	}
 }
 
