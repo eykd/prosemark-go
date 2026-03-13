@@ -40,6 +40,9 @@ func ValidateNewNodeInput(target, title, synopsis string) error {
 	if len(title) > 500 {
 		return fmt.Errorf("--title must be 500 characters or fewer")
 	}
+	if strings.ContainsRune(title, '\t') {
+		return fmt.Errorf("--title must not contain tab characters")
+	}
 	if containsNewline(title) {
 		return fmt.Errorf("--title must not contain newline characters")
 	}

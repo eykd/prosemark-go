@@ -436,6 +436,7 @@ func TestAddChild_TitleWithNewline_Rejected(t *testing.T) {
 		{"LF in title", "Line1\nLine2"},
 		{"CR in title", "Line1\rLine2"},
 		{"CRLF in title", "Line1\r\nLine2"},
+		{"tab in title", "Line1\tLine2"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

@@ -216,11 +216,11 @@ func TestValidateNewNodeInput(t *testing.T) {
 			wantErr:  true,
 		},
 		{
-			name:     "title with tab is allowed (correct semantics)",
+			name:     "title with tab is rejected",
 			target:   "",
 			title:    "title\twith\ttab",
 			synopsis: "",
-			wantErr:  false,
+			wantErr:  true,
 		},
 		{
 			name:     "synopsis with tab is allowed (correct semantics)",

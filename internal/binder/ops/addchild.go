@@ -503,9 +503,9 @@ func majorityLineEnding(ends []string) string {
 	return "\n"
 }
 
-// titleContainsNewline reports whether s contains LF (0x0A) or CR (0x0D).
+// titleContainsNewline reports whether s contains LF (0x0A), CR (0x0D), or TAB (0x09).
 func titleContainsNewline(s string) bool {
-	return strings.ContainsAny(s, "\n\r")
+	return strings.ContainsAny(s, "\t\n\r")
 }
 
 // escapeTitle backslash-escapes '[' and ']' in a title string.
