@@ -637,12 +637,12 @@ func TestNewDeleteCmd_RmCascadeRemovesAllSubtreeFiles(t *testing.T) {
 // ──────────────────────────────────────────────────────────────────────────────
 
 func TestNewDeleteCmd_RmUsesProjectDirNotCWD(t *testing.T) {
-	// When ScanProject returns BinderDir="." (as ScanProjectImpl does),
-	// deleteRemoveNodeFiles constructs filepath.Join(".", target) which is
-	// CWD-relative. It should use the actual project directory instead.
+	// ScanProjectImpl now returns the actual directory from binderPath,
+	// so deleteRemoveNodeFiles constructs correct absolute paths even
+	// when CWD differs from the project directory.
 	mock := &mockDeleteIO{
 		binderBytes: delBinder(),
-		project:     &binder.Project{Files: []string{"chapter-one.md"}, BinderDir: "."},
+		project:     &binder.Project{Files: []string{"chapter-one.md"}, BinderDir: "/some/dir"},
 	}
 	c := NewDeleteCmd(mock)
 	c.SetOut(new(bytes.Buffer))

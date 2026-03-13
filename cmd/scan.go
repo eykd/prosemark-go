@@ -39,5 +39,5 @@ func ScanProjectImpl(_ context.Context, binderPath string) (*binder.Project, err
 	if files == nil {
 		files = []string{}
 	}
-	return &binder.Project{Files: files, BinderDir: "."}, err
+	return &binder.Project{Files: files, BinderDir: dir}, err
 }

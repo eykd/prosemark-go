@@ -69,13 +69,6 @@ func newDeleteCmdWithGetCWD(io DeleteIO, getwd func() (string, error)) *cobra.Co
 				return emitOPE009AndError(cmd, jsonMode, err)
 			}
 
-			// ScanProjectImpl returns BinderDir="." which is CWD-relative.
-			// Override with the actual directory from binderPath so that
-			// file operations (e.g. --rm) use the correct absolute path.
-			if proj.BinderDir == "." {
-				proj.BinderDir = filepath.Dir(binderPath)
-			}
-
 			params := binder.DeleteParams{
 				Selector: selector,
 				Yes:      yes || dryRun,
