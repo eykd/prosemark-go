@@ -345,11 +345,17 @@ func findSiblingIndex(children []*binder.Node, selector string) int {
 	return -1
 }
 
-// siblingMatchesSelector reports whether a child node's target matches a bare-stem selector.
+// siblingMatchesSelector reports whether a child node matches selector by
+// stem, direct path, path+".md", or case-insensitive title.
 func siblingMatchesSelector(child *binder.Node, selector string) bool {
+	return nodeMatchesSelector(child, selector)
+}
+
+// nodeMatchesSelector reports whether a child node matches a non-path
+// selector by stem, exact target, or case-insensitive title.
+func nodeMatchesSelector(child *binder.Node, selector string) bool {
 	return opStemFromPath(child.Target) == selector ||
 		child.Target == selector ||
-		child.Target == selector+".md" ||
 		strings.EqualFold(child.Title, selector)
 }
 

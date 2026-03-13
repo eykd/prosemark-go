@@ -195,14 +195,13 @@ func deleteSearchTree(n *binder.Node, selector string, matches *[]*binder.Node) 
 }
 
 // deleteNodeMatchesSelector reports whether child matches selector by stem,
-// direct path, stem+".md", or case-insensitive title.
+// direct path, stem+".md", or case-insensitive title. Path-containing
+// selectors bypass stem and title matching.
 func deleteNodeMatchesSelector(child *binder.Node, selector string) bool {
 	if strings.Contains(selector, "/") {
 		return child.Target == selector || child.Target == selector+".md"
 	}
-	return opStemFromPath(child.Target) == selector ||
-		child.Target == selector ||
-		strings.EqualFold(child.Title, selector)
+	return nodeMatchesSelector(child, selector)
 }
 
 // deleteComputeSubtreeEnd returns the 1-based line number of the last line in
