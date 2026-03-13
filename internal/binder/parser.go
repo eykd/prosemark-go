@@ -22,7 +22,7 @@ var (
 	wikilinkRE           = regexp.MustCompile(`^!?\[\[([^\]|]+)(?:\|([^\]]*))?\]\]`)
 	shortcutRefRE        = regexp.MustCompile(`^\[([^\]]+)\]$`)
 	refDefRE             = regexp.MustCompile(`^\[([^\]]+)\]:\s+(\S+)(?:\s+"([^"]*)")?`)
-	mdInlineLinkRE       = regexp.MustCompile(`\[[^\]]*\]\([^)]*\.md[^)]*\)`)
+	mdInlineLinkRE       = regexp.MustCompile(`\[(?:[^\]\\]|\\.)*\]\([^)]*\.md[^)]*\)`)
 	checkboxRE           = regexp.MustCompile(`^\[[xX ]\]\s+`)
 	strikethroughRE      = regexp.MustCompile(`~~[^~]*~~`)
 	// allInlineLinkRE finds all inline links anywhere in content.
