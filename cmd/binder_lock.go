@@ -15,25 +15,56 @@ type flockResult struct {
 }
 
 // acquireFlockImpl acquires an exclusive OS-level file lock on path+".lock".
+// It uses an open-lock-verify loop to handle the race where another process
+// removes the lock file between our open and flock calls. After acquiring
+// the flock, it verifies the fd still refers to the on-disk file; if not,
+// it retries with a freshly opened file.
 func acquireFlockImpl(path string) (flockResult, error) {
-	lockFile, err := os.OpenFile(path+".lock", os.O_CREATE|os.O_RDWR, 0600)
+	lockPath := path + ".lock"
+	for {
+		lockFile, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0600)
+		if err != nil {
+			return flockResult{}, fmt.Errorf("opening lock file: %w", err)
+		}
+		if err := syscall.Flock(int(lockFile.Fd()), syscall.LOCK_EX); err != nil {
+			_ = lockFile.Close()
+			return flockResult{}, fmt.Errorf("acquiring file lock: %w", err)
+		}
+		// Verify the fd still refers to the on-disk file. Another holder
+		// may have removed the lock file before releasing their flock,
+		// leaving us with a lock on a deleted inode.
+		if !flockInodeMatchImpl(lockFile, lockPath) {
+			_ = lockFile.Close()
+			continue
+		}
+		return flockResult{
+			release: func() error {
+				removeErr := os.Remove(lockPath)
+				flockErr := syscall.Flock(int(lockFile.Fd()), syscall.LOCK_UN)
+				closeErr := lockFile.Close()
+				if removeErr != nil {
+					return removeErr
+				}
+				if flockErr != nil {
+					return flockErr
+				}
+				return closeErr
+			},
+		}, nil
+	}
+}
+
+// flockInodeMatchImpl reports whether lockFile's inode matches the file at diskPath.
+func flockInodeMatchImpl(lockFile *os.File, diskPath string) bool {
+	fdStat, err := lockFile.Stat()
 	if err != nil {
-		return flockResult{}, fmt.Errorf("opening lock file: %w", err)
+		return false
 	}
-	if err := syscall.Flock(int(lockFile.Fd()), syscall.LOCK_EX); err != nil {
-		_ = lockFile.Close()
-		return flockResult{}, fmt.Errorf("acquiring file lock: %w", err)
+	diskStat, err := os.Stat(diskPath)
+	if err != nil {
+		return false
 	}
-	return flockResult{
-		release: func() error {
-			flockErr := syscall.Flock(int(lockFile.Fd()), syscall.LOCK_UN)
-			closeErr := lockFile.Close()
-			if flockErr != nil {
-				return flockErr
-			}
-			return closeErr
-		},
-	}, nil
+	return os.SameFile(fdStat, diskStat)
 }
 
 // binderLockRegistry maintains per-path exclusive mutexes for binder files,
