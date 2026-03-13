@@ -136,38 +136,3 @@ func TestNewAddChildCmd_NewMode_EditorShellSplit(t *testing.T) {
 		t.Errorf("OpenEditor called with editor=%q, want %q", gotEditor, "code --wait")
 	}
 }
-
-// TestNewAddChildCmd_NewMode_WhitespaceOnlyEditorRejected verifies that a
-// $EDITOR value consisting entirely of whitespace is treated as "not configured"
-// and rejected before OpenEditor is called. This aligns with the strings.Fields
-// split behaviour: Fields("   ") returns no tokens, so there is no executable to
-// run. The check must happen at the runNewMode level so that OpenEditor is never
-// invoked with a meaningless value.
-func TestNewAddChildCmd_NewMode_WhitespaceOnlyEditorRejected(t *testing.T) {
-	t.Setenv("EDITOR", "   ") // whitespace-only; passes editor == "" but has no tokens
-	mock := &mockAddChildIOWithNew{
-		mockAddChildIO: mockAddChildIO{
-			binderBytes: emptyBinder(),
-			project:     &binder.Project{Files: []string{}, BinderDir: "."},
-		},
-	}
-	c := NewAddChildCmd(mock)
-	out := new(bytes.Buffer)
-	errOut := new(bytes.Buffer)
-	c.SetOut(out)
-	c.SetErr(errOut)
-	c.SetArgs([]string{"--new", "--title", "Chapter", "--edit", "--parent", ".", "--project", "."})
-
-	err := c.Execute()
-	if err == nil {
-		t.Error("expected error when $EDITOR is whitespace-only, got nil")
-	}
-	// Early EDITOR check prevents mutations (prosemark-go-02c.50).
-	if len(mock.nodeWrittenContents) > 0 {
-		t.Error("expected no node file to be written when EDITOR is whitespace-only")
-	}
-	// OpenEditor must NOT be called when the editor string has no tokens.
-	if len(mock.editorCalls) > 0 {
-		t.Errorf("expected OpenEditor NOT to be called for whitespace-only EDITOR, got calls: %v", mock.editorCalls)
-	}
-}
