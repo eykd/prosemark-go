@@ -146,12 +146,12 @@ func emitOPE009AndError(cmd *cobra.Command, jsonMode bool, origErr error) error 
 		diags := []binder.Diagnostic{{Severity: "error", Code: binder.CodeIOOrParseFailure, Message: origErr.Error()}}
 		out := binder.OpResult{Version: "1", Changed: false, Diagnostics: diags}
 		if encErr := json.NewEncoder(cmd.OutOrStdout()).Encode(out); encErr != nil {
-			return fmt.Errorf("encoding OPE009 diagnostic: %w: %w", encErr, origErr)
+			return &ExitError{Code: ExitTransient, Err: fmt.Errorf("encoding OPE009 diagnostic: %w: %w", encErr, origErr)}
 		}
 	} else {
 		fmt.Fprintf(cmd.ErrOrStderr(), "error: I/O or parse failure: %v (OPE009)\n", origErr)
 	}
-	return fmt.Errorf("operation failed: %w", origErr)
+	return &ExitError{Code: ExitTransient, Err: fmt.Errorf("operation failed: %w", origErr)}
 }
 
 // dryRunHelpSuffix is the help text appended to mutation subcommand Long
