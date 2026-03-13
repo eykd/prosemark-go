@@ -1565,3 +1565,47 @@ func TestParse_PlaceholderContinuationLine(t *testing.T) {
 		})
 	}
 }
+
+// TestParse_EscapedBracketTitle_NoBNDW002 verifies that titles containing ] or [
+// characters do not produce a spurious BNDW002 (multiple structural links) warning
+// after round-tripping through escapeTitle → parse. The escaped form \] and \[
+// must not be mis-detected as additional markdown inline links.
+func TestParse_EscapedBracketTitle_NoBNDW002(t *testing.T) {
+	tests := []struct {
+		name string
+		src  string
+	}{
+		{
+			name: "closing bracket followed by .md-like text",
+			// Title: "](evil.md) [Injected" → serialized: [\](evil.md) \[Injected](uuid.md)
+			src: "<!-- prosemark-binder:v1 -->\n- [\\](evil.md) \\[Injected](11111111-1111-1111-1111-111111111111.md)\n",
+		},
+		{
+			name: "brackets around text",
+			// Title: "[bracketed]" → serialized: [\[bracketed\]](uuid.md)
+			src: "<!-- prosemark-binder:v1 -->\n- [\\[bracketed\\]](11111111-1111-1111-1111-111111111111.md)\n",
+		},
+		{
+			name: "bracket with parenthesized .md text",
+			// Title: "See [ref](doc.md)" → serialized: [See \[ref\](doc.md)](uuid.md)
+			src: "<!-- prosemark-binder:v1 -->\n- [See \\[ref\\](doc.md)](11111111-1111-1111-1111-111111111111.md)\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, diags, err := binder.Parse(context.Background(), []byte(tt.src), nil)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if len(result.Root.Children) != 1 {
+				t.Fatalf("expected 1 child, got %d", len(result.Root.Children))
+			}
+			for _, d := range diags {
+				if d.Code == binder.CodeMultipleStructLinks {
+					t.Errorf("unexpected BNDW002 diagnostic: %s", d.Message)
+				}
+			}
+		})
+	}
+}
