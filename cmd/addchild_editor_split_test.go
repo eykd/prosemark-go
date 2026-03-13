@@ -50,9 +50,9 @@ func TestNewAddChildCmd_NewMode_WhitespaceVariantsRejected(t *testing.T) {
 			if err == nil {
 				t.Errorf("expected error when $EDITOR=%q, got nil", ws.editor)
 			}
-			// Node must be persisted (same behaviour as unset $EDITOR, US2/9).
-			if len(mock.nodeWrittenContents) == 0 {
-				t.Error("expected node file to be written even when EDITOR is whitespace-only")
+			// Early EDITOR check prevents mutations (prosemark-go-02c.50).
+			if len(mock.nodeWrittenContents) > 0 {
+				t.Error("expected no node file to be written when EDITOR is whitespace-only")
 			}
 			// OpenEditor must NOT be called when the editor string has no tokens.
 			if len(mock.editorCalls) > 0 {
@@ -162,9 +162,9 @@ func TestNewAddChildCmd_NewMode_WhitespaceOnlyEditorRejected(t *testing.T) {
 	if err == nil {
 		t.Error("expected error when $EDITOR is whitespace-only, got nil")
 	}
-	// The node must be persisted (same behaviour as unset $EDITOR, US2 scenario 9).
-	if len(mock.nodeWrittenContents) == 0 {
-		t.Error("expected node file to be written even when EDITOR is whitespace-only")
+	// Early EDITOR check prevents mutations (prosemark-go-02c.50).
+	if len(mock.nodeWrittenContents) > 0 {
+		t.Error("expected no node file to be written when EDITOR is whitespace-only")
 	}
 	// OpenEditor must NOT be called when the editor string has no tokens.
 	if len(mock.editorCalls) > 0 {

@@ -343,7 +343,8 @@ func TestNewAddChildCmd_NewMode_EmptyEditorEnv(t *testing.T) {
 	if err := c.Execute(); err == nil {
 		t.Error("expected error when $EDITOR is unset and --edit is provided")
 	}
-	if mock.nodeWrittenPath == "" {
-		t.Error("expected node file to be created before editor check")
+	// Early EDITOR check prevents any filesystem mutations (prosemark-go-02c.50)
+	if mock.nodeWrittenPath != "" {
+		t.Error("expected no node file to be created when EDITOR is not set")
 	}
 }

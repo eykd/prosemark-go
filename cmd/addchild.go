@@ -281,6 +281,11 @@ func rollbackNewNode(ctx context.Context, io NewNodeAddChildIO, nodePath, binder
 // params.Target must already be set to a valid UUID filename before calling.
 func runNewMode(ctx context.Context, cmd *cobra.Command, io NewNodeAddChildIO, binderPath string, binderBytes []byte, proj *binder.Project, params binder.AddChildParams, opts newModeOpts) error {
 	dryRun := isDryRun(cmd)
+
+	if opts.editMode && !dryRun && len(strings.Fields(opts.editor)) == 0 {
+		return fmt.Errorf("$EDITOR is not set")
+	}
+
 	uuidStem := strings.TrimSuffix(params.Target, ".md")
 	binderDir := filepath.Dir(binderPath)
 	nodePath := filepath.Join(binderDir, params.Target)
@@ -329,9 +334,6 @@ func runNewMode(ctx context.Context, cmd *cobra.Command, io NewNodeAddChildIO, b
 	}
 
 	if opts.editMode && !dryRun {
-		if len(strings.Fields(opts.editor)) == 0 {
-			return rollbackNewNode(ctx, io, nodePath, binderPath, binderBytes, result.changed, fmt.Errorf("$EDITOR is not set"))
-		}
 		if err := io.OpenEditor(opts.editor, nodePath); err != nil {
 			return rollbackNewNode(ctx, io, nodePath, binderPath, binderBytes, result.changed, fmt.Errorf("opening editor: %w", err))
 		}

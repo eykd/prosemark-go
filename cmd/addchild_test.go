@@ -639,14 +639,14 @@ func TestNewAddChildCmd_NewMode_Scenarios(t *testing.T) {
 			wantErr:     true,
 		},
 		{
-			// US2 scenario 9: no editor configured; node and binder rolled back, error returned
-			name:           "US2/9 no editor configured: node committed then error",
+			// US2 scenario 9: no editor configured; early check prevents mutations (prosemark-go-02c.50)
+			name:           "US2/9 no editor configured: early check prevents mutations",
 			args:           []string{"--new", "--title", "No Editor", "--edit", "--parent", ".", "--project", "."},
 			binderBytes:    emptyBinder(),
 			editorEnv:      "", // will be unset
 			wantErr:        true,
-			wantNodeCalled: true,
-			wantDeleted:    true, // node must be rolled back (prosemark-go-02c.28)
+			wantNodeCalled: false,
+			wantDeleted:    false,
 		},
 	}
 
