@@ -156,19 +156,22 @@ func newAddChildCmdWithGetCWD(io NewNodeAddChildIO, getwd func() (string, error)
 				})
 			}
 
-			result, err := execAddChild(ctx, cmd, binderBytes, proj, params, jsonMode, dryRun, "")
-			if err != nil {
+			result := execAddChild(ctx, binderBytes, proj, params, dryRun)
+
+			diagErr := hasDiagnosticError(result.diags)
+			committed := result.changed && !diagErr
+			if committed {
+				if err := io.WriteBinderAtomic(ctx, binderPath, result.modifiedBytes); err != nil {
+					return writeBinderExitError(err)
+				}
+			}
+
+			if err := emitOpResult(cmd, jsonMode, committed, dryRun, result.diags, ""); err != nil {
 				return err
 			}
 
-			if hasDiagnosticError(result.diags) {
+			if diagErr {
 				return diagnosticExitError("add", jsonMode, result.diags)
-			}
-
-			if result.changed {
-				if err = io.WriteBinderAtomic(ctx, binderPath, result.modifiedBytes); err != nil {
-					return writeBinderExitError(err)
-				}
 			}
 
 			if !jsonMode {
@@ -244,23 +247,20 @@ type addResult struct {
 	bytesModified bool
 }
 
-// execAddChild applies AddChild, prepares diagnostics, and emits the operation result.
-// Callers inspect the returned addResult to handle errors and write the binder.
-// jsonTarget is the target path to include in JSON output; pass "" to omit it.
-func execAddChild(ctx context.Context, cmd *cobra.Command, binderBytes []byte, proj *binder.Project, params binder.AddChildParams, jsonMode, dryRun bool, jsonTarget string) (addResult, error) {
+// execAddChild applies AddChild and prepares diagnostics.
+// Callers inspect the returned addResult to handle errors, write the binder,
+// and emit JSON output after confirming the write succeeded.
+func execAddChild(ctx context.Context, binderBytes []byte, proj *binder.Project, params binder.AddChildParams, dryRun bool) addResult {
 	modifiedBytes, diags := ops.AddChild(ctx, binderBytes, proj, params)
 	diags = prepareDiagnostics(diags)
 	bytesModified := !bytes.Equal(binderBytes, modifiedBytes)
 	changed := bytesModified && !dryRun
-	if err := emitOpResult(cmd, jsonMode, changed, dryRun, diags, jsonTarget); err != nil {
-		return addResult{}, err
-	}
 	return addResult{
 		modifiedBytes: modifiedBytes,
 		diags:         diags,
 		changed:       changed,
 		bytesModified: bytesModified,
-	}, nil
+	}
 }
 
 // rollbackNewNode deletes the node file and restores the binder to its
@@ -305,15 +305,27 @@ func runNewMode(ctx context.Context, cmd *cobra.Command, io NewNodeAddChildIO, b
 		}
 	}
 
-	result, err := execAddChild(ctx, cmd, binderBytes, proj, params, opts.jsonMode, dryRun, params.Target)
-	if err != nil {
+	result := execAddChild(ctx, binderBytes, proj, params, dryRun)
+
+	diagErr := hasDiagnosticError(result.diags)
+	committed := result.changed && !diagErr
+	if committed {
+		if writeErr := io.WriteBinderAtomic(ctx, binderPath, result.modifiedBytes); writeErr != nil {
+			if rollbackErr := io.DeleteFile(nodePath); rollbackErr != nil {
+				return &ExitError{Code: ExitTransient, Err: fmt.Errorf("writing binder: %w; rollback also failed: %v", writeErr, rollbackErr)}
+			}
+			return writeBinderExitError(writeErr)
+		}
+	}
+
+	if err := emitOpResult(cmd, opts.jsonMode, committed, dryRun, result.diags, params.Target); err != nil {
 		if !dryRun {
 			_ = io.DeleteFile(nodePath)
 		}
 		return err
 	}
 
-	if hasDiagnosticError(result.diags) {
+	if diagErr {
 		var rollbackErr error
 		if !dryRun {
 			rollbackErr = io.DeleteFile(nodePath)
@@ -323,14 +335,6 @@ func runNewMode(ctx context.Context, cmd *cobra.Command, io NewNodeAddChildIO, b
 			exitErr.Err = errors.Join(fmt.Errorf("add has errors"), rollbackErr)
 		}
 		return exitErr
-	}
-	if result.changed {
-		if writeErr := io.WriteBinderAtomic(ctx, binderPath, result.modifiedBytes); writeErr != nil {
-			if rollbackErr := io.DeleteFile(nodePath); rollbackErr != nil {
-				return &ExitError{Code: ExitTransient, Err: fmt.Errorf("writing binder: %w; rollback also failed: %v", writeErr, rollbackErr)}
-			}
-			return writeBinderExitError(writeErr)
-		}
 	}
 
 	if opts.editMode && !dryRun {
