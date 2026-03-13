@@ -107,9 +107,9 @@ func TestJSONMode_DiagnosticErrors_NoHumanTextOnStderr(t *testing.T) {
 			setup: func(out, errBuf *bytes.Buffer) (*cobra.Command, []string) {
 				mock := newMockInitIO()
 				mock.binderExists = true
-				sub := newInitCmdWithGetCWD(mock, func() (string, error) { return "/tmp/test", nil })
+				sub := newInitCmdWithGetCWD(mock, func() (string, error) { return "/tmp", nil })
 				root := withRootFlags(sub, out, errBuf)
-				return root, []string{"init", "--project", "/tmp/test", "--json"}
+				return root, []string{"init", "--project", "/tmp", "--json"}
 			},
 		},
 	}

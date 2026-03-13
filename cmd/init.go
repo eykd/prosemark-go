@@ -62,6 +62,13 @@ func newInitCmdWithGetCWD(initIO InitIO, getwd func() (string, error)) *cobra.Co
 				return err
 			}
 
+			if !checkDirExistsImpl(project) {
+				return &ExitError{
+					Code: ExitValidation,
+					Err:  fmt.Errorf("project directory does not exist: %s", project),
+				}
+			}
+
 			binderPath := filepath.Join(project, "_binder.md")
 			configPath := filepath.Join(project, ".prosemark.yml")
 
@@ -246,4 +253,13 @@ func (f fileInitIO) WriteFileAtomicImpl(path, content string) error {
 		return fmt.Errorf("renaming temp file: %w", err)
 	}
 	return nil
+}
+
+// checkDirExistsImpl checks whether the given path exists and is a directory.
+func checkDirExistsImpl(path string) bool {
+	info, err := os.Stat(path)
+	if err != nil {
+		return false
+	}
+	return info.IsDir()
 }

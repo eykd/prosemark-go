@@ -59,13 +59,14 @@ func TestInitCmd_JSON_ErrorResponses(t *testing.T) {
 				mock.writeErrFor = tt.writeErrFor
 			}
 
-			sub := newInitCmdWithGetCWD(mock, func() (string, error) { return "/tmp/test", nil })
+			projectDir := t.TempDir()
+			sub := newInitCmdWithGetCWD(mock, func() (string, error) { return projectDir, nil })
 			root := withDryRunFlag(sub)
 			out := new(bytes.Buffer)
 			sub.SetOut(out)
 			sub.SetErr(new(bytes.Buffer))
 
-			args := []string{"init", "--project", "/tmp/test", "--json"}
+			args := []string{"init", "--project", projectDir, "--json"}
 			if tt.force {
 				args = append(args, "--force")
 			}

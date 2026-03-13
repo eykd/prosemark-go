@@ -49,10 +49,11 @@ func TestInitCmd_OPE009_ReturnsExitTransient(t *testing.T) {
 				mock.writeErrFor = tt.writeErrFor
 			}
 
-			c := newInitCmdWithGetCWD(mock, func() (string, error) { return "/tmp/test", nil })
+			projectDir := t.TempDir()
+			c := newInitCmdWithGetCWD(mock, func() (string, error) { return projectDir, nil })
 			c.SetOut(new(bytes.Buffer))
 			c.SetErr(new(bytes.Buffer))
-			c.SetArgs([]string{"--project", "/tmp/test"})
+			c.SetArgs([]string{"--project", projectDir})
 
 			err := c.Execute()
 			if err == nil {
