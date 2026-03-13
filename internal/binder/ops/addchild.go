@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/url"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 
@@ -34,8 +35,8 @@ func AddChild(ctx context.Context, src []byte, project *binder.Project, params b
 
 	// Restore the pragma line if it was missing from the source.
 	if !result.HasPragma {
-		result.Lines = sliceInsert(result.Lines, 0, "<!-- prosemark-binder:v1 -->")
-		result.LineEnds = sliceInsert(result.LineEnds, 0, "\n")
+		result.Lines = slices.Insert(result.Lines, 0, "<!-- prosemark-binder:v1 -->")
+		result.LineEnds = slices.Insert(result.LineEnds, 0, "\n")
 		result.HasPragma = true
 		result.PragmaLine = 1
 	}
@@ -120,14 +121,14 @@ func AddChild(ctx context.Context, src []byte, project *binder.Project, params b
 
 		// For the first child of an empty root, prepend a blank separator line.
 		if parent.Type == "root" && len(parent.Children) == 0 {
-			result.Lines = sliceInsert(result.Lines, lineIdx, "")
-			result.LineEnds = sliceInsert(result.LineEnds, lineIdx, lineEnd)
+			result.Lines = slices.Insert(result.Lines, lineIdx, "")
+			result.LineEnds = slices.Insert(result.LineEnds, lineIdx, lineEnd)
 			lineIdx++
 		}
 
 		// Splice the new line into the ParseResult.
-		result.Lines = sliceInsert(result.Lines, lineIdx, newLine)
-		result.LineEnds = sliceInsert(result.LineEnds, lineIdx, lineEnd)
+		result.Lines = slices.Insert(result.Lines, lineIdx, newLine)
+		result.LineEnds = slices.Insert(result.LineEnds, lineIdx, lineEnd)
 	}
 
 	return binder.Serialize(result), allDiags
@@ -346,17 +347,11 @@ func resolveInsertionIndex(parent *binder.Node, params binder.AddChildParams) (i
 // matches selector, or -1 if no child matches.
 func findSiblingIndex(children []*binder.Node, selector string) int {
 	for i, child := range children {
-		if siblingMatchesSelector(child, selector) {
+		if nodeMatchesSelector(child, selector) {
 			return i
 		}
 	}
 	return -1
-}
-
-// siblingMatchesSelector reports whether a child node matches selector by
-// stem, direct path, path+".md", or case-insensitive title.
-func siblingMatchesSelector(child *binder.Node, selector string) bool {
-	return nodeMatchesSelector(child, selector)
 }
 
 // nodeMatchesSelector reports whether a child node matches a non-path
@@ -532,13 +527,4 @@ func opStemFromPath(p string) string {
 		p = p[:idx]
 	}
 	return p
-}
-
-// sliceInsert returns a new slice with v inserted at position idx.
-func sliceInsert(s []string, idx int, v string) []string {
-	out := make([]string, len(s)+1)
-	copy(out, s[:idx])
-	out[idx] = v
-	copy(out[idx+1:], s[idx:])
-	return out
 }
