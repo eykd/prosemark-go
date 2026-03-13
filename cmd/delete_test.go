@@ -631,3 +631,88 @@ func TestNewDeleteCmd_RmCascadeRemovesAllSubtreeFiles(t *testing.T) {
 		t.Errorf("RemoveFile called %d times, want 2 (parent + child)", mock.removeFileCalls)
 	}
 }
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Bug: delete --rm fails when CWD differs from project directory
+// ──────────────────────────────────────────────────────────────────────────────
+
+func TestNewDeleteCmd_RmUsesProjectDirNotCWD(t *testing.T) {
+	// When ScanProject returns BinderDir="." (as ScanProjectImpl does),
+	// deleteRemoveNodeFiles constructs filepath.Join(".", target) which is
+	// CWD-relative. It should use the actual project directory instead.
+	mock := &mockDeleteIO{
+		binderBytes: delBinder(),
+		project:     &binder.Project{Files: []string{"chapter-one.md"}, BinderDir: "."},
+	}
+	c := NewDeleteCmd(mock)
+	c.SetOut(new(bytes.Buffer))
+	c.SetArgs([]string{"--selector", "chapter-one", "--yes", "--rm", "--project", "/some/dir"})
+
+	if err := c.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(mock.removedFiles) != 1 {
+		t.Fatalf("expected 1 removed file, got %d", len(mock.removedFiles))
+	}
+	want := "/some/dir/chapter-one.md"
+	if mock.removedFiles[0] != want {
+		t.Errorf("RemoveFile path = %q, want %q (should use project dir, not CWD)", mock.removedFiles[0], want)
+	}
+}
+
+func TestNewDeleteCmd_RmRemoveFileError_ExitCodeIsTransient(t *testing.T) {
+	// When RemoveFile fails, the exit code should be ExitTransient (6)
+	// for I/O failures, not the default exit code 1.
+	mock := &mockDeleteIO{
+		binderBytes:   delBinder(),
+		project:       &binder.Project{Files: []string{"chapter-one.md"}, BinderDir: "/proj"},
+		removeFileErr: errors.New("permission denied"),
+	}
+	c := NewDeleteCmd(mock)
+	c.SetOut(new(bytes.Buffer))
+	c.SetArgs([]string{"--selector", "chapter-one", "--yes", "--rm", "--project", "/proj"})
+
+	err := c.Execute()
+	if err == nil {
+		t.Fatal("expected error when RemoveFile fails")
+	}
+
+	var exitErr *ExitError
+	if !errors.As(err, &exitErr) {
+		t.Fatalf("expected *ExitError, got %T: %v", err, err)
+	}
+	if exitErr.Code != ExitTransient {
+		t.Errorf("exit code = %d, want %d (ExitTransient)", exitErr.Code, ExitTransient)
+	}
+}
+
+func TestNewDeleteCmd_RmError_JSON_DoesNotEmitSuccessBeforeFailure(t *testing.T) {
+	// In --json mode, the success JSON (Changed=true, no diagnostics) must
+	// NOT be emitted before the --rm file removal is attempted. If rm fails,
+	// callers should see the failure reflected in the output, not a misleading
+	// success followed by an error.
+	mock := &mockDeleteIO{
+		binderBytes:   delBinder(),
+		project:       &binder.Project{Files: []string{"chapter-one.md"}, BinderDir: "/proj"},
+		removeFileErr: errors.New("permission denied"),
+	}
+	c := NewDeleteCmd(mock)
+	out := new(bytes.Buffer)
+	c.SetOut(out)
+	c.SetArgs([]string{"--selector", "chapter-one", "--yes", "--rm", "--json", "--project", "/proj"})
+
+	err := c.Execute()
+	if err == nil {
+		t.Fatal("expected error when RemoveFile fails with --json")
+	}
+
+	var result binder.OpResult
+	if json.Unmarshal(out.Bytes(), &result) == nil {
+		// If JSON was emitted, it must not show success when rm failed.
+		if result.Changed && len(result.Diagnostics) == 0 {
+			t.Error("JSON output shows Changed=true with no diagnostics, but rm failed; " +
+				"success JSON must not be emitted before rm failure is known")
+		}
+	}
+}

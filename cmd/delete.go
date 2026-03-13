@@ -69,6 +69,13 @@ func newDeleteCmdWithGetCWD(io DeleteIO, getwd func() (string, error)) *cobra.Co
 				return emitOPE009AndError(cmd, jsonMode, err)
 			}
 
+			// ScanProjectImpl returns BinderDir="." which is CWD-relative.
+			// Override with the actual directory from binderPath so that
+			// file operations (e.g. --rm) use the correct absolute path.
+			if proj.BinderDir == "." {
+				proj.BinderDir = filepath.Dir(binderPath)
+			}
+
 			params := binder.DeleteParams{
 				Selector: selector,
 				Yes:      yes || dryRun,
@@ -78,6 +85,17 @@ func newDeleteCmdWithGetCWD(io DeleteIO, getwd func() (string, error)) *cobra.Co
 			diags = prepareDiagnostics(diags)
 
 			changed := !bytes.Equal(binderBytes, modifiedBytes) && !dryRun
+
+			// Remove node files from disk when --rm is set and not dry-run.
+			// This must happen before emitting JSON so that rm failures
+			// are reflected in the output.
+			var removedTargets []string
+			if rm && changed {
+				removedTargets, err = deleteRemoveNodeFiles(ctx, io, binderBytes, modifiedBytes, proj)
+				if err != nil {
+					return &ExitError{Code: ExitTransient, Err: err}
+				}
+			}
 
 			if err := emitOpResult(cmd, jsonMode, changed, dryRun, diags, ""); err != nil {
 				return err
@@ -90,15 +108,6 @@ func newDeleteCmdWithGetCWD(io DeleteIO, getwd func() (string, error)) *cobra.Co
 			if changed {
 				if err = io.WriteBinderAtomic(ctx, binderPath, modifiedBytes); err != nil {
 					return writeBinderExitError(err)
-				}
-			}
-
-			// Remove node files from disk when --rm is set and not dry-run.
-			var removedTargets []string
-			if rm && changed {
-				removedTargets, err = deleteRemoveNodeFiles(ctx, io, binderBytes, modifiedBytes, proj)
-				if err != nil {
-					return err
 				}
 			}
 
