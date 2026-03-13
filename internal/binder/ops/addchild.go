@@ -349,7 +349,8 @@ func findSiblingIndex(children []*binder.Node, selector string) int {
 func siblingMatchesSelector(child *binder.Node, selector string) bool {
 	return opStemFromPath(child.Target) == selector ||
 		child.Target == selector ||
-		child.Target == selector+".md"
+		child.Target == selector+".md" ||
+		strings.EqualFold(child.Title, selector)
 }
 
 // inferMarkerAndIndent returns the indentation string and list marker to use for a new
