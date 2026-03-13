@@ -52,7 +52,16 @@ func newParseCmdWithGetCWD(reader ParseReader, getwd func() (string, error)) *co
 
 			binderBytes, err := reader.ReadBinder(ctx, binderPath)
 			if err != nil {
-				return fmt.Errorf("reading binder: %w", err)
+				diags := prepareDiagnostics([]binder.Diagnostic{{
+					Severity: "error",
+					Code:     binder.CodeIOOrParseFailure,
+					Message:  fmt.Sprintf("reading binder: %v", err),
+				}})
+				out := parseOutput{Version: "1", Diagnostics: diags}
+				if encErr := json.NewEncoder(cmd.OutOrStdout()).Encode(out); encErr != nil {
+					return fmt.Errorf("encoding output: %w", encErr)
+				}
+				return &ExitError{Code: ExitCodeForDiagnostics(diags), Err: fmt.Errorf("reading binder: %w", err)}
 			}
 
 			proj, err := reader.ScanProject(ctx, binderPath)

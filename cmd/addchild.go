@@ -103,7 +103,7 @@ func newAddChildCmdWithGetCWD(io NewNodeAddChildIO, getwd func() (string, error)
 
 			binderBytes, err := io.ReadBinder(ctx, binderPath)
 			if err != nil {
-				return fmt.Errorf("reading binder: %w", err)
+				return emitOPE009AndError(cmd, jsonMode, err)
 			}
 
 			proj, err := io.ScanProject(ctx, binderPath)

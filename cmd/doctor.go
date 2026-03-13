@@ -70,6 +70,18 @@ func newDoctorCmdWithGetCWD(io DoctorIO, getwd func() (string, error)) *cobra.Co
 			// Read binder — distinguish not-found from permission errors.
 			binderBytes, err := io.ReadBinder(binderPath)
 			if err != nil {
+				if jsonMode {
+					msg := fmt.Sprintf("cannot read binder: %v", err)
+					if errors.Is(err, os.ErrNotExist) {
+						msg = "project not initialized — run 'pmk init' first"
+					}
+					diag := DoctorDiagnosticJSON{Severity: "error", Code: "IO_ERROR", Message: msg}
+					out := doctorOutput{Version: "1", Diagnostics: []DoctorDiagnosticJSON{diag}}
+					if encErr := json.NewEncoder(cmd.OutOrStdout()).Encode(out); encErr != nil {
+						return fmt.Errorf("encoding output: %w", encErr)
+					}
+					return &ExitError{Code: ExitValidation, Err: fmt.Errorf("%s", msg)}
+				}
 				if errors.Is(err, os.ErrNotExist) {
 					return fmt.Errorf("project not initialized — run 'pmk init' first")
 				}

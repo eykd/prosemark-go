@@ -27,8 +27,8 @@ func TestNewParseCmd_ReadBinderError(t *testing.T) {
 	if err == nil {
 		t.Error("expected error when ReadBinder fails")
 	}
-	if out.Len() > 0 {
-		t.Errorf("expected no stdout on ReadBinder error, got: %s", out.String())
+	if out.Len() == 0 {
+		t.Error("expected JSON diagnostic output on ReadBinder error")
 	}
 }
 
