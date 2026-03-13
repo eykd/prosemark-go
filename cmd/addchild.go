@@ -162,11 +162,7 @@ func newAddChildCmdWithGetCWD(io NewNodeAddChildIO, getwd func() (string, error)
 			}
 
 			if hasDiagnosticError(result.diags) {
-				exitErr := &ExitError{Code: ExitCodeForDiagnostics(result.diags)}
-				if !jsonMode {
-					exitErr.Err = fmt.Errorf("add has errors")
-				}
-				return exitErr
+				return diagnosticExitError("add", jsonMode, result.diags)
 			}
 
 			if result.changed {

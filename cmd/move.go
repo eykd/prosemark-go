@@ -98,11 +98,7 @@ func newMoveCmdWithGetCWD(io MoveIO, getwd func() (string, error)) *cobra.Comman
 			}
 
 			if hasDiagnosticError(diags) {
-				exitErr := &ExitError{Code: ExitCodeForDiagnostics(diags)}
-				if !jsonMode {
-					exitErr.Err = fmt.Errorf("move has errors")
-				}
-				return exitErr
+				return diagnosticExitError("move", jsonMode, diags)
 			}
 
 			if changed {
