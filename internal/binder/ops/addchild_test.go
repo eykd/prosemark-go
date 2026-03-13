@@ -1051,3 +1051,69 @@ func TestAddChild_BracketTitle_DoubleRoundTrip(t *testing.T) {
 		t.Fatalf("expected 2 children after second add+parse, got %d; double-escape zombie bug", len(result2.Root.Children))
 	}
 }
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Pragma restoration (BUG: prosemark-go-02c.53)
+// ──────────────────────────────────────────────────────────────────────────────
+
+// TestAddChild_EmptyBinder_RestoresPragma verifies that adding a node to a
+// completely empty binder (zero bytes) restores the pragma line in the output.
+func TestAddChild_EmptyBinder_RestoresPragma(t *testing.T) {
+	src := []byte{} // truncated / empty binder
+	params := binder.AddChildParams{
+		ParentSelector: ".",
+		Target:         "chapter.md",
+		Title:          "Chapter",
+		Position:       "last",
+	}
+
+	out, diags := AddChild(context.Background(), src, nil, params)
+	if hasDiagCode(diags, "error") {
+		t.Errorf("unexpected error diagnostic: %v", diags)
+	}
+	if !bytes.Contains(out, []byte("<!-- prosemark-binder:v1 -->")) {
+		t.Errorf("expected pragma to be restored in output from empty binder:\n%q", out)
+	}
+	// Pragma must precede the list item.
+	pragmaIdx := bytes.Index(out, []byte("<!-- prosemark-binder:v1 -->"))
+	nodeIdx := bytes.Index(out, []byte("chapter.md"))
+	if pragmaIdx < 0 || nodeIdx < 0 || pragmaIdx > nodeIdx {
+		t.Errorf("pragma must appear before the node entry:\n%q", out)
+	}
+}
+
+// TestAddChild_NoPragma_RestoresPragma verifies that adding a node to a binder
+// that has content but is missing the pragma restores the pragma line.
+func TestAddChild_NoPragma_RestoresPragma(t *testing.T) {
+	// Binder with content but no pragma (e.g. user deleted it or file was corrupted).
+	src := []byte("- [Existing](existing.md)\n")
+	params := binder.AddChildParams{
+		ParentSelector: ".",
+		Target:         "new.md",
+		Title:          "New",
+		Position:       "last",
+	}
+
+	out, diags := AddChild(context.Background(), src, nil, params)
+	// Should not produce fatal errors (parse warnings like BNDW001 are OK).
+	for _, d := range diags {
+		if d.Severity == "error" {
+			t.Errorf("unexpected error diagnostic: %+v", d)
+		}
+	}
+	if !bytes.Contains(out, []byte("<!-- prosemark-binder:v1 -->")) {
+		t.Errorf("expected pragma to be restored in output from pragma-less binder:\n%q", out)
+	}
+	// Pragma must be the first non-empty line.
+	lines := bytes.Split(out, []byte("\n"))
+	firstNonEmpty := ""
+	for _, line := range lines {
+		if len(bytes.TrimSpace(line)) > 0 {
+			firstNonEmpty = string(line)
+			break
+		}
+	}
+	if firstNonEmpty != "<!-- prosemark-binder:v1 -->" {
+		t.Errorf("pragma must be the first non-empty line, got %q", firstNonEmpty)
+	}
+}

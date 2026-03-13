@@ -32,6 +32,14 @@ func AddChild(ctx context.Context, src []byte, project *binder.Project, params b
 		})
 	}
 
+	// Restore the pragma line if it was missing from the source.
+	if !result.HasPragma {
+		result.Lines = sliceInsert(result.Lines, 0, "<!-- prosemark-binder:v1 -->")
+		result.LineEnds = sliceInsert(result.LineEnds, 0, "\n")
+		result.HasPragma = true
+		result.PragmaLine = 1
+	}
+
 	params.Target = normalizeTargetInput(params.Target)
 
 	// Validate target path (OPE004, OPE005) before touching the selector.
