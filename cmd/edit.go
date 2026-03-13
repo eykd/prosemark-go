@@ -72,17 +72,14 @@ func newEditCmdWithGetCWD(io EditIO, getwd func() (string, error)) *cobra.Comman
 				return fmt.Errorf("cannot parse binder: %w", err)
 			}
 
-			targetFilename := nodeID + ".md"
-			if !findNodeInTree(parsed.Root, targetFilename) {
-				return &ExitError{
-					Code: ExitNotFound,
-					Err:  fmt.Errorf("node %q not found in binder", nodeID),
-				}
+			resolvedID, resolveErr := resolveEditSelector(nodeID, parsed.Root)
+			if resolveErr != nil {
+				return resolveErr
 			}
 
 			binderDir := filepath.Dir(binderPath)
-			draftPath := filepath.Join(binderDir, nodeID+".md")
-			notesPath := filepath.Join(binderDir, nodeID+".notes.md")
+			draftPath := filepath.Join(binderDir, resolvedID+".md")
+			notesPath := filepath.Join(binderDir, resolvedID+".notes.md")
 
 			var editPath string
 			var notesCreated bool
@@ -140,6 +137,50 @@ func newEditCmdWithGetCWD(io EditIO, getwd func() (string, error)) *cobra.Comman
 	cmd.Flags().String("part", "draft", "which part to edit: draft or notes")
 
 	return cmd
+}
+
+// resolveEditSelector resolves a selector (UUID or title) to a node UUID.
+// It first tries an exact target match (nodeID + ".md"), then falls back to
+// case-insensitive title matching. Returns an error if no match is found or
+// if the title is ambiguous (matches multiple distinct targets).
+func resolveEditSelector(selector string, root *binder.Node) (string, error) {
+	// Try UUID match first: selector + ".md" matches a target.
+	targetFilename := selector + ".md"
+	if findNodeInTree(root, targetFilename) {
+		return selector, nil
+	}
+
+	// Try case-insensitive title match.
+	var matches []*binder.Node
+	collectNodesByTitle(root, selector, &matches)
+	if len(matches) == 0 {
+		return "", &ExitError{
+			Code: ExitNotFound,
+			Err:  fmt.Errorf("node %q not found in binder", selector),
+		}
+	}
+
+	// Check for ambiguity: multiple matches with different targets.
+	firstTarget := matches[0].Target
+	for _, m := range matches[1:] {
+		if m.Target != firstTarget {
+			return "", fmt.Errorf("ambiguous title %q matches multiple nodes", selector)
+		}
+	}
+
+	// Extract UUID from target filename (strip ".md" suffix).
+	return strings.TrimSuffix(matches[0].Target, ".md"), nil
+}
+
+// collectNodesByTitle recursively collects nodes whose title matches selector
+// (case-insensitive).
+func collectNodesByTitle(n *binder.Node, selector string, matches *[]*binder.Node) {
+	if strings.EqualFold(n.Title, selector) {
+		*matches = append(*matches, n)
+	}
+	for _, child := range n.Children {
+		collectNodesByTitle(child, selector, matches)
+	}
 }
 
 // findNodeInTree recursively searches the binder tree for a node with the given target filename.
