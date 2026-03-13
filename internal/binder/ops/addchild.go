@@ -53,11 +53,11 @@ func AddChild(ctx context.Context, src []byte, project *binder.Project, params b
 	decodedTarget := percentDecodeOpTarget(params.Target)
 
 	// Validate title content before use (OPE012).
-	if titleContainsNewline(params.Title) {
+	if titleHasInvalidChars(params.Title) {
 		return src, append(parseDiags, binder.Diagnostic{
 			Severity: "error",
 			Code:     binder.CodeInvalidTitleContent,
-			Message:  fmt.Sprintf("title %q contains newline characters", params.Title),
+			Message:  fmt.Sprintf("title %q contains invalid characters (tab, newline, or carriage return)", params.Title),
 		})
 	}
 
@@ -503,8 +503,8 @@ func majorityLineEnding(ends []string) string {
 	return "\n"
 }
 
-// titleContainsNewline reports whether s contains LF (0x0A), CR (0x0D), or TAB (0x09).
-func titleContainsNewline(s string) bool {
+// titleHasInvalidChars reports whether s contains TAB (0x09), LF (0x0A), or CR (0x0D).
+func titleHasInvalidChars(s string) bool {
 	return strings.ContainsAny(s, "\t\n\r")
 }
 
