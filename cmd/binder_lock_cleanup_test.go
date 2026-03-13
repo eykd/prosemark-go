@@ -1,10 +1,9 @@
 package cmd
 
-// binder_lock_cleanup_test.go — RED tests for lock file cleanup after operations.
+// binder_lock_cleanup_test.go — tests for lock file cleanup after operations.
 //
 // These tests verify that _binder.md.lock files are removed from disk after
-// successful lock release. Currently, acquireFlockImpl creates the lock file
-// but the release function only closes the file descriptor without removing it.
+// successful lock release.
 
 import (
 	"context"
@@ -13,41 +12,32 @@ import (
 	"testing"
 )
 
+// binderLockable is the interface satisfied by all file-IO types via binderLocker embedding.
+type binderLockable interface {
+	LockBinder(context.Context, string) (func() error, error)
+}
+
 // TestLockFileCleanup_RemovedAfterRelease verifies that the .lock file is
 // removed from disk after the lock is released successfully.
 func TestLockFileCleanup_RemovedAfterRelease(t *testing.T) {
 	tests := []struct {
-		name  string
-		newIO func() interface {
-			LockBinder(context.Context, string) (func() error, error)
-		}
+		name   string
+		newIO  func() binderLockable
 		ioName string
 	}{
 		{
-			name: "addchild IO",
-			newIO: func() interface {
-				LockBinder(context.Context, string) (func() error, error)
-			} {
-				return newDefaultAddChildIO()
-			},
+			name:   "addchild IO",
+			newIO:  func() binderLockable { return newDefaultAddChildIO() },
 			ioName: "fileAddChildIO",
 		},
 		{
-			name: "delete IO",
-			newIO: func() interface {
-				LockBinder(context.Context, string) (func() error, error)
-			} {
-				return newDefaultDeleteIO()
-			},
+			name:   "delete IO",
+			newIO:  func() binderLockable { return newDefaultDeleteIO() },
 			ioName: "fileDeleteIO",
 		},
 		{
-			name: "move IO",
-			newIO: func() interface {
-				LockBinder(context.Context, string) (func() error, error)
-			} {
-				return newDefaultMoveIO()
-			},
+			name:   "move IO",
+			newIO:  func() binderLockable { return newDefaultMoveIO() },
 			ioName: "fileMoveIO",
 		},
 	}
