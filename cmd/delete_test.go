@@ -515,6 +515,103 @@ func TestNewDeleteCmd_RmConfirmationMessageIncludesFileRemoval(t *testing.T) {
 	}
 }
 
+// ──────────────────────────────────────────────────────────────────────────────
+// --selector omitted: should report missing flag, not OPE001
+// ──────────────────────────────────────────────────────────────────────────────
+
+func TestNewDeleteCmd_MissingSelectorFlag(t *testing.T) {
+	tests := []struct {
+		name      string
+		args      []string
+		wantInErr string
+		wantCode  int
+		jsonMode  bool
+	}{
+		{
+			name:      "text mode reports missing --selector",
+			args:      []string{"--yes", "--project", "."},
+			wantInErr: "--selector",
+			wantCode:  ExitUsage,
+		},
+		{
+			name:      "text mode does not mention OPE001",
+			args:      []string{"--yes", "--project", "."},
+			wantInErr: "--selector",
+			wantCode:  ExitUsage,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock := &mockDeleteIO{
+				binderBytes: delBinder(),
+				project:     &binder.Project{Files: []string{"chapter-one.md"}, BinderDir: "."},
+			}
+			c := NewDeleteCmd(mock)
+			out := new(bytes.Buffer)
+			errOut := new(bytes.Buffer)
+			c.SetOut(out)
+			c.SetErr(errOut)
+			c.SetArgs(tt.args)
+
+			err := c.Execute()
+			if err == nil {
+				t.Fatal("expected error when --selector is omitted")
+			}
+
+			// Exit code must be ExitUsage (1), not ExitNotFound (3).
+			var exitErr *ExitError
+			if errors.As(err, &exitErr) {
+				if exitErr.Code != tt.wantCode {
+					t.Errorf("exit code = %d, want %d (ExitUsage)", exitErr.Code, tt.wantCode)
+				}
+			}
+
+			// Stderr must mention --selector.
+			stderr := errOut.String()
+			if !strings.Contains(stderr, tt.wantInErr) {
+				t.Errorf("expected stderr to contain %q, got: %s", tt.wantInErr, stderr)
+			}
+
+			// Must NOT contain OPE001 (selector-not-found) — that's the misleading error.
+			if strings.Contains(stderr, binder.CodeSelectorNoMatch) {
+				t.Errorf("stderr must NOT contain %s when --selector is omitted: %s", binder.CodeSelectorNoMatch, stderr)
+			}
+		})
+	}
+}
+
+func TestNewDeleteCmd_MissingSelectorFlag_JSON(t *testing.T) {
+	mock := &mockDeleteIO{
+		binderBytes: delBinder(),
+		project:     &binder.Project{Files: []string{"chapter-one.md"}, BinderDir: "."},
+	}
+	c := NewDeleteCmd(mock)
+	out := new(bytes.Buffer)
+	c.SetOut(out)
+	c.SetErr(new(bytes.Buffer))
+	c.SetArgs([]string{"--yes", "--json", "--project", "."})
+
+	_ = c.Execute()
+
+	var result binder.OpResult
+	if err := json.Unmarshal(out.Bytes(), &result); err != nil {
+		t.Fatalf("expected valid JSON, got: %s", out.String())
+	}
+	if len(result.Diagnostics) == 0 {
+		t.Fatal("expected at least one diagnostic")
+	}
+	d := result.Diagnostics[0]
+	// Must NOT be OPE001 (selector-not-found).
+	if d.Code == binder.CodeSelectorNoMatch {
+		t.Errorf("diagnostic code must NOT be %q when --selector is omitted", binder.CodeSelectorNoMatch)
+	}
+	// Message should mention --selector.
+	if !strings.Contains(d.Message, "--selector") {
+		t.Errorf("diagnostic message should mention --selector, got: %q", d.Message)
+	}
+}
+
 func TestNewDeleteCmd_RmCascadeRemovesAllSubtreeFiles(t *testing.T) {
 	// Binder with parent + child nodes.
 	src := []byte("<!-- prosemark-binder:v1 -->\n- [Act One](act-one.md)\n  - [Scene One](scene-one.md)\n")

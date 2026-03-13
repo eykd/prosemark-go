@@ -65,6 +65,10 @@ func newDeleteCmdWithGetCWD(io DeleteIO, getwd func() (string, error)) *cobra.Co
 				return emitOPE009AndError(cmd, jsonMode, err)
 			}
 
+			if selector == "" {
+				return missingFlagError(cmd, jsonMode, dryRun, "delete", "--selector")
+			}
+
 			params := binder.DeleteParams{
 				Selector: selector,
 				Yes:      yes || dryRun,

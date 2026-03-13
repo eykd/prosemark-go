@@ -14,6 +14,7 @@ var suggestionMap = map[string]string{
 	binder.CodeIOOrParseFailure:    "Check that '_binder.md' exists and is readable. Run 'pmk doctor' to diagnose.",
 	binder.CodeConflictingFlags:    "Specify only one positioning flag: --first, --at, --before, or --after.",
 	binder.CodeMissingConfirmation: "Pass --yes to confirm this operation, or use --dry-run to preview changes.",
+	binder.CodeMissingRequiredFlag: "Provide the required flag indicated in the error message.",
 	binder.CodeIllegalPathChars:    "Remove illegal characters from the file path.",
 	binder.CodePathEscapesRoot:     "Paths must not escape the project root with '../'.",
 	binder.CodeAmbiguousWikilink:   "Use a full path instead of a wikilink to resolve the ambiguity.",

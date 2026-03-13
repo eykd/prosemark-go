@@ -31,6 +31,7 @@ var diagnosticExitMap = map[string]int{
 	binder.CodeNodeInCodeFence:     ExitConflict,
 	binder.CodeIOOrParseFailure:    ExitTransient,
 	binder.CodeMissingConfirmation: ExitUsage,
+	binder.CodeMissingRequiredFlag: ExitUsage,
 	binder.CodeInvalidTitleContent: ExitValidation,
 }
 

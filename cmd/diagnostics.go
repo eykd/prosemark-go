@@ -3,6 +3,8 @@ package cmd
 import (
 	"fmt"
 
+	"github.com/spf13/cobra"
+
 	"github.com/eykd/prosemark-go/internal/binder"
 	"github.com/eykd/prosemark-go/internal/node"
 )
@@ -39,6 +41,20 @@ func diagnosticExitError(cmdName string, jsonMode bool, diags []binder.Diagnosti
 // all mutation commands handle WriteBinderAtomic failures consistently.
 func writeBinderExitError(err error) *ExitError {
 	return &ExitError{Code: ExitTransient, Err: fmt.Errorf("writing binder: %w", err)}
+}
+
+// missingFlagError emits a diagnostic for a missing required flag and returns
+// an ExitError. Used by commands that detect an empty required flag value.
+func missingFlagError(cmd *cobra.Command, jsonMode, dryRun bool, cmdName, flagName string) error {
+	diags := prepareDiagnostics([]binder.Diagnostic{{
+		Severity: "error",
+		Code:     binder.CodeMissingRequiredFlag,
+		Message:  fmt.Sprintf("%s is required", flagName),
+	}})
+	if err := emitOpResult(cmd, jsonMode, false, dryRun, diags, ""); err != nil {
+		return err
+	}
+	return diagnosticExitError(cmdName, jsonMode, diags)
 }
 
 // hasAuditDiagnosticError reports whether any node.AuditDiagnostic in diags has error severity.

@@ -67,6 +67,10 @@ func newMoveCmdWithGetCWD(io MoveIO, getwd func() (string, error)) *cobra.Comman
 				return emitOPE009AndError(cmd, jsonMode, err)
 			}
 
+			if source == "" {
+				return missingFlagError(cmd, jsonMode, dryRun, "move", "--source")
+			}
+
 			if err := checkConflictingPositionFlags(cmd, first, before, after); err != nil {
 				return err
 			}
