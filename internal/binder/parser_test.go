@@ -1566,6 +1566,80 @@ func TestParse_PlaceholderContinuationLine(t *testing.T) {
 	}
 }
 
+// TestParse_RootNodeHasDotSelector verifies that after parsing, the root node's
+// Selector field is "." so that pmk parse --json output tells new users how to
+// reference the root when adding the first child node.
+func TestParse_RootNodeHasDotSelector(t *testing.T) {
+	tests := []struct {
+		name string
+		src  string
+	}{
+		{
+			name: "empty binder (just pragma)",
+			src:  "<!-- prosemark-binder:v1 -->\n",
+		},
+		{
+			name: "binder with children",
+			src:  "<!-- prosemark-binder:v1 -->\n- [Chapter One](chapter-one.md)\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, _, err := binder.Parse(context.Background(), []byte(tt.src), nil)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if result.Root.Selector != "." {
+				t.Errorf("root.Selector = %q, want %q", result.Root.Selector, ".")
+			}
+		})
+	}
+}
+
+// TestParse_ChildNodesHaveStemSelector verifies that after parsing, each child
+// node's Selector field is set to its file stem (the shortest unambiguous
+// selector) so that pmk parse --json output is self-documenting.
+func TestParse_ChildNodesHaveStemSelector(t *testing.T) {
+	tests := []struct {
+		name         string
+		src          string
+		wantSelector string
+	}{
+		{
+			name:         "simple child",
+			src:          "<!-- prosemark-binder:v1 -->\n- [Chapter One](chapter-one.md)\n",
+			wantSelector: "chapter-one",
+		},
+		{
+			name:         "child in subdirectory",
+			src:          "<!-- prosemark-binder:v1 -->\n- [Chapter One](parts/chapter-one.md)\n",
+			wantSelector: "chapter-one",
+		},
+		{
+			name:         "placeholder node uses title",
+			src:          "<!-- prosemark-binder:v1 -->\n- [Part I]()\n",
+			wantSelector: "Part I",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, _, err := binder.Parse(context.Background(), []byte(tt.src), nil)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if len(result.Root.Children) == 0 {
+				t.Fatal("expected at least one child node")
+			}
+			child := result.Root.Children[0]
+			if child.Selector != tt.wantSelector {
+				t.Errorf("child.Selector = %q, want %q", child.Selector, tt.wantSelector)
+			}
+		})
+	}
+}
+
 // TestParse_EscapedBracketTitle_NoBNDW002 verifies that titles containing ] or [
 // characters do not produce a spurious BNDW002 (multiple structural links) warning
 // after round-tripping through escapeTitle → parse. The escaped form \] and \[

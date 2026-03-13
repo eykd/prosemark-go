@@ -223,6 +223,92 @@ func TestNewParseCmd_ReturnsOPE009OnInvalidUTF8(t *testing.T) {
 	}
 }
 
+// TestNewParseCmd_JSONOutputIncludesRootSelector verifies that the parse JSON
+// output includes "selector": "." on the root node so that new users can
+// discover the root selector via pmk parse --json.
+func TestNewParseCmd_JSONOutputIncludesRootSelector(t *testing.T) {
+	tests := []struct {
+		name        string
+		binderBytes []byte
+		wantRootSel string
+	}{
+		{
+			name:        "empty binder has root selector dot",
+			binderBytes: []byte("<!-- prosemark-binder:v1 -->\n"),
+			wantRootSel: ".",
+		},
+		{
+			name:        "non-empty binder has root selector dot",
+			binderBytes: []byte("<!-- prosemark-binder:v1 -->\n- [Ch1](ch1.md)\n"),
+			wantRootSel: ".",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			reader := &mockParseReader{
+				binderBytes: tt.binderBytes,
+				project:     &binder.Project{Files: []string{"ch1.md"}, BinderDir: "."},
+			}
+			c := NewParseCmd(reader)
+			out := new(bytes.Buffer)
+			c.SetOut(out)
+			c.SetArgs([]string{"--project", "."})
+
+			if err := c.Execute(); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			var result struct {
+				Root struct {
+					Selector string `json:"selector"`
+				} `json:"root"`
+			}
+			if err := json.Unmarshal(out.Bytes(), &result); err != nil {
+				t.Fatalf("invalid JSON: %v\noutput: %s", err, out.String())
+			}
+			if result.Root.Selector != tt.wantRootSel {
+				t.Errorf("root.selector = %q, want %q\nfull output: %s", result.Root.Selector, tt.wantRootSel, out.String())
+			}
+		})
+	}
+}
+
+// TestNewParseCmd_JSONOutputIncludesChildSelectors verifies that child nodes
+// in parse JSON output include a "selector" field with their stem, making
+// selectors discoverable for new users.
+func TestNewParseCmd_JSONOutputIncludesChildSelectors(t *testing.T) {
+	reader := &mockParseReader{
+		binderBytes: []byte("<!-- prosemark-binder:v1 -->\n- [Chapter One](chapter-one.md)\n"),
+		project:     &binder.Project{Files: []string{"chapter-one.md"}, BinderDir: "."},
+	}
+	c := NewParseCmd(reader)
+	out := new(bytes.Buffer)
+	c.SetOut(out)
+	c.SetArgs([]string{"--project", "."})
+
+	if err := c.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var result struct {
+		Root struct {
+			Children []struct {
+				Selector string `json:"selector"`
+			} `json:"children"`
+		} `json:"root"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &result); err != nil {
+		t.Fatalf("invalid JSON: %v\noutput: %s", err, out.String())
+	}
+	if len(result.Root.Children) == 0 {
+		t.Fatal("expected at least one child in JSON output")
+	}
+	if result.Root.Children[0].Selector != "chapter-one" {
+		t.Errorf("child selector = %q, want %q\nfull output: %s", result.Root.Children[0].Selector, "chapter-one", out.String())
+	}
+}
+
 // TestNewParseCmd_ParseErrorPropagatedInReturnedError verifies that when
 // binder.Parse returns a non-nil error the error surfaced to the caller
 // (returned by Execute) includes the underlying parse failure message, not

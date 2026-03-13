@@ -291,17 +291,12 @@ func Parse(ctx context.Context, src []byte, project *Project) (*ParseResult, []D
 			}
 		}
 
-		sel := stemFromPath(target)
-		if sel == "" {
-			sel = title
-		}
-
 		node := &Node{
 			Type:       "node",
 			Children:   []*Node{},
 			Target:     target,
 			Title:      title,
-			Selector:   sel,
+			Selector:   nodeSelector(target, title),
 			Line:       lineNum,
 			Indent:     indent,
 			ListMarker: marker,
@@ -645,6 +640,16 @@ func validateTarget(target string, lineNum, column int) *Diagnostic {
 		}
 	}
 	return nil
+}
+
+// nodeSelector returns the discoverable selector for a node.
+// For nodes with a file target, the selector is the filename stem (e.g. "chapter-one"
+// from "parts/chapter-one.md"). For placeholder nodes (empty target), the title is used.
+func nodeSelector(target, title string) string {
+	if sel := stemFromPath(target); sel != "" {
+		return sel
+	}
+	return title
 }
 
 // stemFromPath returns the filename stem (basename without last extension).
