@@ -84,7 +84,7 @@ func newAddChildCmdWithGetCWD(io NewNodeAddChildIO, getwd func() (string, error)
 		Short: "Add a child node to a binder",
 		Long:  "Add a child node to a binder." + dryRunHelpSuffix,
 		Example: `  # Add an existing node as a child of another node
-  pmk add --parent abc123 --child def456
+  pmk add --parent abc123 --target def456
 
   # Add a new node as a child, creating the file automatically
   pmk add --parent abc123 --new --title "Chapter One"`,

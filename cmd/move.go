@@ -41,10 +41,10 @@ func newMoveCmdWithGetCWD(io MoveIO, getwd func() (string, error)) *cobra.Comman
 		Short: "Move a node within a binder",
 		Long:  "Move a node within a binder." + dryRunHelpSuffix,
 		Example: `  # Move a node to a new parent
-  pmk move --id abc123 --parent def456
+  pmk move --source abc123 --dest def456
 
   # Move a node to a specific position under its parent
-  pmk move --id abc123 --parent def456 --position 2`,
+  pmk move --source abc123 --dest def456 --at 2`,
 		Args:         cobra.NoArgs,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
