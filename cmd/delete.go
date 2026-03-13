@@ -48,6 +48,10 @@ func newDeleteCmdWithGetCWD(io DeleteIO, getwd func() (string, error)) *cobra.Co
 		RunE: func(cmd *cobra.Command, args []string) error {
 			dryRun := isDryRun(cmd)
 
+			if selector == "" {
+				return missingFlagError(cmd, jsonMode, dryRun, "delete", "--selector")
+			}
+
 			binderPath, err := resolveBinderPathFromCmd(cmd, getwd)
 			if err != nil {
 				return err
@@ -63,10 +67,6 @@ func newDeleteCmdWithGetCWD(io DeleteIO, getwd func() (string, error)) *cobra.Co
 			proj, err := io.ScanProject(ctx, binderPath)
 			if err != nil {
 				return emitOPE009AndError(cmd, jsonMode, err)
-			}
-
-			if selector == "" {
-				return missingFlagError(cmd, jsonMode, dryRun, "delete", "--selector")
 			}
 
 			params := binder.DeleteParams{

@@ -50,6 +50,10 @@ func newMoveCmdWithGetCWD(io MoveIO, getwd func() (string, error)) *cobra.Comman
 		RunE: func(cmd *cobra.Command, args []string) error {
 			dryRun := isDryRun(cmd)
 
+			if source == "" {
+				return missingFlagError(cmd, jsonMode, dryRun, "move", "--source")
+			}
+
 			binderPath, err := resolveBinderPathFromCmd(cmd, getwd)
 			if err != nil {
 				return err
@@ -65,10 +69,6 @@ func newMoveCmdWithGetCWD(io MoveIO, getwd func() (string, error)) *cobra.Comman
 			proj, err := io.ScanProject(ctx, binderPath)
 			if err != nil {
 				return emitOPE009AndError(cmd, jsonMode, err)
-			}
-
-			if source == "" {
-				return missingFlagError(cmd, jsonMode, dryRun, "move", "--source")
 			}
 
 			if err := checkConflictingPositionFlags(cmd, first, before, after); err != nil {
