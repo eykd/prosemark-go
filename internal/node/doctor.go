@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/eykd/prosemark-go/internal/binder"
 )
@@ -49,6 +50,13 @@ func RunDoctor(ctx context.Context, data DoctorData) []AuditDiagnostic {
 		}
 	} else {
 		// Legacy path: parse the binder and detect duplicates.
+
+		// AUD009: detect invalid UTF-8 / binary content before parsing.
+		if len(data.BinderSrc) > 0 && !utf8.Valid(data.BinderSrc) {
+			diags = append(diags, errDiag(AUD009, "_binder.md", "binder contains invalid UTF-8 content"))
+			return sortDiags(diags)
+		}
+
 		parseResult, _, _ := binder.Parse(ctx, data.BinderSrc, nil)
 
 		duplicated := make(map[string]bool)
@@ -113,7 +121,11 @@ func RunDoctor(ctx context.Context, data DoctorData) []AuditDiagnostic {
 		}
 	}
 
-	// Sort: errors before warnings, then alphabetically by path within each tier.
+	return sortDiags(diags)
+}
+
+// sortDiags sorts diagnostics: errors before warnings, then alphabetically by path.
+func sortDiags(diags []AuditDiagnostic) []AuditDiagnostic {
 	sort.SliceStable(diags, func(i, j int) bool {
 		si := severityRank(diags[i].Severity)
 		sj := severityRank(diags[j].Severity)
@@ -122,7 +134,6 @@ func RunDoctor(ctx context.Context, data DoctorData) []AuditDiagnostic {
 		}
 		return diags[i].Path < diags[j].Path
 	})
-
 	return diags
 }
 

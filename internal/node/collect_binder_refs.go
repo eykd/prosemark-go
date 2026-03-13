@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/eykd/prosemark-go/internal/binder"
 )
@@ -20,6 +21,17 @@ var binderLinkTargetRE = regexp.MustCompile(`\]\(([^)]+)\)`)
 // regex scan is required to surface those targets as diagnostics.
 func CollectBinderRefs(ctx context.Context, binderSrc []byte) ([]string, []AuditDiagnostic) {
 	var diags []AuditDiagnostic
+
+	// AUD009: detect invalid UTF-8 / binary content before parsing.
+	if len(binderSrc) > 0 && !utf8.Valid(binderSrc) {
+		diags = append(diags, AuditDiagnostic{
+			Code:     AUD009,
+			Severity: SeverityError,
+			Message:  "binder contains invalid UTF-8 content",
+			Path:     "_binder.md",
+		})
+		return []string{}, diags
+	}
 
 	// Scan raw bytes for path-escaping links that binder.Parse rejects from the tree.
 	for _, m := range binderLinkTargetRE.FindAllSubmatch(binderSrc, -1) {
