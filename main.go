@@ -31,7 +31,9 @@ func handleCommandError(err error, stderr io.Writer) int {
 	}
 	var exitErr *cmd.ExitError
 	if errors.As(err, &exitErr) {
-		fmt.Fprintln(stderr, exitErr.Err)
+		if exitErr.Err != nil {
+			fmt.Fprintln(stderr, exitErr.Err)
+		}
 		return exitErr.Code
 	}
 	fmt.Fprintln(stderr, err)

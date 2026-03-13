@@ -162,7 +162,11 @@ func newAddChildCmdWithGetCWD(io NewNodeAddChildIO, getwd func() (string, error)
 			}
 
 			if hasDiagnosticError(result.diags) {
-				return &ExitError{Code: ExitCodeForDiagnostics(result.diags), Err: fmt.Errorf("add has errors")}
+				exitErr := &ExitError{Code: ExitCodeForDiagnostics(result.diags)}
+				if !jsonMode {
+					exitErr.Err = fmt.Errorf("add has errors")
+				}
+				return exitErr
 			}
 
 			if result.changed {
@@ -313,7 +317,11 @@ func runNewMode(ctx context.Context, cmd *cobra.Command, io NewNodeAddChildIO, b
 		if !dryRun {
 			rollbackErr = io.DeleteFile(nodePath)
 		}
-		return &ExitError{Code: ExitCodeForDiagnostics(result.diags), Err: errors.Join(fmt.Errorf("add has errors"), rollbackErr)}
+		exitErr := &ExitError{Code: ExitCodeForDiagnostics(result.diags)}
+		if !opts.jsonMode {
+			exitErr.Err = errors.Join(fmt.Errorf("add has errors"), rollbackErr)
+		}
+		return exitErr
 	}
 	if result.changed {
 		if writeErr := io.WriteBinderAtomic(ctx, binderPath, result.modifiedBytes); writeErr != nil {

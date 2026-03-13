@@ -151,7 +151,11 @@ func emitOPE009AndError(cmd *cobra.Command, jsonMode bool, origErr error) error 
 	} else {
 		fmt.Fprintf(cmd.ErrOrStderr(), "error: I/O or parse failure: %v (OPE009)\n", origErr)
 	}
-	return &ExitError{Code: ExitTransient, Err: fmt.Errorf("operation failed: %w", origErr)}
+	exitErr := &ExitError{Code: ExitTransient}
+	if !jsonMode {
+		exitErr.Err = fmt.Errorf("operation failed: %w", origErr)
+	}
+	return exitErr
 }
 
 // dryRunHelpSuffix is the help text appended to mutation subcommand Long

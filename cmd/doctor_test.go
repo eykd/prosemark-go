@@ -729,6 +729,45 @@ func TestNewDoctorCmd_JSONEncodeError(t *testing.T) {
 	}
 }
 
+// TestNewDoctorCmd_JSONMode_BinderNotFound verifies that --json mode emits a
+// JSON diagnostic with "project not initialized" when the binder is missing.
+func TestNewDoctorCmd_JSONMode_BinderNotFound(t *testing.T) {
+	mock := &mockDoctorIO{binderErr: os.ErrNotExist}
+	c := NewDoctorCmd(mock)
+	out := new(bytes.Buffer)
+	c.SetOut(out)
+	c.SetErr(new(bytes.Buffer))
+	c.SetArgs([]string{"--project", ".", "--json"})
+
+	err := c.Execute()
+	if err == nil {
+		t.Fatal("expected error for missing binder")
+	}
+
+	var result doctorOutput
+	if jsonErr := json.Unmarshal(out.Bytes(), &result); jsonErr != nil {
+		t.Fatalf("--json output is not valid JSON: %v\noutput: %q", jsonErr, out.String())
+	}
+	if len(result.Diagnostics) != 1 || result.Diagnostics[0].Message != "project not initialized — run 'pmk init' first" {
+		t.Errorf("unexpected diagnostic: %+v", result.Diagnostics)
+	}
+}
+
+// TestNewDoctorCmd_JSONMode_BinderReadError_EncodeFailure verifies that an
+// encoding failure during the binder-read-error JSON path is surfaced.
+func TestNewDoctorCmd_JSONMode_BinderReadError_EncodeFailure(t *testing.T) {
+	mock := &mockDoctorIO{binderErr: os.ErrNotExist}
+	c := NewDoctorCmd(mock)
+	c.SetOut(&errWriter{err: errors.New("stdout closed")})
+	c.SetErr(new(bytes.Buffer))
+	c.SetArgs([]string{"--project", ".", "--json"})
+
+	err := c.Execute()
+	if err == nil {
+		t.Error("expected error when JSON encoding fails")
+	}
+}
+
 // ─── Binder parse diagnostics (BNDW*) ────────────────────────────────────────
 
 // TestNewDoctorCmd_BinderParseWarnings verifies that binder-level parse diagnostics

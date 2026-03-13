@@ -146,7 +146,11 @@ func newDoctorCmdWithGetCWD(io DoctorIO, getwd func() (string, error)) *cobra.Co
 			}
 
 			if hasAuditDiagnosticError(diags) {
-				return &ExitError{Code: ExitCodeForAuditDiagnostics(diags), Err: fmt.Errorf("project has integrity errors")}
+				exitErr := &ExitError{Code: ExitCodeForAuditDiagnostics(diags)}
+				if !jsonMode {
+					exitErr.Err = fmt.Errorf("project has integrity errors")
+				}
+				return exitErr
 			}
 
 			return nil

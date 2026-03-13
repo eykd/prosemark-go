@@ -62,6 +62,22 @@ func TestNewParseCmd_EncodeError(t *testing.T) {
 	}
 }
 
+// TestNewParseCmd_ReadBinderError_EncodeFailure verifies that an encoding
+// failure during the ReadBinder-error JSON path is surfaced.
+func TestNewParseCmd_ReadBinderError_EncodeFailure(t *testing.T) {
+	reader := &mockParseReader{
+		binderErr: errors.New("disk error"),
+	}
+	c := NewParseCmd(reader)
+	c.SetOut(&errWriter{err: errors.New("write error")})
+	c.SetArgs([]string{"--project", "."})
+
+	err := c.Execute()
+	if err == nil {
+		t.Error("expected error when JSON encoding fails")
+	}
+}
+
 func TestRootRunE_ShowsHelp(t *testing.T) {
 	root := NewRootCmd()
 	root.SetOut(new(bytes.Buffer))

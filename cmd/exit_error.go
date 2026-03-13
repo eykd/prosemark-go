@@ -82,7 +82,11 @@ type ExitError struct {
 }
 
 // Error delegates to the inner error's message.
+// Returns an empty string when Err is nil (silent exit in --json mode).
 func (e *ExitError) Error() string {
+	if e.Err == nil {
+		return ""
+	}
 	return e.Err.Error()
 }
 
