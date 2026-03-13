@@ -183,6 +183,99 @@ func TestAddChild_AfterSibling(t *testing.T) {
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
+// Title-based sibling selectors
+// ──────────────────────────────────────────────────────────────────────────────
+
+// TestAddChild_BeforeSibling_TitleSelector verifies that Before accepts a
+// title string (not just bare stem) to locate the sibling.
+func TestAddChild_BeforeSibling_TitleSelector(t *testing.T) {
+	src := binderSrc(
+		"- [Alpha](alpha.md)",
+		"- [Beta](beta.md)",
+		"- [Gamma](gamma.md)",
+	)
+	params := binder.AddChildParams{
+		ParentSelector: ".",
+		Target:         "inserted.md",
+		Title:          "Inserted",
+		Before:         "Beta",
+	}
+
+	out, diags := AddChild(context.Background(), src, nil, params)
+	if hasDiagCode(diags, "error") {
+		t.Errorf("unexpected error diagnostic: %v", diags)
+	}
+	alphaIdx := bytes.Index(out, []byte("alpha.md"))
+	insertedIdx := bytes.Index(out, []byte("inserted.md"))
+	betaIdx := bytes.Index(out, []byte("beta.md"))
+	if alphaIdx < 0 || insertedIdx < 0 || betaIdx < 0 {
+		t.Fatalf("expected all nodes in output:\n%s", out)
+	}
+	if !(alphaIdx < insertedIdx && insertedIdx < betaIdx) {
+		t.Errorf("expected alpha < inserted < beta:\n%s", out)
+	}
+}
+
+// TestAddChild_AfterSibling_TitleSelector verifies that After accepts a
+// title string (not just bare stem) to locate the sibling.
+func TestAddChild_AfterSibling_TitleSelector(t *testing.T) {
+	src := binderSrc(
+		"- [Alpha](alpha.md)",
+		"- [Beta](beta.md)",
+		"- [Gamma](gamma.md)",
+	)
+	params := binder.AddChildParams{
+		ParentSelector: ".",
+		Target:         "after-alpha.md",
+		Title:          "After Alpha",
+		After:          "Alpha",
+	}
+
+	out, diags := AddChild(context.Background(), src, nil, params)
+	if hasDiagCode(diags, "error") {
+		t.Errorf("unexpected error diagnostic: %v", diags)
+	}
+	alphaIdx := bytes.Index(out, []byte("alpha.md"))
+	afterAlphaIdx := bytes.Index(out, []byte("after-alpha.md"))
+	betaIdx := bytes.Index(out, []byte("beta.md"))
+	if alphaIdx < 0 || afterAlphaIdx < 0 || betaIdx < 0 {
+		t.Fatalf("expected all nodes in output:\n%s", out)
+	}
+	if !(alphaIdx < afterAlphaIdx && afterAlphaIdx < betaIdx) {
+		t.Errorf("expected alpha < after-alpha < beta:\n%s", out)
+	}
+}
+
+// TestAddChild_BeforeSibling_TitleSelector_CaseInsensitive verifies that
+// title matching for Before is case-insensitive, matching EvalSelector behavior.
+func TestAddChild_BeforeSibling_TitleSelector_CaseInsensitive(t *testing.T) {
+	src := binderSrc(
+		"- [Alpha](alpha.md)",
+		"- [Beta](beta.md)",
+	)
+	params := binder.AddChildParams{
+		ParentSelector: ".",
+		Target:         "inserted.md",
+		Title:          "Inserted",
+		Before:         "bEtA",
+	}
+
+	out, diags := AddChild(context.Background(), src, nil, params)
+	if hasDiagCode(diags, "error") {
+		t.Errorf("unexpected error diagnostic: %v", diags)
+	}
+	alphaIdx := bytes.Index(out, []byte("alpha.md"))
+	insertedIdx := bytes.Index(out, []byte("inserted.md"))
+	betaIdx := bytes.Index(out, []byte("beta.md"))
+	if alphaIdx < 0 || insertedIdx < 0 || betaIdx < 0 {
+		t.Fatalf("expected all nodes in output:\n%s", out)
+	}
+	if !(alphaIdx < insertedIdx && insertedIdx < betaIdx) {
+		t.Errorf("expected alpha < inserted < beta:\n%s", out)
+	}
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
 // Idempotency (OPW002)
 // ──────────────────────────────────────────────────────────────────────────────
 

@@ -697,6 +697,72 @@ func TestMove_After_SiblingNotFound_OPE007(t *testing.T) {
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
+// Title-based sibling selectors
+// ──────────────────────────────────────────────────────────────────────────────
+
+// TestMove_Before_TitleSelector verifies that --before accepts a title string
+// (not just bare stem) to locate the sibling.
+func TestMove_Before_TitleSelector(t *testing.T) {
+	// ch1, ch2, ch3 at root; move ch3 before "Chapter Two" → ch1, ch3, ch2.
+	src := []byte("<!-- prosemark-binder:v1 -->\n\n" +
+		"- [Chapter One](ch1.md)\n" +
+		"- [Chapter Two](ch2.md)\n" +
+		"- [Chapter Three](ch3.md)\n")
+	params := binder.MoveParams{
+		SourceSelector:            "ch3.md",
+		DestinationParentSelector: ".",
+		Before:                    "Chapter Two",
+		Yes:                       true,
+	}
+
+	out, diags := Move(context.Background(), src, nil, params)
+	if hasDiagCode(diags, "error") {
+		t.Errorf("unexpected error diagnostic: %v", diags)
+	}
+	ch1Pos := bytes.Index(out, []byte("ch1.md"))
+	ch3Pos := bytes.Index(out, []byte("ch3.md"))
+	ch2Pos := bytes.Index(out, []byte("ch2.md"))
+	if ch1Pos < 0 || ch2Pos < 0 || ch3Pos < 0 {
+		t.Fatalf("expected all nodes in output:\n%s", out)
+	}
+	if !(ch1Pos < ch3Pos && ch3Pos < ch2Pos) {
+		t.Errorf("expected order ch1, ch3, ch2 but got positions %d, %d, %d:\n%s",
+			ch1Pos, ch3Pos, ch2Pos, out)
+	}
+}
+
+// TestMove_After_TitleSelector verifies that --after accepts a title string
+// (not just bare stem) to locate the sibling.
+func TestMove_After_TitleSelector(t *testing.T) {
+	// ch1, ch2, ch3 at root; move ch1 after "Chapter Two" → ch2, ch1, ch3.
+	src := []byte("<!-- prosemark-binder:v1 -->\n\n" +
+		"- [Chapter One](ch1.md)\n" +
+		"- [Chapter Two](ch2.md)\n" +
+		"- [Chapter Three](ch3.md)\n")
+	params := binder.MoveParams{
+		SourceSelector:            "ch1.md",
+		DestinationParentSelector: ".",
+		After:                     "Chapter Two",
+		Yes:                       true,
+	}
+
+	out, diags := Move(context.Background(), src, nil, params)
+	if hasDiagCode(diags, "error") {
+		t.Errorf("unexpected error diagnostic: %v", diags)
+	}
+	ch2Pos := bytes.Index(out, []byte("ch2.md"))
+	ch1Pos := bytes.Index(out, []byte("ch1.md"))
+	ch3Pos := bytes.Index(out, []byte("ch3.md"))
+	if ch1Pos < 0 || ch2Pos < 0 || ch3Pos < 0 {
+		t.Fatalf("expected all nodes in output:\n%s", out)
+	}
+	if !(ch2Pos < ch1Pos && ch1Pos < ch3Pos) {
+		t.Errorf("expected order ch2, ch1, ch3 but got positions %d, %d, %d:\n%s",
+			ch2Pos, ch1Pos, ch3Pos, out)
+	}
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
 // Missing --yes: must emit OPE011, not OPE009
 // ──────────────────────────────────────────────────────────────────────────────
 
