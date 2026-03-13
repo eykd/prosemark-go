@@ -20,6 +20,9 @@ const (
 	diagCodeBinderCreated  = "OPI001"
 	diagCodeConfigCreated  = "OPI002"
 	diagCodeBinderDataLoss = "OPW006"
+
+	// dataLossMessageFmt is the format string for the binder data loss warning.
+	dataLossMessageFmt = "existing binder contains %d node entries that will be lost"
 )
 
 // InitIO handles I/O for the init command.
@@ -116,7 +119,7 @@ func newInitCmdWithGetCWD(initIO InitIO, getwd func() (string, error)) *cobra.Co
 				diags = append(diags, binder.Diagnostic{
 					Severity: "warning",
 					Code:     diagCodeBinderDataLoss,
-					Message:  fmt.Sprintf("existing binder contains %d node entries that will be lost", binderNodeCount),
+					Message:  fmt.Sprintf(dataLossMessageFmt, binderNodeCount),
 				})
 			}
 
@@ -131,7 +134,7 @@ func newInitCmdWithGetCWD(initIO InitIO, getwd func() (string, error)) *cobra.Co
 			}
 
 			if binderNodeCount > 0 {
-				msg := fmt.Sprintf("warning: existing binder contains %d node entries that will be lost", binderNodeCount)
+				msg := fmt.Sprintf("warning: "+dataLossMessageFmt, binderNodeCount)
 				if _, err := fmt.Fprintln(cmd.ErrOrStderr(), msg); err != nil {
 					return fmt.Errorf("writing output: %w", err)
 				}
