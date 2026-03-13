@@ -245,6 +245,74 @@ func TestRootCmd_DoctorHelp_ShowsUsage(t *testing.T) {
 	}
 }
 
+// TestRootCmd_HelpExamples_UseCorrectFlagNames verifies that command help
+// examples reference the actual flag names, not stale/wrong ones.
+func TestRootCmd_HelpExamples_UseCorrectFlagNames(t *testing.T) {
+	tests := []struct {
+		name       string
+		command    string
+		wantFlags  []string // flags that MUST appear in examples
+		wrongFlags []string // flags that must NOT appear in examples
+	}{
+		{
+			name:       "delete uses --selector not --id",
+			command:    "delete",
+			wantFlags:  []string{"--selector"},
+			wrongFlags: []string{"--id"},
+		},
+		{
+			name:       "add uses --target not --child",
+			command:    "add",
+			wantFlags:  []string{"--target"},
+			wrongFlags: []string{"--child"},
+		},
+		{
+			name:       "move uses --source not --id",
+			command:    "move",
+			wantFlags:  []string{"--source"},
+			wrongFlags: []string{"--id"},
+		},
+		{
+			name:       "move uses --dest not --parent",
+			command:    "move",
+			wantFlags:  []string{"--dest"},
+			wrongFlags: []string{"--parent"},
+		},
+		{
+			name:       "move uses --at not --position",
+			command:    "move",
+			wantFlags:  []string{"--at"},
+			wrongFlags: []string{"--position"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			root := NewRootCmd()
+			out := new(bytes.Buffer)
+			root.SetOut(out)
+			root.SetErr(new(bytes.Buffer))
+			root.SetArgs([]string{tt.command, "--help"})
+			_ = root.Execute()
+
+			helpOutput := out.String()
+
+			for _, flag := range tt.wantFlags {
+				if !strings.Contains(helpOutput, flag) {
+					t.Errorf("'pmk %s --help' should contain %q in examples but doesn't.\nOutput:\n%s",
+						tt.command, flag, helpOutput)
+				}
+			}
+			for _, flag := range tt.wrongFlags {
+				if strings.Contains(helpOutput, flag) {
+					t.Errorf("'pmk %s --help' should NOT contain %q in examples (wrong flag name).\nOutput:\n%s",
+						tt.command, flag, helpOutput)
+				}
+			}
+		})
+	}
+}
+
 // TestRootCmd_DoctorCmd_HumanReadable_SeverityColumnAligned verifies that
 // pmk doctor human-readable output pads the severity field to 7 characters,
 // aligning the message column per contracts/commands.md §Output (default, human-readable).
