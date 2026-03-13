@@ -34,6 +34,13 @@ func diagnosticExitError(cmdName string, jsonMode bool, diags []binder.Diagnosti
 	return exitErr
 }
 
+// writeBinderExitError returns an ExitError with ExitTransient for a failed
+// binder write. This centralises the "write error → exit 6" mapping so that
+// all mutation commands handle WriteBinderAtomic failures consistently.
+func writeBinderExitError(err error) *ExitError {
+	return &ExitError{Code: ExitTransient, Err: fmt.Errorf("writing binder: %w", err)}
+}
+
 // hasAuditDiagnosticError reports whether any node.AuditDiagnostic in diags has error severity.
 func hasAuditDiagnosticError(diags []node.AuditDiagnostic) bool {
 	for _, d := range diags {

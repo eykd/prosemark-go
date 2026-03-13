@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/eykd/prosemark-go/internal/binder"
@@ -80,5 +82,23 @@ func TestHasAuditDiagnosticError_DelegatesViaPrimitive(t *testing.T) {
 				t.Errorf("hasAuditDiagnosticError() = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+// TestWriteBinderExitError verifies that writeBinderExitError returns an ExitError
+// with ExitTransient code and wraps the original error with "writing binder:" prefix.
+func TestWriteBinderExitError(t *testing.T) {
+	orig := fmt.Errorf("permission denied")
+	got := writeBinderExitError(orig)
+
+	if got.Code != ExitTransient {
+		t.Errorf("Code = %d, want %d (ExitTransient)", got.Code, ExitTransient)
+	}
+	if !errors.Is(got.Err, orig) {
+		t.Errorf("Err does not wrap original: %v", got.Err)
+	}
+	want := "writing binder: permission denied"
+	if got.Err.Error() != want {
+		t.Errorf("Err.Error() = %q, want %q", got.Err.Error(), want)
 	}
 }
