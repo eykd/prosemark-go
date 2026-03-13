@@ -24,12 +24,7 @@ func CollectBinderRefs(ctx context.Context, binderSrc []byte) ([]string, []Audit
 
 	// AUD009: detect invalid UTF-8 / binary content before parsing.
 	if len(binderSrc) > 0 && !utf8.Valid(binderSrc) {
-		diags = append(diags, AuditDiagnostic{
-			Code:     AUD009,
-			Severity: SeverityError,
-			Message:  "binder contains invalid UTF-8 content",
-			Path:     "_binder.md",
-		})
+		diags = append(diags, errDiag(AUD009, "_binder.md", "binder contains invalid UTF-8 content"))
 		return []string{}, diags
 	}
 
@@ -37,12 +32,7 @@ func CollectBinderRefs(ctx context.Context, binderSrc []byte) ([]string, []Audit
 	for _, m := range binderLinkTargetRE.FindAllSubmatch(binderSrc, -1) {
 		target := string(m[1])
 		if target == ".." || strings.HasPrefix(target, "../") {
-			diags = append(diags, AuditDiagnostic{
-				Code:     AUDW001,
-				Severity: SeverityWarning,
-				Message:  fmt.Sprintf("binder link escapes project directory: %s", target),
-				Path:     target,
-			})
+			diags = append(diags, warnDiag(AUDW001, target, fmt.Sprintf("binder link escapes project directory: %s", target)))
 		}
 	}
 
@@ -70,12 +60,7 @@ func CollectBinderRefs(ctx context.Context, binderSrc []byte) ([]string, []Audit
 					refs = append(refs, n.Target)
 				} else if !duplicated[n.Target] {
 					duplicated[n.Target] = true
-					diags = append(diags, AuditDiagnostic{
-						Code:     AUD003,
-						Severity: SeverityError,
-						Message:  fmt.Sprintf("file appears more than once in binder: %s", n.Target),
-						Path:     n.Target,
-					})
+					diags = append(diags, errDiag(AUD003, n.Target, fmt.Sprintf("file appears more than once in binder: %s", n.Target)))
 				}
 			}
 			walk(n.Children)
