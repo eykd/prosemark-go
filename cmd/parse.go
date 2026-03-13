@@ -61,7 +61,7 @@ func newParseCmdWithGetCWD(reader ParseReader, getwd func() (string, error)) *co
 				if encErr := json.NewEncoder(cmd.OutOrStdout()).Encode(out); encErr != nil {
 					return fmt.Errorf("encoding output: %w", encErr)
 				}
-				return &ExitError{Code: ExitCodeForDiagnostics(diags), Err: fmt.Errorf("reading binder: %w", err)}
+				return &ExitError{Code: ExitCodeForDiagnostics(diags), Msg: fmt.Sprintf("reading binder: %v", err)}
 			}
 
 			proj, err := reader.ScanProject(ctx, binderPath)
@@ -89,13 +89,11 @@ func newParseCmdWithGetCWD(reader ParseReader, getwd func() (string, error)) *co
 			}
 
 			if hasDiagnosticError(diags) {
-				var inner error
+				msg := "binder has parse errors"
 				if parseErr != nil {
-					inner = fmt.Errorf("binder has parse errors: %w", parseErr)
-				} else {
-					inner = fmt.Errorf("binder has parse errors")
+					msg = fmt.Sprintf("binder has parse errors: %v", parseErr)
 				}
-				return &ExitError{Code: ExitCodeForDiagnostics(diags), Err: inner}
+				return &ExitError{Code: ExitCodeForDiagnostics(diags), Msg: msg}
 			}
 			return nil
 		},

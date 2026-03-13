@@ -80,7 +80,7 @@ func newDoctorCmdWithGetCWD(io DoctorIO, getwd func() (string, error)) *cobra.Co
 					if encErr := json.NewEncoder(cmd.OutOrStdout()).Encode(out); encErr != nil {
 						return fmt.Errorf("encoding output: %w", encErr)
 					}
-					return &ExitError{Code: ExitValidation, Err: fmt.Errorf("%s", msg)}
+					return &ExitError{Code: ExitValidation, Msg: msg}
 				}
 				if errors.Is(err, os.ErrNotExist) {
 					return fmt.Errorf("project not initialized — run 'pmk init' first")

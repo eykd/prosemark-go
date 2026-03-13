@@ -80,15 +80,16 @@ func ExitCodeForAuditDiagnostics(diags []node.AuditDiagnostic) int {
 type ExitError struct {
 	Code int
 	Err  error
+	Msg  string // error context for Error() when Err is nil (JSON mode)
 }
 
 // Error delegates to the inner error's message.
-// Returns an empty string when Err is nil (silent exit in --json mode).
+// Falls back to Msg when Err is nil (JSON mode: diagnostics on stdout, no stderr).
 func (e *ExitError) Error() string {
-	if e.Err == nil {
-		return ""
+	if e.Err != nil {
+		return e.Err.Error()
 	}
-	return e.Err.Error()
+	return e.Msg
 }
 
 // Unwrap returns the inner error for use with errors.Is/As.
