@@ -37,6 +37,9 @@ func ValidateNewNodeInput(target, title, synopsis string) error {
 	if title == "" && synopsis == "" {
 		return fmt.Errorf("--title or --synopsis is required when --new is set")
 	}
+	if title != "" && strings.TrimSpace(title) == "" {
+		return fmt.Errorf("--title must not be only whitespace")
+	}
 	if len(title) > 500 {
 		return fmt.Errorf("--title must be 500 characters or fewer")
 	}
