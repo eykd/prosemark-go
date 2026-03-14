@@ -335,12 +335,7 @@ var deleteRefLabelRE = regexp.MustCompile(`\[[^\]]*\]\[([^\]]+)\]`)
 // deleteCollectRefLabels recursively collects lowercase reference link labels
 // used in the subtree rooted at n.
 func deleteCollectRefLabels(n *binder.Node, labels map[string]bool) {
-	for _, child := range n.Children {
-		if label := deleteExtractRefLabel(child.RawLine); label != "" {
-			labels[label] = true
-		}
-		deleteCollectRefLabels(child, labels)
-	}
+	deleteCollectRefLabelsExcluding(n, nil, labels)
 }
 
 // deleteCollectRefLabelsExcluding recursively collects lowercase reference link
