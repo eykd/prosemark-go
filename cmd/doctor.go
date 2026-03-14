@@ -134,11 +134,20 @@ func newDoctorCmdWithGetCWD(io DoctorIO, getwd func() (string, error)) *cobra.Co
 				}
 			} else {
 				for _, d := range jsonDiags {
-					fmt.Fprintf(cmd.ErrOrStderr(), "%s %-7s %s\n",
-						d.Code,
-						d.Severity,
-						sanitizePath(d.Message),
-					)
+					if d.Path != "" {
+						fmt.Fprintf(cmd.ErrOrStderr(), "%s %-7s %s: %s\n",
+							d.Code,
+							d.Severity,
+							sanitizePath(d.Path),
+							sanitizePath(d.Message),
+						)
+					} else {
+						fmt.Fprintf(cmd.ErrOrStderr(), "%s %-7s %s\n",
+							d.Code,
+							d.Severity,
+							sanitizePath(d.Message),
+						)
+					}
 					if d.Suggestion != "" {
 						fmt.Fprintf(cmd.ErrOrStderr(), "  suggestion: %s\n", d.Suggestion)
 					}
