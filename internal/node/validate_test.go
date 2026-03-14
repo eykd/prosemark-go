@@ -257,6 +257,34 @@ func TestValidateNewNodeInput(t *testing.T) {
 			synopsis: "",
 			wantErr:  false,
 		},
+		{
+			name:     "whitespace-only title (spaces) is rejected",
+			target:   "",
+			title:    "   ",
+			synopsis: "",
+			wantErr:  true,
+		},
+		{
+			name:     "whitespace-only title (single space) is rejected",
+			target:   "",
+			title:    " ",
+			synopsis: "",
+			wantErr:  true,
+		},
+		{
+			name:     "whitespace-only title with synopsis is rejected",
+			target:   "",
+			title:    "   ",
+			synopsis: "A synopsis",
+			wantErr:  true,
+		},
+		{
+			name:     "title with leading/trailing spaces is valid (content present)",
+			target:   "",
+			title:    "  A good title  ",
+			synopsis: "",
+			wantErr:  false,
+		},
 	}
 
 	for _, tt := range tests {
