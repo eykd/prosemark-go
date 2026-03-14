@@ -96,11 +96,49 @@ func Delete(ctx context.Context, src []byte, project *binder.Project, params bin
 		return nodes[i].Line > nodes[j].Line
 	})
 
+	// Collect ref labels used by deleted nodes (including subtrees) before
+	// removing lines, so we can detect orphaned reference definitions.
+	deletedLabels := make(map[string]bool)
+	for _, node := range nodes {
+		if label := deleteExtractRefLabel(node.RawLine); label != "" {
+			deletedLabels[label] = true
+		}
+		deleteCollectRefLabels(node, deletedLabels)
+	}
+
 	for _, node := range nodes {
 		startIdx := node.Line - 1
 		endIdx := deleteComputeSubtreeEnd(node) - 1
 		result.Lines = deleteRemoveRange(result.Lines, startIdx, endIdx)
 		result.LineEnds = deleteRemoveRange(result.LineEnds, startIdx, endIdx)
+	}
+
+	// Remove orphaned reference definitions (OPW006).
+	if len(deletedLabels) > 0 {
+		// Build set of deleted node pointers for fast lookup.
+		deletedSet := make(map[*binder.Node]bool, len(nodes))
+		for _, node := range nodes {
+			deletedSet[node] = true
+		}
+		// Collect labels still referenced by surviving nodes.
+		survivingLabels := make(map[string]bool)
+		deleteCollectRefLabelsExcluding(result.Root, deletedSet, survivingLabels)
+		// Remove labels that are still in use from the orphan set.
+		for label := range deletedLabels {
+			if survivingLabels[label] {
+				delete(deletedLabels, label)
+			}
+		}
+		if len(deletedLabels) > 0 {
+			result.Lines, result.LineEnds = deleteRemoveOrphanRefDefs(
+				result.Lines, result.LineEnds, deletedLabels,
+			)
+			allDiags = append(allDiags, binder.Diagnostic{
+				Severity: "warning",
+				Code:     binder.CodeOrphanRefDefCleaned,
+				Message:  "orphaned reference definition(s) removed after deletion",
+			})
+		}
 	}
 
 	// Collapse consecutive blank lines (no \n\n\n or more in output).
@@ -289,3 +327,70 @@ func deleteStripTrailingBlanks(lines, lineEnds []string) ([]string, []string) {
 	}
 	return lines[:n], lineEnds[:n]
 }
+
+// deleteRefLabelRE matches a full reference-style link [text][label] and
+// captures the label in group 1.
+var deleteRefLabelRE = regexp.MustCompile(`\[[^\]]*\]\[([^\]]+)\]`)
+
+// deleteCollectRefLabels recursively collects lowercase reference link labels
+// used in the subtree rooted at n.
+func deleteCollectRefLabels(n *binder.Node, labels map[string]bool) {
+	for _, child := range n.Children {
+		if label := deleteExtractRefLabel(child.RawLine); label != "" {
+			labels[label] = true
+		}
+		deleteCollectRefLabels(child, labels)
+	}
+}
+
+// deleteCollectRefLabelsExcluding recursively collects lowercase reference link
+// labels, skipping nodes in the excluded set and their subtrees.
+func deleteCollectRefLabelsExcluding(n *binder.Node, excluded map[*binder.Node]bool, labels map[string]bool) {
+	for _, child := range n.Children {
+		if excluded[child] {
+			continue
+		}
+		if label := deleteExtractRefLabel(child.RawLine); label != "" {
+			labels[label] = true
+		}
+		deleteCollectRefLabelsExcluding(child, excluded, labels)
+	}
+}
+
+// deleteExtractRefLabel returns the lowercase reference label from a raw line
+// containing a reference-style link, or "" if none found.
+func deleteExtractRefLabel(rawLine string) string {
+	m := deleteRefLabelRE.FindStringSubmatch(rawLine)
+	if m == nil {
+		return ""
+	}
+	return strings.ToLower(m[1])
+}
+
+// deleteRemoveOrphanRefDefs removes lines that are reference definitions for
+// any of the given orphaned labels.
+func deleteRemoveOrphanRefDefs(lines, lineEnds []string, orphanLabels map[string]bool) ([]string, []string) {
+	newLines := make([]string, 0, len(lines))
+	newEnds := make([]string, 0, len(lineEnds))
+	for i, line := range lines {
+		if deleteIsOrphanRefDefLine(line, orphanLabels) {
+			continue
+		}
+		newLines = append(newLines, line)
+		newEnds = append(newEnds, lineEnds[i])
+	}
+	return newLines, newEnds
+}
+
+// deleteIsOrphanRefDefLine reports whether line is a reference definition whose
+// label is in orphanLabels.
+func deleteIsOrphanRefDefLine(line string, orphanLabels map[string]bool) bool {
+	m := refDefLineRE.FindStringSubmatch(line)
+	if m == nil {
+		return false
+	}
+	return orphanLabels[strings.ToLower(m[1])]
+}
+
+// refDefLineRE matches a markdown reference definition line: [label]: url
+var refDefLineRE = regexp.MustCompile(`^\[([^\]]+)\]:\s+`)

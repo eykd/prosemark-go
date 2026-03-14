@@ -235,13 +235,13 @@ func TestDelete_InlineProse_OPW003(t *testing.T) {
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
-// Reference definition preserved (FR-014)
+// Reference definition removed with orphan cleanup (supersedes FR-014)
 // ──────────────────────────────────────────────────────────────────────────────
 
-// TestDelete_ReferenceDefinition_Preserved verifies that when a node uses a
-// reference-style link, deleting the node removes the list item but leaves
-// the reference definition intact in the file.
-func TestDelete_ReferenceDefinition_Preserved(t *testing.T) {
+// TestDelete_ReferenceDefinition_RemovedWhenOrphaned verifies that when a node
+// uses a reference-style link, deleting the node removes both the list item and
+// the now-orphaned reference definition.
+func TestDelete_ReferenceDefinition_RemovedWhenOrphaned(t *testing.T) {
 	// Node uses reference link syntax; its definition appears at the bottom.
 	src := []byte("<!-- prosemark-binder:v1 -->\n\n" +
 		"- [Chapter One][ch1]\n" +
@@ -261,9 +261,113 @@ func TestDelete_ReferenceDefinition_Preserved(t *testing.T) {
 	if bytes.Contains(out, []byte("- [Chapter One][ch1]")) {
 		t.Errorf("list item for deleted node should not appear:\n%s", out)
 	}
-	// But the reference definition must remain.
-	if !bytes.Contains(out, []byte("[ch1]: chapter-one.md")) {
-		t.Errorf("reference definition must be preserved after deletion:\n%s", out)
+	// The orphaned reference definition should also be removed.
+	if bytes.Contains(out, []byte("[ch1]: chapter-one.md")) {
+		t.Errorf("orphaned reference definition should be removed after deletion:\n%s", out)
+	}
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Orphan reference definition cleanup (OPW006)
+// ──────────────────────────────────────────────────────────────────────────────
+
+// TestDelete_OrphanRefDef_Removed verifies that when a node using a
+// reference-style link is deleted, the now-orphaned reference definition
+// is also removed from the output.
+func TestDelete_OrphanRefDef_Removed(t *testing.T) {
+	src := []byte("<!-- prosemark-binder:v1 -->\n\n" +
+		"- [Chapter One][ch1]\n" +
+		"- [Chapter Two](chapter-two.md)\n" +
+		"\n" +
+		"[ch1]: chapter-one.md\n")
+	params := binder.DeleteParams{
+		Selector: "chapter-one",
+		Yes:      true,
+	}
+
+	out, diags := Delete(context.Background(), src, nil, params)
+	if hasDiagCode(diags, "error") {
+		t.Errorf("unexpected error diagnostic: %v", diags)
+	}
+	// The list item must be removed.
+	if bytes.Contains(out, []byte("- [Chapter One][ch1]")) {
+		t.Errorf("list item for deleted node should not appear:\n%s", out)
+	}
+	// The orphaned reference definition must also be removed.
+	if bytes.Contains(out, []byte("[ch1]: chapter-one.md")) {
+		t.Errorf("orphaned reference definition should be removed after deletion:\n%s", out)
+	}
+	// The remaining node should still be present.
+	if !bytes.Contains(out, []byte("chapter-two.md")) {
+		t.Errorf("chapter-two.md should remain in output:\n%s", out)
+	}
+}
+
+// TestDelete_OrphanRefDef_EmitsOPW006 verifies that cleaning up an orphaned
+// reference definition emits an OPW006 warning diagnostic.
+func TestDelete_OrphanRefDef_EmitsOPW006(t *testing.T) {
+	src := []byte("<!-- prosemark-binder:v1 -->\n\n" +
+		"- [Chapter One][ch1]\n" +
+		"- [Chapter Two](chapter-two.md)\n" +
+		"\n" +
+		"[ch1]: chapter-one.md\n")
+	params := binder.DeleteParams{
+		Selector: "chapter-one",
+		Yes:      true,
+	}
+
+	_, diags := Delete(context.Background(), src, nil, params)
+	if !hasDiagCode(diags, binder.CodeOrphanRefDefCleaned) {
+		t.Errorf("expected OPW006 (orphan ref def cleaned), got: %v", diags)
+	}
+}
+
+// TestDelete_SharedRefDef_NotRemoved verifies that when two nodes share a
+// reference definition and only one is deleted, the definition is kept
+// because the other node still uses it.
+func TestDelete_SharedRefDef_NotRemoved(t *testing.T) {
+	src := []byte("<!-- prosemark-binder:v1 -->\n\n" +
+		"- [Chapter One][shared]\n" +
+		"- [Chapter Two][shared]\n" +
+		"\n" +
+		"[shared]: chapter.md\n")
+	params := binder.DeleteParams{
+		Selector: ".:chapter[1]", // delete only the first match
+		Yes:      true,
+	}
+
+	out, _ := Delete(context.Background(), src, nil, params)
+	// The shared definition must remain because Chapter Two still uses it.
+	if !bytes.Contains(out, []byte("[shared]: chapter.md")) {
+		t.Errorf("shared reference definition should be preserved:\n%s", out)
+	}
+}
+
+// TestDelete_MultipleOrphanRefDefs_AllRemoved verifies that when deleting
+// a node whose subtree uses multiple distinct reference definitions, all
+// orphaned definitions are removed.
+func TestDelete_MultipleOrphanRefDefs_AllRemoved(t *testing.T) {
+	src := []byte("<!-- prosemark-binder:v1 -->\n\n" +
+		"- [Part One][p1]\n" +
+		"  - [Chapter A][cha]\n" +
+		"- [Part Two](part-two.md)\n" +
+		"\n" +
+		"[p1]: part-one.md\n" +
+		"[cha]: chapter-a.md\n")
+	params := binder.DeleteParams{
+		Selector: "part-one",
+		Yes:      true,
+	}
+
+	out, _ := Delete(context.Background(), src, nil, params)
+	if bytes.Contains(out, []byte("[p1]: part-one.md")) {
+		t.Errorf("orphaned [p1] definition should be removed:\n%s", out)
+	}
+	if bytes.Contains(out, []byte("[cha]: chapter-a.md")) {
+		t.Errorf("orphaned [cha] definition should be removed:\n%s", out)
+	}
+	if !bytes.Contains(out, []byte("part-two.md")) {
+		t.Errorf("part-two.md should remain:\n%s", out)
 	}
 }
 
