@@ -134,20 +134,7 @@ func newDoctorCmdWithGetCWD(io DoctorIO, getwd func() (string, error)) *cobra.Co
 				}
 			} else {
 				for _, d := range jsonDiags {
-					if d.Path != "" {
-						fmt.Fprintf(cmd.ErrOrStderr(), "%s %-7s %s: %s\n",
-							d.Code,
-							d.Severity,
-							sanitizePath(d.Path),
-							sanitizePath(d.Message),
-						)
-					} else {
-						fmt.Fprintf(cmd.ErrOrStderr(), "%s %-7s %s\n",
-							d.Code,
-							d.Severity,
-							sanitizePath(d.Message),
-						)
-					}
+					fmt.Fprintln(cmd.ErrOrStderr(), formatDiagnosticLine(d))
 					if d.Suggestion != "" {
 						fmt.Fprintf(cmd.ErrOrStderr(), "  suggestion: %s\n", d.Suggestion)
 					}
@@ -221,6 +208,16 @@ func doctorReadFile(io DoctorIO, projectDir, ref string) []byte {
 		return []byte{}
 	}
 	return content
+}
+
+// formatDiagnosticLine formats a single diagnostic for human-readable output.
+func formatDiagnosticLine(d DoctorDiagnosticJSON) string {
+	if d.Path != "" {
+		return fmt.Sprintf("%s %-7s %s: %s",
+			d.Code, d.Severity, sanitizePath(d.Path), sanitizePath(d.Message))
+	}
+	return fmt.Sprintf("%s %-7s %s",
+		d.Code, d.Severity, sanitizePath(d.Message))
 }
 
 // toDoctorDiagnosticJSON converts audit diagnostics to the JSON output type.
