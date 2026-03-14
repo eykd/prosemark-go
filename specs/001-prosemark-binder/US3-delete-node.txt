@@ -56,14 +56,14 @@ THEN a "not found" error is returned.
 THEN the binder is unchanged.
 
 ;===============================================================
-; Deleting a chapter that uses footnote-style links preserves the link definition in the file.
+; Deleting a chapter that uses footnote-style links removes the orphaned link definition from the file.
 ;===============================================================
 GIVEN a binder with a chapter that uses a footnote-style link, with the definition stored at the bottom of the file.
 
 WHEN the author deletes that chapter.
 
 THEN the chapter entry is removed.
-THEN the footnote link definition at the bottom of the file is kept intact.
+THEN the orphaned footnote link definition at the bottom of the file is removed.
 
 ;===============================================================
 ; Deleting the last top-level chapter removes any trailing blank lines from the file.

@@ -197,9 +197,9 @@ func Test_Attempting_to_delete_a_non_existent_chapter_returns_an_error_without_m
 	}
 }
 
-// Deleting a chapter that uses footnote-style links preserves the link definition in the file.
+// Deleting a chapter that uses footnote-style links removes the orphaned link definition from the file.
 // Source: specs/001-prosemark-binder/US3-delete-node.txt:59
-func Test_Deleting_a_chapter_that_uses_footnote_style_links_preserves_the_link_definition_in_the_file(t *testing.T) {
+func Test_Deleting_a_chapter_that_uses_footnote_style_links_removes_the_orphaned_link_definition_from_the_file(t *testing.T) {
 	// GIVEN a binder with a chapter that uses a footnote-style link, with the definition stored at the bottom of the file.
 	dir := t.TempDir()
 	writeFile(t, dir, "_binder.md",
@@ -222,9 +222,9 @@ func Test_Deleting_a_chapter_that_uses_footnote_style_links_preserves_the_link_d
 	if strings.Contains(content, "[Chapter Two][ch2]") {
 		t.Errorf("expected chapter list entry to be removed\ncontent: %s", content)
 	}
-	// THEN the footnote link definition at the bottom of the file is kept intact.
-	if !strings.Contains(content, "[ch2]: ch2.md") {
-		t.Errorf("expected footnote definition '[ch2]: ch2.md' to be preserved\ncontent: %s", content)
+	// THEN the orphaned footnote link definition at the bottom of the file is removed.
+	if strings.Contains(content, "[ch2]: ch2.md") {
+		t.Errorf("expected orphaned footnote definition '[ch2]: ch2.md' to be removed\ncontent: %s", content)
 	}
 }
 
