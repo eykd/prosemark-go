@@ -534,12 +534,7 @@ func escapeTitle(title string) string {
 // normalizeCrossTreeTarget normalizes a target path for cross-tree duplicate
 // comparison by stripping "./" prefix and percent-decoding.
 func normalizeCrossTreeTarget(target string) string {
-	t := strings.TrimPrefix(target, "./")
-	decoded, err := url.QueryUnescape(strings.ReplaceAll(t, "+", "%2B"))
-	if err != nil {
-		return t
-	}
-	return decoded
+	return percentDecodeOpTarget(strings.TrimPrefix(target, "./"))
 }
 
 // treeContainsTarget reports whether any node in the tree has a target that
