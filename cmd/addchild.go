@@ -160,15 +160,8 @@ func newAddChildCmdWithGetCWD(io NewNodeAddChildIO, getwd func() (string, error)
 				})
 			}
 
-			// Derive title from frontmatter when not explicitly provided.
 			if params.Title == "" && params.Target != "" {
-				binderDir := filepath.Dir(binderPath)
-				nodePath := filepath.Join(binderDir, params.Target)
-				if content, err := io.ReadNodeFile(nodePath); err == nil {
-					if fm, _, fmErr := node.ParseFrontmatter(content); fmErr == nil && fm.Title != "" {
-						params.Title = fm.Title
-					}
-				}
+				params.Title = deriveTitleFromFrontmatter(io, binderPath, params.Target)
 			}
 
 			result := execAddChild(ctx, binderBytes, proj, params, dryRun)
@@ -206,7 +199,7 @@ func newAddChildCmdWithGetCWD(io NewNodeAddChildIO, getwd func() (string, error)
 	cmd.Flags().String("project", "", "project directory containing _binder.md (default: current directory)")
 	cmd.Flags().StringVar(&parent, "parent", "", "Parent selector")
 	cmd.Flags().StringVar(&target, "target", "", "Target path for new child")
-	cmd.Flags().StringVar(&title, "title", "", "Display title (empty = derive from stem)")
+	cmd.Flags().StringVar(&title, "title", "", "Display title (empty = derive from frontmatter or stem)")
 	cmd.Flags().BoolVar(&first, "first", false, "Insert as first child")
 	cmd.Flags().IntVar(&at, "at", 0, "Zero-based insertion index")
 	cmd.Flags().StringVar(&before, "before", "", "Insert before selector")
@@ -276,6 +269,22 @@ func execAddChild(ctx context.Context, binderBytes []byte, proj *binder.Project,
 		changed:       changed,
 		bytesModified: bytesModified,
 	}
+}
+
+// deriveTitleFromFrontmatter reads the target node file and returns its
+// frontmatter title. Returns empty string if the file cannot be read, has no
+// frontmatter, or has no title — the caller falls through to stem derivation.
+func deriveTitleFromFrontmatter(io newNodeIO, binderPath, target string) string {
+	nodePath := filepath.Join(filepath.Dir(binderPath), target)
+	content, err := io.ReadNodeFile(nodePath)
+	if err != nil {
+		return ""
+	}
+	fm, _, err := node.ParseFrontmatter(content)
+	if err != nil || fm.Title == "" {
+		return ""
+	}
+	return fm.Title
 }
 
 // rollbackNewNode deletes the node file and restores the binder to its
