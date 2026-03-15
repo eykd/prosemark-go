@@ -56,6 +56,7 @@ func TestExitCodeForDiagnostics_MappedCodes(t *testing.T) {
 		{"OPE002 -> 5", binder.CodeAmbiguousBareStem, ExitConflict},
 		{"OPE003 -> 5", binder.CodeCycleDetected, ExitConflict},
 		{"OPE006 -> 5", binder.CodeNodeInCodeFence, ExitConflict},
+		{"OPE014 -> 5", binder.CodeSelfMove, ExitConflict},
 
 		// ExitTransient (6) — IO/parse failure
 		{"OPE009 -> 6", binder.CodeIOOrParseFailure, ExitTransient},

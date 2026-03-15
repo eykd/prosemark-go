@@ -28,6 +28,7 @@ var diagnosticExitMap = map[string]int{
 	binder.CodeIndexOutOfBounds:    ExitNotFound,
 	binder.CodeAmbiguousBareStem:   ExitConflict,
 	binder.CodeCycleDetected:       ExitConflict,
+	binder.CodeSelfMove:            ExitConflict,
 	binder.CodeNodeInCodeFence:     ExitConflict,
 	binder.CodeIOOrParseFailure:    ExitTransient,
 	binder.CodeMissingConfirmation: ExitUsage,
