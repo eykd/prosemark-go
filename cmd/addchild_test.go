@@ -1294,3 +1294,71 @@ func TestNewAddChildCmd_NewMode_ExecAddChildError_RollsBackNodeFile(t *testing.T
 		t.Error("expected node file to be rolled back (DeleteFile called) when execAddChild fails, but DeleteFile was not called")
 	}
 }
+
+func TestNewAddChildCmd_MissingParentFlag(t *testing.T) {
+	mock := &mockAddChildIO{
+		binderBytes: acBinder(),
+		project:     &binder.Project{Files: []string{"chapter-one.md"}, BinderDir: "."},
+	}
+	c := NewAddChildCmd(mock)
+	out := new(bytes.Buffer)
+	errOut := new(bytes.Buffer)
+	c.SetOut(out)
+	c.SetErr(errOut)
+	c.SetArgs([]string{"--target", "chapter-two.md", "--title", "Chapter Two", "--project", "."})
+
+	err := c.Execute()
+	if err == nil {
+		t.Fatal("expected error when --parent is omitted")
+	}
+
+	// Exit code must be ExitUsage (1), not ExitNotFound (3).
+	var exitErr *ExitError
+	if errors.As(err, &exitErr) {
+		if exitErr.Code != ExitUsage {
+			t.Errorf("exit code = %d, want %d (ExitUsage)", exitErr.Code, ExitUsage)
+		}
+	}
+
+	// Stderr must mention the missing flag.
+	stderr := errOut.String()
+	if !strings.Contains(stderr, "--parent") {
+		t.Errorf("expected stderr to contain %q, got: %s", "--parent", stderr)
+	}
+
+	// Must NOT contain OPE001 (selector-not-found) — that's the misleading error.
+	if strings.Contains(stderr, binder.CodeSelectorNoMatch) {
+		t.Errorf("stderr must NOT contain %s when --parent is omitted: %s", binder.CodeSelectorNoMatch, stderr)
+	}
+}
+
+func TestNewAddChildCmd_MissingParentFlag_JSON(t *testing.T) {
+	mock := &mockAddChildIO{
+		binderBytes: acBinder(),
+		project:     &binder.Project{Files: []string{"chapter-one.md"}, BinderDir: "."},
+	}
+	c := NewAddChildCmd(mock)
+	out := new(bytes.Buffer)
+	c.SetOut(out)
+	c.SetErr(new(bytes.Buffer))
+	c.SetArgs([]string{"--target", "chapter-two.md", "--title", "Chapter Two", "--json", "--project", "."})
+
+	_ = c.Execute()
+
+	var result binder.OpResult
+	if err := json.Unmarshal(out.Bytes(), &result); err != nil {
+		t.Fatalf("expected valid JSON, got: %s", out.String())
+	}
+	if len(result.Diagnostics) == 0 {
+		t.Fatal("expected at least one diagnostic")
+	}
+	d := result.Diagnostics[0]
+	// Must NOT be OPE001 (selector-not-found).
+	if d.Code == binder.CodeSelectorNoMatch {
+		t.Errorf("diagnostic code must NOT be %q when --parent is omitted", binder.CodeSelectorNoMatch)
+	}
+	// Message should mention the missing flag.
+	if !strings.Contains(d.Message, "--parent") {
+		t.Errorf("diagnostic message should mention --parent, got: %q", d.Message)
+	}
+}
