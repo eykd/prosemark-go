@@ -54,6 +54,10 @@ func newMoveCmdWithGetCWD(io MoveIO, getwd func() (string, error)) *cobra.Comman
 				return missingFlagError(cmd, jsonMode, dryRun, "move", "--source")
 			}
 
+			if dest == "" {
+				return missingFlagError(cmd, jsonMode, dryRun, "move", "--dest")
+			}
+
 			binderPath, err := resolveBinderPathFromCmd(cmd, getwd)
 			if err != nil {
 				return err
