@@ -159,6 +159,7 @@ const (
 	CodeMissingConfirmation = "OPE011"
 	CodeInvalidTitleContent = "OPE012"
 	CodeMissingRequiredFlag = "OPE013"
+	CodeSelfMove            = "OPE014"
 )
 
 // Operation warnings (exit 0; mutation proceeds).

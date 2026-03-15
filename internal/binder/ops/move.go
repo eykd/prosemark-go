@@ -63,9 +63,20 @@ func Move(ctx context.Context, src []byte, project *binder.Project, params binde
 	}
 	allDiags = append(allDiags, destDiags...)
 
+	// Self-move detection: source and destination must not be the same node.
+	for _, srcNode := range sourceNodes {
+		if srcNode == destNode {
+			return src, append(allDiags, binder.Diagnostic{
+				Severity: "error",
+				Code:     binder.CodeSelfMove,
+				Message:  "source and destination are the same node",
+			})
+		}
+	}
+
 	// Cycle detection: destination must not be a descendant of any source node.
 	for _, srcNode := range sourceNodes {
-		if srcNode == destNode || moveIsDescendant(srcNode, destNode) {
+		if moveIsDescendant(srcNode, destNode) {
 			return src, append(allDiags, binder.Diagnostic{
 				Severity: "error",
 				Code:     binder.CodeCycleDetected,
