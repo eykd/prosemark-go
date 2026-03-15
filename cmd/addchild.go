@@ -160,6 +160,17 @@ func newAddChildCmdWithGetCWD(io NewNodeAddChildIO, getwd func() (string, error)
 				})
 			}
 
+			// Derive title from frontmatter when not explicitly provided.
+			if params.Title == "" && params.Target != "" {
+				binderDir := filepath.Dir(binderPath)
+				nodePath := filepath.Join(binderDir, params.Target)
+				if content, err := io.ReadNodeFile(nodePath); err == nil {
+					if fm, _, fmErr := node.ParseFrontmatter(content); fmErr == nil && fm.Title != "" {
+						params.Title = fm.Title
+					}
+				}
+			}
+
 			result := execAddChild(ctx, binderBytes, proj, params, dryRun)
 
 			diagErr := hasDiagnosticError(result.diags)
