@@ -412,18 +412,24 @@ func TestNewMoveCmd_ScanProjectErrorWithJSON(t *testing.T) {
 // --source omitted: should report missing flag, not OPE001
 // ──────────────────────────────────────────────────────────────────────────────
 
-func TestNewMoveCmd_MissingSourceFlag(t *testing.T) {
+func TestNewMoveCmd_MissingRequiredFlag(t *testing.T) {
 	tests := []struct {
-		name      string
-		args      []string
-		wantInErr string
-		wantCode  int
+		name     string
+		args     []string
+		wantFlag string
+		wantCode int
 	}{
 		{
-			name:      "text mode reports missing --source",
-			args:      []string{"--dest", "chapter-one.md", "--yes", "--project", "."},
-			wantInErr: "--source",
-			wantCode:  ExitUsage,
+			name:     "missing --source",
+			args:     []string{"--dest", "chapter-one.md", "--yes", "--project", "."},
+			wantFlag: "--source",
+			wantCode: ExitUsage,
+		},
+		{
+			name:     "missing --dest",
+			args:     []string{"--source", "chapter-two.md", "--yes", "--project", "."},
+			wantFlag: "--dest",
+			wantCode: ExitUsage,
 		},
 	}
 
@@ -442,7 +448,7 @@ func TestNewMoveCmd_MissingSourceFlag(t *testing.T) {
 
 			err := c.Execute()
 			if err == nil {
-				t.Fatal("expected error when --source is omitted")
+				t.Fatalf("expected error when %s is omitted", tt.wantFlag)
 			}
 
 			// Exit code must be ExitUsage (1), not ExitNotFound (3).
@@ -453,48 +459,69 @@ func TestNewMoveCmd_MissingSourceFlag(t *testing.T) {
 				}
 			}
 
-			// Stderr must mention --source.
+			// Stderr must mention the missing flag.
 			stderr := errOut.String()
-			if !strings.Contains(stderr, tt.wantInErr) {
-				t.Errorf("expected stderr to contain %q, got: %s", tt.wantInErr, stderr)
+			if !strings.Contains(stderr, tt.wantFlag) {
+				t.Errorf("expected stderr to contain %q, got: %s", tt.wantFlag, stderr)
 			}
 
 			// Must NOT contain OPE001 (selector-not-found) — that's the misleading error.
 			if strings.Contains(stderr, binder.CodeSelectorNoMatch) {
-				t.Errorf("stderr must NOT contain %s when --source is omitted: %s", binder.CodeSelectorNoMatch, stderr)
+				t.Errorf("stderr must NOT contain %s when %s is omitted: %s", binder.CodeSelectorNoMatch, tt.wantFlag, stderr)
 			}
 		})
 	}
 }
 
-func TestNewMoveCmd_MissingSourceFlag_JSON(t *testing.T) {
-	mock := &mockMoveIO{
-		binderBytes: moveBinder(),
-		project:     &binder.Project{Files: []string{"chapter-one.md", "chapter-two.md"}, BinderDir: "."},
+func TestNewMoveCmd_MissingRequiredFlag_JSON(t *testing.T) {
+	tests := []struct {
+		name     string
+		args     []string
+		wantFlag string
+	}{
+		{
+			name:     "missing --source",
+			args:     []string{"--dest", "chapter-one.md", "--yes", "--json", "--project", "."},
+			wantFlag: "--source",
+		},
+		{
+			name:     "missing --dest",
+			args:     []string{"--source", "chapter-two.md", "--yes", "--json", "--project", "."},
+			wantFlag: "--dest",
+		},
 	}
-	c := NewMoveCmd(mock)
-	out := new(bytes.Buffer)
-	c.SetOut(out)
-	c.SetErr(new(bytes.Buffer))
-	c.SetArgs([]string{"--dest", "chapter-one.md", "--yes", "--json", "--project", "."})
 
-	_ = c.Execute()
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock := &mockMoveIO{
+				binderBytes: moveBinder(),
+				project:     &binder.Project{Files: []string{"chapter-one.md", "chapter-two.md"}, BinderDir: "."},
+			}
+			c := NewMoveCmd(mock)
+			out := new(bytes.Buffer)
+			c.SetOut(out)
+			c.SetErr(new(bytes.Buffer))
+			c.SetArgs(tt.args)
 
-	var result binder.OpResult
-	if err := json.Unmarshal(out.Bytes(), &result); err != nil {
-		t.Fatalf("expected valid JSON, got: %s", out.String())
-	}
-	if len(result.Diagnostics) == 0 {
-		t.Fatal("expected at least one diagnostic")
-	}
-	d := result.Diagnostics[0]
-	// Must NOT be OPE001 (selector-not-found).
-	if d.Code == binder.CodeSelectorNoMatch {
-		t.Errorf("diagnostic code must NOT be %q when --source is omitted", binder.CodeSelectorNoMatch)
-	}
-	// Message should mention --source.
-	if !strings.Contains(d.Message, "--source") {
-		t.Errorf("diagnostic message should mention --source, got: %q", d.Message)
+			_ = c.Execute()
+
+			var result binder.OpResult
+			if err := json.Unmarshal(out.Bytes(), &result); err != nil {
+				t.Fatalf("expected valid JSON, got: %s", out.String())
+			}
+			if len(result.Diagnostics) == 0 {
+				t.Fatal("expected at least one diagnostic")
+			}
+			d := result.Diagnostics[0]
+			// Must NOT be OPE001 (selector-not-found).
+			if d.Code == binder.CodeSelectorNoMatch {
+				t.Errorf("diagnostic code must NOT be %q when %s is omitted", binder.CodeSelectorNoMatch, tt.wantFlag)
+			}
+			// Message should mention the missing flag.
+			if !strings.Contains(d.Message, tt.wantFlag) {
+				t.Errorf("diagnostic message should mention %s, got: %q", tt.wantFlag, d.Message)
+			}
+		})
 	}
 }
 
