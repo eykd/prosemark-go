@@ -94,6 +94,10 @@ func newAddChildCmdWithGetCWD(io NewNodeAddChildIO, getwd func() (string, error)
 			dryRun := isDryRun(cmd)
 			editor := os.Getenv("EDITOR")
 
+			if parent == "" {
+				return missingFlagError(cmd, jsonMode, dryRun, "add", "--parent")
+			}
+
 			binderPath, err := resolveBinderPathFromCmd(cmd, getwd)
 			if err != nil {
 				return err
