@@ -12,6 +12,7 @@ var suggestionMap = map[string]string{
 	binder.CodeSiblingNotFound:     "The sibling selector matched no nodes. Run 'pmk parse --json' to verify.",
 	binder.CodeIndexOutOfBounds:    "The index is out of bounds. Run 'pmk parse --json' to check child count.",
 	binder.CodeIOOrParseFailure:    "Check that '_binder.md' exists and is readable. Run 'pmk doctor' to diagnose.",
+	binder.CodeSelfMove:            "The source and destination refer to the same node. Choose a different destination.",
 	binder.CodeConflictingFlags:    "Specify only one positioning flag: --first, --at, --before, or --after.",
 	binder.CodeMissingConfirmation: "Pass --yes to confirm this operation, or use --dry-run to preview changes.",
 	binder.CodeMissingRequiredFlag: "Provide the required flag indicated in the error message.",
