@@ -708,6 +708,125 @@ func TestNewEditCmd_TitleBasedSelector(t *testing.T) {
 	}
 }
 
+// ─── UUID prefix matching ───────────────────────────────────────────────────
+
+func TestNewEditCmd_UUIDPrefixSelector(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+
+		binderBytes []byte
+		nodeFiles   map[string][]byte
+
+		want editExpected
+	}{
+		{
+			// A unique UUID prefix should resolve to the full UUID.
+			name:        "unique prefix resolves to correct node",
+			args:        []string{"01234567", "--project", "."},
+			binderBytes: editBinderWithTwoNodes(),
+			nodeFiles: map[string][]byte{
+				editTestNodeUUID + ".md":  validEditNodeContent(),
+				editTestNodeUUID2 + ".md": validEditNodeContent2(),
+			},
+			want: editExpected{
+				editorCalled:     true,
+				editorPathSuffix: editTestNodeUUID + ".md",
+				writeCalled:      true,
+				writePathSuffix:  editTestNodeUUID + ".md",
+			},
+		},
+		{
+			// A longer unique prefix (with hyphens) should also work.
+			name:        "prefix with hyphens resolves correctly",
+			args:        []string{"01234567-89ab", "--project", "."},
+			binderBytes: editBinderWithTwoNodes(),
+			nodeFiles: map[string][]byte{
+				editTestNodeUUID + ".md":  validEditNodeContent(),
+				editTestNodeUUID2 + ".md": validEditNodeContent2(),
+			},
+			want: editExpected{
+				editorCalled:     true,
+				editorPathSuffix: editTestNodeUUID + ".md",
+				writeCalled:      true,
+				writePathSuffix:  editTestNodeUUID + ".md",
+			},
+		},
+		{
+			// A prefix matching the second node resolves to that node.
+			name:        "prefix resolves second node",
+			args:        []string{"aaaaaaaa", "--project", "."},
+			binderBytes: editBinderWithTwoNodes(),
+			nodeFiles: map[string][]byte{
+				editTestNodeUUID + ".md":  validEditNodeContent(),
+				editTestNodeUUID2 + ".md": validEditNodeContent2(),
+			},
+			want: editExpected{
+				editorCalled:     true,
+				editorPathSuffix: editTestNodeUUID2 + ".md",
+				writeCalled:      true,
+				writePathSuffix:  editTestNodeUUID2 + ".md",
+			},
+		},
+		{
+			// UUID prefix with --part notes opens the notes file.
+			name:        "prefix with --part notes",
+			args:        []string{"aaaaaaaa-bbbb", "--part", "notes", "--project", "."},
+			binderBytes: editBinderWithTwoNodes(),
+			nodeFiles: map[string][]byte{
+				editTestNodeUUID + ".md":  validEditNodeContent(),
+				editTestNodeUUID2 + ".md": validEditNodeContent2(),
+			},
+			want: editExpected{
+				noteCreateAttempt: true,
+				editorCalled:      true,
+				editorPathSuffix:  editTestNodeUUID2 + ".notes.md",
+				writeCalled:       true,
+				writePathSuffix:   editTestNodeUUID2 + ".md",
+			},
+		},
+		{
+			// Ambiguous prefix (matches multiple nodes) should produce an error.
+			name:        "ambiguous prefix matches multiple nodes",
+			args:        []string{"0", "--project", "."},
+			binderBytes: editBinderWithPrefixCollision(),
+			want:        editExpected{err: true},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("EDITOR", "vi")
+
+			mock := &mockEditIO{
+				binderBytes: tt.binderBytes,
+				nodeFiles:   tt.nodeFiles,
+			}
+
+			c := NewEditCmd(mock)
+			out := new(bytes.Buffer)
+			errOut := new(bytes.Buffer)
+			c.SetOut(out)
+			c.SetErr(errOut)
+			c.SetArgs(tt.args)
+
+			err := c.Execute()
+
+			assertEditOutcome(t, mock, err, tt.want)
+		})
+	}
+}
+
+// editBinderWithPrefixCollision returns a binder with two nodes whose UUIDs
+// share a common prefix ("0..."), making single-char prefix "0" ambiguous.
+func editBinderWithPrefixCollision() []byte {
+	return []byte(
+		"<!-- prosemark-binder:v1 -->\n" +
+			"- [Chapter One](01234567-89ab-7def-0123-456789abcdef.md)\n" +
+			"- [Chapter Two](0fedcba9-8765-7432-1fed-cba987654321.md)\n",
+	)
+}
+
 // ─── Root command wiring ────────────────────────────────────────────────────
 
 // TestNewRootCmd_RegistersEditSubcommand verifies that "edit" is registered on

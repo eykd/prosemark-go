@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -139,10 +140,9 @@ func newEditCmdWithGetCWD(io EditIO, getwd func() (string, error)) *cobra.Comman
 	return cmd
 }
 
-// resolveEditSelector resolves a selector (UUID or title) to a node UUID.
-// It first tries an exact target match (nodeID + ".md"), then falls back to
-// case-insensitive title matching. Returns an error if no match is found or
-// if the title is ambiguous (matches multiple distinct targets).
+// resolveEditSelector resolves a selector (UUID, UUID prefix, or title) to a node UUID.
+// Resolution order: exact UUID match, unique UUID prefix match, case-insensitive title match.
+// Returns an error if no match is found or if the selector is ambiguous.
 func resolveEditSelector(selector string, root *binder.Node) (string, error) {
 	// Try UUID match first: selector + ".md" matches a target.
 	targetFilename := selector + ".md"
@@ -186,18 +186,8 @@ func resolveEditSelector(selector string, root *binder.Node) (string, error) {
 // starts with the given prefix. Each unique UUID is collected at most once.
 func collectNodesByUUIDPrefix(n *binder.Node, prefix string, matches *[]string) {
 	stem := strings.TrimSuffix(n.Target, ".md")
-	if stem != "" && strings.HasPrefix(stem, prefix) {
-		// Deduplicate: only add if not already present.
-		found := false
-		for _, m := range *matches {
-			if m == stem {
-				found = true
-				break
-			}
-		}
-		if !found {
-			*matches = append(*matches, stem)
-		}
+	if stem != "" && strings.HasPrefix(stem, prefix) && !slices.Contains(*matches, stem) {
+		*matches = append(*matches, stem)
 	}
 	for _, child := range n.Children {
 		collectNodesByUUIDPrefix(child, prefix, matches)
