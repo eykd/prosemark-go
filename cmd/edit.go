@@ -150,6 +150,16 @@ func resolveEditSelector(selector string, root *binder.Node) (string, error) {
 		return selector, nil
 	}
 
+	// Try UUID prefix match: selector is a prefix of some node's target stem.
+	var prefixMatches []string
+	collectNodesByUUIDPrefix(root, selector, &prefixMatches)
+	if len(prefixMatches) == 1 {
+		return prefixMatches[0], nil
+	}
+	if len(prefixMatches) > 1 {
+		return "", fmt.Errorf("ambiguous UUID prefix %q matches %d nodes", selector, len(prefixMatches))
+	}
+
 	// Try case-insensitive title match.
 	var matches []*binder.Node
 	collectNodesByTitle(root, selector, &matches)
@@ -170,6 +180,28 @@ func resolveEditSelector(selector string, root *binder.Node) (string, error) {
 
 	// Extract UUID from target filename (strip ".md" suffix).
 	return strings.TrimSuffix(matches[0].Target, ".md"), nil
+}
+
+// collectNodesByUUIDPrefix recursively collects UUIDs of nodes whose target
+// starts with the given prefix. Each unique UUID is collected at most once.
+func collectNodesByUUIDPrefix(n *binder.Node, prefix string, matches *[]string) {
+	stem := strings.TrimSuffix(n.Target, ".md")
+	if stem != "" && strings.HasPrefix(stem, prefix) {
+		// Deduplicate: only add if not already present.
+		found := false
+		for _, m := range *matches {
+			if m == stem {
+				found = true
+				break
+			}
+		}
+		if !found {
+			*matches = append(*matches, stem)
+		}
+	}
+	for _, child := range n.Children {
+		collectNodesByUUIDPrefix(child, prefix, matches)
+	}
 }
 
 // collectNodesByTitle recursively collects nodes whose title matches selector
