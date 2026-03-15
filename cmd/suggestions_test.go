@@ -24,6 +24,8 @@ func TestAttachSuggestions_MappedCodes(t *testing.T) {
 		{"OPE008", binder.CodeIndexOutOfBounds, "The index is out of bounds. Run 'pmk parse --json' to check child count."},
 		{"OPE009", binder.CodeIOOrParseFailure, "Check that '_binder.md' exists and is readable. Run 'pmk doctor' to diagnose."},
 		{"OPE010", binder.CodeConflictingFlags, "Specify only one positioning flag: --first, --at, --before, or --after."},
+		// OPE014 self-move
+		{"OPE014", binder.CodeSelfMove, "The source and destination refer to the same node. Choose a different destination."},
 		// BNDE codes
 		{"BNDE001", binder.CodeIllegalPathChars, "Remove illegal characters from the file path."},
 		{"BNDE002", binder.CodePathEscapesRoot, "Paths must not escape the project root with '../'."},
