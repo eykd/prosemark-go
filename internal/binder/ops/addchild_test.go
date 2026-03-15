@@ -1117,3 +1117,137 @@ func TestAddChild_NoPragma_RestoresPragma(t *testing.T) {
 		t.Errorf("pragma must be the first non-empty line, got %q", firstNonEmpty)
 	}
 }
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Cross-tree duplicate detection (OPW007)
+// ──────────────────────────────────────────────────────────────────────────────
+
+// TestAddChild_CrossTreeDuplicate_OPW007 verifies that adding a target that
+// already exists under a different parent emits an OPW007 warning. The
+// operation should still succeed (exit 0) but alert the user that the target
+// is referenced elsewhere in the binder tree.
+func TestAddChild_CrossTreeDuplicate_OPW007(t *testing.T) {
+	// Binder with two top-level sections; "opening.md" already under Act I.
+	src := binderSrc(
+		"- [Act I](act-i.md)",
+		"  - [Opening](opening.md)",
+		"- [Act II](act-ii.md)",
+	)
+	params := binder.AddChildParams{
+		ParentSelector: "act-ii.md",
+		Target:         "opening.md",
+		Title:          "Opening",
+		Position:       "last",
+		Force:          false,
+	}
+
+	out, diags := AddChild(context.Background(), src, nil, params)
+
+	// Must emit OPW007 cross-tree duplicate warning.
+	if !hasDiagCode(diags, binder.CodeCrossTreeDuplicate) {
+		t.Errorf("expected OPW007 cross-tree duplicate warning, got: %v", diags)
+	}
+
+	// The target should still be inserted (mutation proceeds with warning).
+	if !bytes.Contains(out, []byte("opening.md")) {
+		t.Errorf("expected opening.md in output:\n%s", out)
+	}
+}
+
+// TestAddChild_CrossTreeDuplicate_ForceSkipsWarning verifies that --force
+// suppresses the OPW007 cross-tree duplicate warning.
+func TestAddChild_CrossTreeDuplicate_ForceSkipsWarning(t *testing.T) {
+	src := binderSrc(
+		"- [Act I](act-i.md)",
+		"  - [Opening](opening.md)",
+		"- [Act II](act-ii.md)",
+	)
+	params := binder.AddChildParams{
+		ParentSelector: "act-ii.md",
+		Target:         "opening.md",
+		Title:          "Opening",
+		Position:       "last",
+		Force:          true,
+	}
+
+	_, diags := AddChild(context.Background(), src, nil, params)
+
+	// --force should suppress the cross-tree duplicate warning.
+	if hasDiagCode(diags, binder.CodeCrossTreeDuplicate) {
+		t.Errorf("expected no OPW007 with --force, got: %v", diags)
+	}
+}
+
+// TestAddChild_CrossTreeDuplicate_VariantPaths verifies that cross-tree
+// duplicate detection works across path encoding variants (e.g., "./a.md"
+// vs "a.md" and percent-encoded paths).
+func TestAddChild_CrossTreeDuplicate_VariantPaths(t *testing.T) {
+	tests := []struct {
+		name           string
+		existingTarget string
+		newTarget      string
+	}{
+		{
+			name:           "bare vs dotslash",
+			existingTarget: "opening.md",
+			newTarget:      "./opening.md",
+		},
+		{
+			name:           "dotslash vs bare",
+			existingTarget: "./opening.md",
+			newTarget:      "opening.md",
+		},
+		{
+			name:           "percent-encoded vs bare",
+			existingTarget: "my%20scene.md",
+			newTarget:      "my scene.md",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			src := binderSrc(
+				"- [Act I](act-i.md)",
+				"  - [Opening]("+tt.existingTarget+")",
+				"- [Act II](act-ii.md)",
+			)
+			params := binder.AddChildParams{
+				ParentSelector: "act-ii.md",
+				Target:         tt.newTarget,
+				Title:          "Opening",
+				Position:       "last",
+				Force:          false,
+			}
+
+			_, diags := AddChild(context.Background(), src, nil, params)
+
+			if !hasDiagCode(diags, binder.CodeCrossTreeDuplicate) {
+				t.Errorf("expected OPW007 cross-tree duplicate warning for %s → %s, got: %v",
+					tt.existingTarget, tt.newTarget, diags)
+			}
+		})
+	}
+}
+
+// TestAddChild_NoCrossTreeWarning_WhenTargetIsNew verifies that OPW007 is NOT
+// emitted when the target does not appear anywhere else in the binder.
+func TestAddChild_NoCrossTreeWarning_WhenTargetIsNew(t *testing.T) {
+	src := binderSrc(
+		"- [Act I](act-i.md)",
+		"  - [Opening](opening.md)",
+		"- [Act II](act-ii.md)",
+	)
+	params := binder.AddChildParams{
+		ParentSelector: "act-ii.md",
+		Target:         "climax.md",
+		Title:          "Climax",
+		Position:       "last",
+		Force:          false,
+	}
+
+	_, diags := AddChild(context.Background(), src, nil, params)
+
+	if hasDiagCode(diags, binder.CodeCrossTreeDuplicate) {
+		t.Errorf("unexpected OPW007 for a new target, got: %v", diags)
+	}
+}

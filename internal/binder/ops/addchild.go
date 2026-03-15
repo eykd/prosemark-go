@@ -77,6 +77,19 @@ func AddChild(ctx context.Context, src []byte, project *binder.Project, params b
 	}
 	title = escapeTitle(title)
 
+	// Cross-tree duplicate detection (OPW007): check if the target already
+	// exists anywhere in the binder tree under a different parent.
+	if !params.Force {
+		normalizedNew := normalizeCrossTreeTarget(params.Target)
+		if treeContainsTarget(result.Root, normalizedNew) {
+			allDiags = append(allDiags, binder.Diagnostic{
+				Severity: "warning",
+				Code:     binder.CodeCrossTreeDuplicate,
+				Message:  fmt.Sprintf("target %q already referenced elsewhere in the binder", params.Target),
+			})
+		}
+	}
+
 	// Determine line ending from the file's majority style.
 	lineEnd := majorityLineEnding(result.LineEnds)
 
@@ -516,6 +529,31 @@ func escapeTitle(title string) string {
 	title = strings.ReplaceAll(title, "[", `\[`)
 	title = strings.ReplaceAll(title, "]", `\]`)
 	return title
+}
+
+// normalizeCrossTreeTarget normalizes a target path for cross-tree duplicate
+// comparison by stripping "./" prefix and percent-decoding.
+func normalizeCrossTreeTarget(target string) string {
+	t := strings.TrimPrefix(target, "./")
+	decoded, err := url.QueryUnescape(strings.ReplaceAll(t, "+", "%2B"))
+	if err != nil {
+		return t
+	}
+	return decoded
+}
+
+// treeContainsTarget reports whether any node in the tree has a target that
+// normalizes to the same value as normalizedTarget.
+func treeContainsTarget(node *binder.Node, normalizedTarget string) bool {
+	if node.Target != "" && normalizeCrossTreeTarget(node.Target) == normalizedTarget {
+		return true
+	}
+	for _, child := range node.Children {
+		if treeContainsTarget(child, normalizedTarget) {
+			return true
+		}
+	}
+	return false
 }
 
 // opStemFromPath extracts the filename stem (basename without last extension).

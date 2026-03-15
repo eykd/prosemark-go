@@ -169,4 +169,5 @@ const (
 	CodeEmptySublistPruned     = "OPW004"
 	CodeCascadeDelete          = "OPW005"
 	CodeOrphanRefDefCleaned    = "OPW006"
+	CodeCrossTreeDuplicate     = "OPW007"
 )
